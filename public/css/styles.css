@@ -574,7 +574,318 @@ tbody tr:hover {
   color: var(--color-text);
 }
 
+/* ===== Header Mode Label ===== */
+.header-mode {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Live Bar ===== */
+.live-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.5rem;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.live-bar.hidden { display: none; }
+
+.live-bar .btn {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.live-bar .btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+.live-badge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ===== Status Badges ===== */
+.status-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.status-idle {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.status-active {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-arrived {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-removed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ===== Source Badges ===== */
+.source-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+}
+
+.source-timed {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.source-manual {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ===== Check-In ===== */
+.checkin-toggle {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: var(--color-success);
+}
+
+.checkin-counter {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+/* ===== Console Layout ===== */
+.console-header {
+  margin-bottom: 1.5rem;
+}
+
+.console-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.console-state-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.console-panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.console-panel {
+  min-width: 0;
+}
+
+.console-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ===== Lane Table ===== */
+.lane-table .lane-number {
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+/* ===== Incomplete Row ===== */
+.incomplete-row {
+  opacity: 0.6;
+}
+
+/* ===== Audience Display — Dark Theme ===== */
+body.audience {
+  background: #0a0a1a;
+  color: #f0f0f5;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.audience #app {
+  max-width: 1200px;
+  width: 100%;
+  padding: 2rem;
+}
+
+.audience-welcome {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.audience-logo {
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 1rem;
+}
+
+.audience-event-name {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #c0c0e0;
+}
+
+.audience-subtitle {
+  font-size: 1.25rem;
+  color: #8080a0;
+}
+
+.audience-screen {
+  padding: 1rem;
+}
+
+.audience-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.audience-section {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.audience-heat-label {
+  font-size: 1.5rem;
+  color: #8080a0;
+  margin-top: 0.25rem;
+}
+
+.audience-staging-label {
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #60a5fa;
+  margin-bottom: 1.5rem;
+}
+
+.audience-complete-banner {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #4ade80;
+  margin-top: 0.5rem;
+}
+
+/* Audience Tables */
+.audience-lane-table,
+.audience-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.5rem;
+}
+
+.audience-lane-table td,
+.audience-results-table td,
+.audience-results-table th {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.audience-results-table th {
+  font-size: 0.875rem;
+  color: #8080a0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  text-align: left;
+}
+
+.audience-lane-number {
+  font-weight: 700;
+  color: #60a5fa;
+  width: 8rem;
+}
+
+.audience-car-number {
+  font-weight: 700;
+  width: 5rem;
+}
+
+.audience-name {
+  font-weight: 500;
+}
+
+.audience-place {
+  font-weight: 800;
+  font-size: 1.75rem;
+  width: 3rem;
+  text-align: center;
+}
+
+.audience-time {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* Medal colors */
+.audience-place-1 td { color: #fbbf24; }
+.audience-place-2 td { color: #d1d5db; }
+.audience-place-3 td { color: #cd7c2f; }
+
 /* ===== Responsive ===== */
+@media (min-width: 900px) {
+  .console-panels {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 640px) {
   #site-header {
     flex-direction: column;

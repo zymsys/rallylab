@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kub Kars — Operator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header id="site-header">
+    <div class="header-brand">
+      <h1 class="logo">Kub Kars</h1>
+      <span class="header-mode">Operator</span>
+      <nav id="breadcrumbs" aria-label="Breadcrumb"></nav>
+    </div>
+    <div id="user-info"></div>
+  </header>
+  <div id="live-bar" class="live-bar hidden">
+    <span class="live-badge"></span>
+    <span id="live-bar-text">Race in progress</span>
+    <button class="btn btn-sm" id="live-bar-btn">Return to Live Console</button>
+  </div>
+  <main id="app"></main>
+  <div id="dialog-backdrop" class="dialog-backdrop hidden" aria-hidden="true">
+    <div id="dialog" class="dialog" role="dialog" aria-modal="true"></div>
+  </div>
+  <div id="toast-container" aria-live="polite"></div>
+  <script type="module" src="js/operator/app.js"></script>
+</body>
+</html>

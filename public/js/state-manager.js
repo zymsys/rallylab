@@ -12,7 +12,12 @@ export function initialState() {
     created_by: null,
     sections: {},
     groups: {},
-    registrars: {}
+    registrars: {},
+    race_day: {
+      loaded: false,
+      sections: {},
+      active_section_id: null
+    }
   };
 }
 
@@ -149,6 +154,208 @@ export function applyEvent(state, event) {
       };
     }
 
+    // ─── Race Day Events ──────────────────────────────────────────
+
+    case 'RosterLoaded': {
+      const rd = state.race_day;
+      const sectionEntry = {
+        section_id: payload.section_id,
+        section_name: payload.section_name,
+        participants: (payload.participants || []).map(p => ({
+          participant_id: p.participant_id,
+          name: p.name,
+          car_number: p.car_number,
+          group_id: p.group_id || null
+        })),
+        arrived: [],
+        removed: [],
+        started: false,
+        completed: false,
+        heats: [],
+        results: {},
+        reruns: {}
+      };
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          loaded: true,
+          sections: { ...rd.sections, [payload.section_id]: sectionEntry }
+        }
+      };
+    }
+
+    case 'CarArrived': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      if (sec.arrived.includes(payload.car_number)) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              arrived: [...sec.arrived, payload.car_number]
+            }
+          }
+        }
+      };
+    }
+
+    case 'SectionStarted': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          active_section_id: payload.section_id,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: { ...sec, started: true }
+          }
+        }
+      };
+    }
+
+    case 'HeatStaged': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              heats: [...sec.heats, {
+                heat_number: payload.heat_number,
+                lanes: payload.lanes
+              }]
+            }
+          }
+        }
+      };
+    }
+
+    case 'RaceCompleted': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              results: {
+                ...sec.results,
+                [payload.heat_number]: {
+                  type: 'RaceCompleted',
+                  heat_number: payload.heat_number,
+                  times_ms: payload.times_ms,
+                  timestamp: payload.timestamp
+                }
+              }
+            }
+          }
+        }
+      };
+    }
+
+    case 'ResultManuallyEntered': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              results: {
+                ...sec.results,
+                [payload.heat_number]: {
+                  type: 'ResultManuallyEntered',
+                  heat_number: payload.heat_number,
+                  rankings: payload.rankings,
+                  timestamp: payload.timestamp
+                }
+              }
+            }
+          }
+        }
+      };
+    }
+
+    case 'RerunDeclared': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      const currentReruns = sec.reruns[payload.heat_number] || 0;
+      const { [payload.heat_number]: _, ...remainingResults } = sec.results;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              reruns: { ...sec.reruns, [payload.heat_number]: currentReruns + 1 },
+              results: remainingResults
+            }
+          }
+        }
+      };
+    }
+
+    case 'CarRemoved': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      if (sec.removed.includes(payload.car_number)) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              removed: [...sec.removed, payload.car_number]
+            }
+          }
+        }
+      };
+    }
+
+    case 'SectionCompleted': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: { ...sec, completed: true }
+          }
+        }
+      };
+    }
+
     default:
       return state;
   }
@@ -167,4 +374,54 @@ export function nextAvailableCarNumber(section) {
   let n = 1;
   while (used.has(n)) n++;
   return n;
+}
+
+/**
+ * Derive the current race day phase for a section.
+ * @param {Object} state - Full application state
+ * @param {string} sectionId
+ * @returns {'idle'|'event-loaded'|'check-in'|'staging'|'results'|'section-complete'}
+ */
+export function deriveRaceDayPhase(state, sectionId) {
+  const rd = state.race_day;
+  if (!rd.loaded) return 'idle';
+
+  const sec = rd.sections[sectionId];
+  if (!sec) return 'event-loaded';
+
+  if (sec.completed) return 'section-complete';
+
+  if (!sec.started) return 'check-in';
+
+  // Section is started — determine staging vs results
+  const heatCount = sec.heats.length;
+  if (heatCount === 0) return 'staging';
+
+  const lastHeat = sec.heats[heatCount - 1].heat_number;
+  const hasResult = sec.results[lastHeat] != null;
+
+  return hasResult ? 'results' : 'staging';
+}
+
+/**
+ * Get the current heat number for a section.
+ * Returns the last staged heat number, or 0 if no heats staged.
+ * @param {Object} state - Full application state
+ * @param {string} sectionId
+ * @returns {number}
+ */
+export function getCurrentHeat(state, sectionId) {
+  const sec = state.race_day.sections[sectionId];
+  if (!sec || sec.heats.length === 0) return 0;
+  return sec.heats[sec.heats.length - 1].heat_number;
+}
+
+/**
+ * Get the accepted (latest) result for a heat.
+ * @param {Object} section - race_day section object
+ * @param {number} heatNumber
+ * @returns {Object|null}
+ */
+export function getAcceptedResult(section, heatNumber) {
+  return section.results[heatNumber] || null;
 }
