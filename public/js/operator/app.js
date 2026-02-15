@@ -1,15 +1,18 @@
 /**
  * operator/app.js — Race day operator entry point.
- * Hash routing, state management, race polling loop.
+ * Hash routing, state management, race loop.
  * Offline-first: no auth required, uses IndexedDB for event storage.
  */
 
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
 import { rebuildState, deriveRaceDayPhase, getCurrentHeat } from '../state-manager.js';
 import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival } from '../scheduler.js';
-import { computeLeaderboard } from '../scoring.js';
-import { connect as trackConnect, waitForRace, waitForGate, getInfo as trackInfo, isConnected } from '../track-connection.js';
-import { sendWelcome, sendStaging, sendResults, sendLeaderboard, sendSectionComplete } from '../broadcast.js';
+import {
+  connect as trackConnect, waitForRace, waitForGate,
+  getInfo as trackInfo, isConnected, isUsingFakeTrack,
+  triggerManualRace, triggerManualGate
+} from '../track-connection.js';
+import { sendWelcome, sendStaging, sendResults } from '../broadcast.js';
 import {
   renderEventList, renderEventHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -79,17 +82,26 @@ function renderScreen(screenName, params) {
   updateBreadcrumbs(screenName, params);
   updateLiveBar(screenName, params);
 
+  // Broadcast welcome to audience when event data is available
+  if (screenName === 'event-home' && _state?.event_name) {
+    sendWelcome(_state.event_name);
+  }
+
   const ctx = {
     state: _state,
     liveSection: _liveSection,
     navigate,
     appendEvent: appendAndRebuild,
     startSection,
+    resumeSection,
     declareRerun,
     removeCar,
     showToast,
     getSchedule: () => _liveSection?.schedule,
-    getLaneCount: () => trackInfo().lane_count
+    getLaneCount: () => trackInfo().lane_count,
+    isUsingFakeTrack,
+    triggerManualRace,
+    triggerManualGate
   };
 
   const result = renderFn(container, params, ctx);
@@ -211,9 +223,62 @@ export async function clearAndRebuild() {
   _liveSection = null;
 }
 
+// ─── Schedule Reconstruction ────────────────────────────────────
+
+/**
+ * Reconstruct the schedule for a started section by replaying events.
+ * The scheduler is fully deterministic, so replaying the same sequence
+ * of generate/regenerate calls produces the identical schedule.
+ */
+async function reconstructSchedule(sectionId, laneCount) {
+  const events = await getAllEvents();
+  const sectionEvents = events.filter(e => e.section_id === sectionId);
+
+  const arrived = new Set();
+  const removed = new Set();
+  let schedule = null;
+  let started = false;
+  let currentHeat = 0;
+
+  // We also need participant data — pull from state (loaded from RosterLoaded)
+  const sec = _state.race_day.sections[sectionId];
+  if (!sec) throw new Error('Section not found');
+
+  for (const evt of sectionEvents) {
+    if (evt.type === 'CarArrived') {
+      arrived.add(evt.car_number);
+      if (started && schedule) {
+        const allParticipants = sec.participants
+          .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
+        schedule = regenerateAfterLateArrival(schedule, allParticipants, currentHeat, laneCount);
+      }
+    } else if (evt.type === 'CarRemoved') {
+      removed.add(evt.car_number);
+      if (started && schedule) {
+        const remaining = sec.participants
+          .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
+        if (remaining.length >= 2) {
+          schedule = regenerateAfterRemoval(schedule, remaining, currentHeat, laneCount);
+        }
+      }
+    } else if (evt.type === 'SectionStarted') {
+      started = true;
+      const participants = sec.participants
+        .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
+      schedule = generateSchedule({ participants, lane_count: laneCount });
+    } else if (evt.type === 'HeatStaged') {
+      currentHeat = evt.heat_number;
+    }
+  }
+
+  return schedule;
+}
+
 // ─── Section Start + Race Loop ───────────────────────────────────
 
 async function startSection(sectionId) {
+  if (_raceAbort) _raceAbort.abort();
+
   if (!isConnected()) {
     await trackConnect();
   }
@@ -251,6 +316,36 @@ async function startSection(sectionId) {
   runRaceLoop(sectionId);
 }
 
+// ─── Resume Section ─────────────────────────────────────────────
+
+async function resumeSection(sectionId) {
+  if (_raceAbort) _raceAbort.abort();
+
+  if (!isConnected()) {
+    await trackConnect();
+  }
+
+  const laneCount = trackInfo().lane_count;
+  const schedule = await reconstructSchedule(sectionId, laneCount);
+
+  if (!schedule) {
+    showToast('Could not reconstruct schedule', 'error');
+    return;
+  }
+
+  _liveSection = { sectionId, schedule };
+
+  // Re-render so the resume button is replaced with heat controls
+  renderCurrentScreen();
+
+  runRaceLoop(sectionId);
+}
+
+/**
+ * Race loop: stage → wait for race → record results → wait for gate → repeat.
+ * With fake track: gate release and reset clicks drive the pacing.
+ * Without fake track: operator clicks "Run Heat" / "Next Heat" buttons.
+ */
 async function runRaceLoop(sectionId) {
   _raceAbort = new AbortController();
   const signal = _raceAbort.signal;
@@ -286,9 +381,11 @@ async function runRaceLoop(sectionId) {
 
       // Render staging + broadcast
       renderCurrentScreen();
-      sendStaging(sec().section_name, heat.heat_number, heat.lanes);
+      const nextHeat = heatIdx + 1 < schedule.heats.length ? schedule.heats[heatIdx + 1] : null;
+      sendStaging(sec().section_name, heat.heat_number, heat.lanes,
+        nextHeat ? { heat_number: nextHeat.heat_number, lanes: nextHeat.lanes } : null);
 
-      // Wait for race
+      // Wait for race (fake track: blocks on gate click; manual: blocks on button)
       const times_ms = await waitForRace(heat.lanes, signal);
 
       // Emit RaceCompleted
@@ -303,17 +400,12 @@ async function runRaceLoop(sectionId) {
       // Render results + broadcast
       renderCurrentScreen();
 
-      // Build results for broadcast
       const resultData = buildResultsForBroadcast(sec(), heat);
       sendResults(sec().section_name, heat.heat_number, resultData);
 
-      // Compute and broadcast leaderboard
-      const standings = computeLeaderboard(sec());
-      sendLeaderboard(sec().section_name, standings);
-
       heatIdx++;
 
-      // If more heats, wait for gate
+      // If more heats, wait for gate (fake track: blocks on reset; manual: blocks on button)
       if (heatIdx < schedule.heats.length) {
         await waitForGate(signal);
       }
@@ -326,9 +418,7 @@ async function runRaceLoop(sectionId) {
       timestamp: Date.now()
     });
 
-    const finalStandings = computeLeaderboard(sec());
-    sendSectionComplete(sec().section_name, finalStandings);
-
+    // Operator controls the audience reveal from the section-complete screen
     navigate('section-complete', { sectionId });
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -366,7 +456,6 @@ function buildResultsForBroadcast(section, heat) {
 // ─── Re-Run ──────────────────────────────────────────────────────
 
 async function declareRerun(sectionId, heatNumber) {
-  // Abort current race loop
   if (_raceAbort) _raceAbort.abort();
 
   await appendAndRebuild({
@@ -385,7 +474,6 @@ async function declareRerun(sectionId, heatNumber) {
 // ─── Remove Car ──────────────────────────────────────────────────
 
 async function removeCar(sectionId, carNumber, reason) {
-  // Abort current race loop
   if (_raceAbort) _raceAbort.abort();
 
   await appendAndRebuild({
@@ -454,7 +542,7 @@ async function init() {
   await openStore();
   await rebuildFromStore();
 
-  // Connect track in mock mode
+  // Connect track
   await trackConnect();
 
   // Route to current hash or event list

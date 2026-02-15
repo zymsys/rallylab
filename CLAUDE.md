@@ -18,7 +18,7 @@ KubKars is a pinewood derby race management system for Scouts Canada. It is even
 
 ```
 public/
-├── pre-race.html              # Only entry point implemented so far
+├── index.html                 # Main entry point (login + pre-race)
 ├── css/styles.css             # Single stylesheet, CSS custom properties
 └── js/
     ├── supabase.js            # Supabase client (currently mock with localStorage)

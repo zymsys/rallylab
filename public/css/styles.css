@@ -804,6 +804,18 @@ body.audience #app {
   margin-top: 0.25rem;
 }
 
+.audience-staging-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.audience-staging-single {
+  grid-template-columns: 1fr;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
 .audience-staging-label {
   text-align: center;
   font-size: 1.25rem;
@@ -811,6 +823,16 @@ body.audience #app {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #60a5fa;
+  margin-bottom: 1.5rem;
+}
+
+.audience-upnext-label {
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #8080a0;
   margin-bottom: 1.5rem;
 }
 
@@ -847,6 +869,10 @@ body.audience #app {
   text-align: left;
 }
 
+.audience-th-place { width: 3rem; }
+.audience-th-car { width: 5rem; }
+.audience-th-time { text-align: right; width: 8rem; }
+
 .audience-lane-number {
   font-weight: 700;
   color: #60a5fa;
@@ -872,12 +898,78 @@ body.audience #app {
 .audience-time {
   font-family: var(--font-mono);
   text-align: right;
+  width: 8rem;
 }
 
 /* Medal colors */
 .audience-place-1 td { color: #fbbf24; }
 .audience-place-2 td { color: #d1d5db; }
 .audience-place-3 td { color: #cd7c2f; }
+
+/* ===== Audience Reveal Animations ===== */
+.audience-reveal-hidden {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  border-bottom: none !important;
+}
+
+.audience-reveal-hidden td {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.audience-reveal-show {
+  animation: audience-reveal-slide 0.5s ease forwards;
+}
+
+.audience-reveal-medal {
+  animation: audience-reveal-bounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.audience-reveal-medal.audience-place-1 td {
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.6), 0 0 24px rgba(251, 191, 36, 0.3);
+}
+
+.audience-reveal-medal.audience-place-2 td {
+  text-shadow: 0 0 12px rgba(209, 213, 219, 0.6), 0 0 24px rgba(209, 213, 219, 0.3);
+}
+
+.audience-reveal-medal.audience-place-3 td {
+  text-shadow: 0 0 12px rgba(205, 124, 47, 0.6), 0 0 24px rgba(205, 124, 47, 0.3);
+}
+
+@keyframes audience-reveal-slide {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    max-height: 5rem;
+    transform: translateY(0);
+  }
+}
+
+@keyframes audience-reveal-bounce {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  60% {
+    opacity: 1;
+    max-height: 5rem;
+    transform: translateY(-4px) scale(1.03);
+  }
+  to {
+    opacity: 1;
+    max-height: 5rem;
+    transform: translateY(0) scale(1);
+  }
+}
 
 /* ===== Responsive ===== */
 @media (min-width: 900px) {
@@ -925,4 +1017,303 @@ body.audience #app {
     margin: 2rem auto;
     padding: 0 0.5rem;
   }
+}
+
+/* ===== Fake Track Display ===== */
+body.fake-track {
+  background: #2c1810;
+  color: #f0e6d8;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.ft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1.5rem;
+  background: #1a0e08;
+  color: #f0e6d8;
+  flex-shrink: 0;
+}
+
+.ft-brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ft-status {
+  font-size: 0.85rem;
+  color: #c4a882;
+  font-weight: 500;
+}
+
+/* Track container — horizontal: gate | start | surface | finish | reset */
+body.fake-track #track {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 1rem;
+  min-height: 0;
+  gap: 0;
+}
+
+/* Gate area (left side) */
+.ft-gate-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  flex-shrink: 0;
+}
+
+.ft-gate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.25rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-align: center;
+  border: 2px solid #5a3a20;
+  border-radius: 8px;
+  background: #3d2415;
+  color: #8a7060;
+  cursor: not-allowed;
+  transition: all 200ms ease;
+}
+
+.ft-gate-btn.ft-gate-ready {
+  background: #c0392b;
+  color: #fff;
+  border-color: #e74c3c;
+  cursor: pointer;
+  animation: gate-pulse 1.5s ease-in-out infinite;
+}
+
+.ft-gate-btn.ft-gate-ready:hover {
+  background: #e74c3c;
+  transform: scale(1.03);
+}
+
+.ft-gate-btn.ft-gate-released {
+  animation: gate-drop 0.5s ease-out;
+}
+
+.ft-gate-icon {
+  font-size: 1.1em;
+  transition: transform 300ms ease;
+}
+
+.ft-gate-btn.ft-gate-released .ft-gate-icon {
+  transform: translateX(6px);
+}
+
+@keyframes gate-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+}
+
+@keyframes gate-drop {
+  0% { transform: translateX(0); }
+  40% { transform: translateX(8px); }
+  100% { transform: translateX(0); opacity: 0.5; }
+}
+
+/* Start / Finish lines — vertical stripes */
+.ft-line {
+  width: 4px;
+  background: repeating-linear-gradient(
+    180deg,
+    #fff 0px, #fff 12px,
+    #111 12px, #111 24px
+  );
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Track surface — lanes stacked vertically, cars race left-to-right */
+.ft-surface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background:
+    linear-gradient(90deg,
+      #8B6914 0%, #a07828 15%, #9a7020 50%, #8B6914 85%, #7a5c10 100%
+    );
+  border-top: 3px solid #5a4010;
+  border-bottom: 3px solid #5a4010;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+/* Lanes — horizontal rows */
+.ft-lane {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-left: 0.4rem;
+}
+
+.ft-lane-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.45);
+  position: absolute;
+  left: 6px;
+  z-index: 2;
+}
+
+/* Horizontal divider between lanes */
+.ft-lane-divider {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+/* Car slot — full lane area for car to travel through */
+.ft-car-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Car element — positioned horizontally */
+.ft-car {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 72px;
+  padding: 4px 6px;
+  background: var(--car-color, #e74c3c);
+  border-radius: 6px;
+  text-align: center;
+  z-index: 5;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.4);
+  transition: none; /* animated via JS */
+}
+
+.ft-car-number {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  line-height: 1.1;
+}
+
+.ft-car-name {
+  font-size: 0.55rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60px;
+  line-height: 1.2;
+}
+
+/* Place label on finished cars — appears above */
+.ft-car-place {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  white-space: nowrap;
+  animation: place-pop 200ms ease;
+}
+
+.ft-place-1 { background: #f1c40f; color: #1a1a1a; }
+.ft-place-2 { background: #bdc3c7; color: #1a1a1a; }
+.ft-place-3 { background: #cd7f32; color: #fff; }
+
+@keyframes place-pop {
+  from { transform: translateX(-50%) scale(0); }
+  to { transform: translateX(-50%) scale(1); }
+}
+
+/* Idle message */
+.ft-idle-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Reset button area (right side) */
+.ft-reset-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  flex-shrink: 0;
+  min-width: 48px;
+}
+
+.ft-reset-btn {
+  padding: 1.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-align: center;
+  border: 2px solid #e74c3c;
+  border-radius: 8px;
+  background: #c0392b;
+  color: #fff;
+  cursor: pointer;
+  transition: all 200ms ease;
+  animation: gate-pulse 1.5s ease-in-out infinite;
+}
+
+.ft-reset-btn:disabled {
+  background: #3d2415;
+  border-color: #5a3a20;
+  color: #8a7060;
+  cursor: not-allowed;
+  animation: none;
+}
+
+.ft-reset-btn:not(:disabled):hover {
+  background: #e74c3c;
+  transform: scale(1.03);
+}
+
+.ft-reset-btn.ft-reset-done {
+  background: #27ae60;
+  border-color: #2ecc71;
+  cursor: default;
+  animation: none;
+}
+
+/* Track state-based visuals */
+body.fake-track[data-track-state="racing"] .ft-surface {
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
 }

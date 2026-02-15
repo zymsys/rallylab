@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kub Kars — Debug View</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; background: #1a1a2e; color: #e0e0e0; font-family: system-ui, sans-serif; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 4px;
+      height: 100vh;
+      padding: 4px;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border: 1px solid #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .panel-operator { grid-row: 1 / 3; }
+
+    .panel-label {
+      background: #252540;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    .panel-operator .panel-label { color: #60a5fa; }
+    .panel-fake-track .panel-label { color: #f59e0b; }
+    .panel-audience .panel-label { color: #4ade80; }
+
+    iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    .panel-audience iframe { background: #0a0a1a; }
+
+    /* Scale audience content to fit small panel — render at 2x then shrink */
+    .panel-audience .iframe-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .panel-audience iframe {
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      transform: scale(0.5);
+      transform-origin: 0 0;
+      flex: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <div class="panel panel-operator">
+      <div class="panel-label">Operator</div>
+      <iframe src="operator.html"></iframe>
+    </div>
+    <div class="panel panel-fake-track">
+      <div class="panel-label">Fake Track</div>
+      <iframe src="fake-track.html"></iframe>
+    </div>
+    <div class="panel panel-audience">
+      <div class="panel-label">Audience Display</div>
+      <div class="iframe-wrap">
+        <iframe src="audience.html"></iframe>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

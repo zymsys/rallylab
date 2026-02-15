@@ -6,7 +6,8 @@
 import { onMessage } from '../broadcast.js';
 import {
   renderWelcome, renderStaging, renderResults,
-  renderLeaderboard, renderSectionComplete
+  renderLeaderboard, renderSectionComplete,
+  revealNext, revealAll
 } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -19,7 +20,7 @@ onMessage((msg) => {
       renderWelcome(container, msg.event_name);
       break;
     case 'SHOW_STAGING':
-      renderStaging(container, msg.section_name, msg.heat_number, msg.lanes);
+      renderStaging(container, msg.section_name, msg.heat_number, msg.lanes, msg.next_heat);
       break;
     case 'SHOW_RESULTS':
       renderResults(container, msg.section_name, msg.heat_number, msg.results);
@@ -29,6 +30,12 @@ onMessage((msg) => {
       break;
     case 'SHOW_SECTION_COMPLETE':
       renderSectionComplete(container, msg.section_name, msg.standings);
+      break;
+    case 'REVEAL_NEXT':
+      revealNext();
+      break;
+    case 'REVEAL_ALL':
+      revealAll();
       break;
   }
 });

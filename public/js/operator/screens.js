@@ -325,6 +325,10 @@ export function renderLiveConsole(container, params, ctx) {
   const schedule = ctx.getSchedule();
   const totalHeats = schedule ? schedule.heats.length : 0;
 
+  // If section is started but no schedule in memory for THIS section → show resume UI
+  const isLiveForThisSection = ctx.liveSection?.sectionId === sectionId;
+  const needsResume = sec.started && !sec.completed && (!schedule || !isLiveForThisSection);
+
   container.innerHTML = '';
 
   // Pinned header
@@ -332,7 +336,8 @@ export function renderLiveConsole(container, params, ctx) {
   header.className = 'console-header';
 
   let stateLabel;
-  if (phase === 'staging') stateLabel = 'Staging';
+  if (needsResume) stateLabel = 'Paused';
+  else if (phase === 'staging') stateLabel = 'Staging';
   else if (phase === 'results') stateLabel = 'Results';
   else if (phase === 'section-complete') stateLabel = 'Complete';
   else stateLabel = 'Ready';
@@ -342,9 +347,48 @@ export function renderLiveConsole(container, params, ctx) {
       <h2 class="screen-title">${esc(sec.section_name)}</h2>
       <span class="console-state-label">${stateLabel}</span>
     </div>
-    <p class="info-line">Heat ${currentHeat} of ${totalHeats}</p>
+    <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'}</p>
   `;
   container.appendChild(header);
+
+  // Resume Racing prompt
+  if (needsResume) {
+    const resumeWrap = document.createElement('div');
+    resumeWrap.className = 'console-resume';
+    resumeWrap.style.textAlign = 'center';
+    resumeWrap.style.padding = '2rem 0';
+
+    const hint = document.createElement('p');
+    hint.className = 'info-line';
+    hint.style.marginBottom = '1rem';
+    hint.textContent = 'Race loop is not running. Reconnect to the track and resume to continue.';
+    resumeWrap.appendChild(hint);
+
+    const resumeBtn = document.createElement('button');
+    resumeBtn.className = 'btn btn-primary';
+    resumeBtn.textContent = 'Resume Racing';
+    resumeBtn.onclick = async () => {
+      resumeBtn.disabled = true;
+      resumeBtn.textContent = 'Resuming...';
+      try {
+        await ctx.resumeSection(sectionId);
+      } catch (e) {
+        resumeBtn.disabled = false;
+        resumeBtn.textContent = 'Resume Racing';
+        ctx.showToast('Resume failed: ' + e.message, 'error');
+      }
+    };
+    resumeWrap.appendChild(resumeBtn);
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn btn-ghost';
+    backBtn.style.marginTop = '0.5rem';
+    backBtn.textContent = 'Event Home';
+    backBtn.onclick = () => navigate('event-home', {});
+    resumeWrap.appendChild(backBtn);
+
+    container.appendChild(resumeWrap);
+  }
 
   // Two-panel layout
   const panels = document.createElement('div');
@@ -439,9 +483,40 @@ export function renderLiveConsole(container, params, ctx) {
   panels.appendChild(rightPanel);
   container.appendChild(panels);
 
-  // Controls row
+  // Controls row (skip when showing resume prompt)
+  if (needsResume) return;
+
   const controls = document.createElement('div');
   controls.className = 'console-controls';
+
+  const usingFakeTrack = ctx.isUsingFakeTrack();
+
+  // Run Heat button — manual fallback only (fake track uses gate click)
+  if (!usingFakeTrack && currentHeat > 0 && phase === 'staging') {
+    const currentHeatData = sec.heats.find(h => h.heat_number === currentHeat);
+    const runBtn = document.createElement('button');
+    runBtn.className = 'btn btn-primary';
+    runBtn.textContent = 'Run Heat ' + currentHeat;
+    runBtn.onclick = () => {
+      runBtn.disabled = true;
+      runBtn.textContent = 'Racing...';
+      if (currentHeatData) ctx.triggerManualRace(currentHeatData.lanes);
+    };
+    controls.appendChild(runBtn);
+  }
+
+  // Next Heat button — manual fallback only (fake track uses reset click)
+  if (!usingFakeTrack && currentHeat > 0 && phase === 'results') {
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.textContent = 'Next Heat';
+    nextBtn.onclick = () => {
+      nextBtn.disabled = true;
+      nextBtn.textContent = 'Staging...';
+      ctx.triggerManualGate();
+    };
+    controls.appendChild(nextBtn);
+  }
 
   // Re-Run button
   if (currentHeat > 0 && phase === 'results') {
@@ -548,16 +623,61 @@ export function renderSectionComplete(container, params, ctx) {
   homeBtn.onclick = () => navigate('event-home', {});
   actions.appendChild(homeBtn);
 
+  // Reveal flow state
+  let revealRemaining = standings.length;
+
   const showBtn = document.createElement('button');
   showBtn.className = 'btn btn-primary';
   showBtn.textContent = 'Show on Audience Display';
-  showBtn.onclick = () => {
-    const { sendSectionComplete } = import('../broadcast.js').then(m => {
-      m.sendSectionComplete(sec.section_name, standings);
-      ctx.showToast('Leaderboard sent to audience display', 'success');
-    });
+
+  const revealNextBtn = document.createElement('button');
+  revealNextBtn.className = 'btn btn-primary';
+  revealNextBtn.style.display = 'none';
+
+  const revealAllBtn = document.createElement('button');
+  revealAllBtn.className = 'btn btn-secondary';
+  revealAllBtn.textContent = 'Reveal All';
+  revealAllBtn.style.display = 'none';
+
+  function updateRevealNextLabel() {
+    revealNextBtn.textContent = `Reveal Next (${revealRemaining} remaining)`;
+    revealNextBtn.disabled = revealRemaining === 0;
+  }
+
+  showBtn.onclick = async () => {
+    const m = await import('../broadcast.js');
+    m.sendSectionComplete(sec.section_name, standings);
+    ctx.showToast('Section results sent to audience display', 'success');
+
+    // Swap to reveal controls
+    showBtn.style.display = 'none';
+    revealNextBtn.style.display = '';
+    revealAllBtn.style.display = '';
+    updateRevealNextLabel();
   };
+
+  revealNextBtn.onclick = async () => {
+    const m = await import('../broadcast.js');
+    m.sendRevealNext();
+    revealRemaining--;
+    updateRevealNextLabel();
+    if (revealRemaining === 0) {
+      revealNextBtn.style.display = 'none';
+      revealAllBtn.style.display = 'none';
+    }
+  };
+
+  revealAllBtn.onclick = async () => {
+    const m = await import('../broadcast.js');
+    m.sendRevealAll();
+    revealRemaining = 0;
+    revealNextBtn.style.display = 'none';
+    revealAllBtn.style.display = 'none';
+  };
+
   actions.appendChild(showBtn);
+  actions.appendChild(revealNextBtn);
+  actions.appendChild(revealAllBtn);
 
   container.appendChild(actions);
 }

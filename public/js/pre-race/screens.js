@@ -181,6 +181,14 @@ export async function renderEventHome(container, params) {
   }
 
   if (isOrganizer) {
+    const raceDayBtn = document.createElement('button');
+    raceDayBtn.className = 'btn btn-primary';
+    raceDayBtn.textContent = 'Race Day';
+    raceDayBtn.onclick = () => window.open('operator.html', 'kubkars-operator');
+    actions.appendChild(raceDayBtn);
+  }
+
+  if (isOrganizer) {
     renderOrganizerEventHome(container, params, state, sections, groups, registrars);
   } else {
     renderRegistrarEventHome(container, params, state, sections, groups);

@@ -23,12 +23,13 @@ export function sendWelcome(eventName) {
   send({ type: 'SHOW_WELCOME', event_name: eventName });
 }
 
-export function sendStaging(sectionName, heatNumber, lanes) {
+export function sendStaging(sectionName, heatNumber, lanes, nextHeat) {
   send({
     type: 'SHOW_STAGING',
     section_name: sectionName,
     heat_number: heatNumber,
-    lanes
+    lanes,
+    next_heat: nextHeat || null
   });
 }
 
@@ -55,6 +56,14 @@ export function sendSectionComplete(sectionName, standings) {
     section_name: sectionName,
     standings
   });
+}
+
+export function sendRevealNext() {
+  send({ type: 'REVEAL_NEXT' });
+}
+
+export function sendRevealAll() {
+  send({ type: 'REVEAL_ALL' });
 }
 
 // ─── Audience Side ──────────────────────────────────────────────
