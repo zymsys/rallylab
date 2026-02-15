@@ -1,0 +1,679 @@
+# Kub Kars — Domain Events Catalog
+
+**Version:** 2.0
+**Status:** Specification
+
+---
+
+## 1. Overview
+
+This document catalogs all domain events in the Kub Kars system. Events represent facts that have occurred and are the source of truth for all derived state.
+
+### 1.1 Event Sourcing Principles
+
+- **Events are immutable** — once written, never modified
+- **Events are append-only** — new events supersede old ones, but old ones remain
+- **State is derived** — all application state is rebuilt by replaying events
+- **Events are facts** — they describe what happened, not what should happen
+
+### 1.2 Event Naming
+
+All event types use **PascalCase** (e.g., `RaceCompleted`, `HeatStaged`).
+
+### 1.3 Event Scope
+
+All events are stored in a single `domain_events` table in Supabase (PostgreSQL). Events are partitioned into two runtime contexts:
+
+- **Pre-race events** — written directly to Supabase via `supabase-js`
+- **Race day events** — written to IndexedDB first (offline-first), synced to Supabase when online
+
+Both contexts share the same event-sourcing model: append-only, immutable, state derived by replay. See `05-pre-race-data.md` for Supabase schema and RLS policies.
+
+---
+
+## 2. Pre-Race Events (Supabase)
+
+These events occur during registration and setup before race day. They are written directly to the `domain_events` table in Supabase via `supabase-js`. State is derived client-side by replaying events.
+
+### 2.1 EventCreated
+
+The Organizer creates a new Event.
+
+```json
+{
+  "type": "EventCreated",
+  "event_id": "uuid",
+  "event_name": "Kub Kars Rally 2026",
+  "event_date": "2026-03-15",
+  "created_by": "organizer@example.com",
+  "timestamp": 1708012345678
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"EventCreated"` |
+| `event_id` | UUID | yes | Unique identifier for the Event |
+| `event_name` | string | yes | Display name |
+| `event_date` | ISO 8601 date | yes | Scheduled date |
+| `created_by` | string | yes | Organizer email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+---
+
+### 2.2 SectionCreated
+
+The Organizer creates a Section within an Event.
+
+```json
+{
+  "type": "SectionCreated",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "section_name": "Cubs",
+  "created_by": "organizer@example.com",
+  "timestamp": 1708012346789
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"SectionCreated"` |
+| `event_id` | UUID | yes | Parent Event |
+| `section_id` | UUID | yes | Unique identifier for the Section |
+| `section_name` | string | yes | Display name (e.g., "Cubs", "Scouts") |
+| `created_by` | string | yes | Organizer email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+---
+
+### 2.3 RegistrarInvited
+
+The Organizer invites a Registrar (Section Contact) to manage a Section's roster.
+
+```json
+{
+  "type": "RegistrarInvited",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "registrar_email": "cubmaster@example.com",
+  "invited_by": "organizer@example.com",
+  "timestamp": 1708012347890
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"RegistrarInvited"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `registrar_email` | string | yes | Email of the Registrar |
+| `invited_by` | string | yes | Organizer email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+Multiple `RegistrarInvited` events for the same Section replace previous invitations. The latest invitation is the active Registrar.
+
+---
+
+### 2.4 OperatorInvited
+
+The Organizer invites an additional Operator to help run the Event on race day.
+
+```json
+{
+  "type": "OperatorInvited",
+  "event_id": "uuid",
+  "operator_email": "backup-operator@example.com",
+  "invited_by": "organizer@example.com",
+  "timestamp": 1708012347890
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"OperatorInvited"` |
+| `event_id` | UUID | yes | |
+| `operator_email` | string | yes | Email of the invited Operator |
+| `invited_by` | string | yes | Organizer email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+Operators have access to the entire Event (all Sections). No `section_id` — unlike Registrars who are scoped to a single Section.
+
+Multiple Operators can be invited. The Organizer is implicitly an Operator and does not need an explicit invitation.
+
+---
+
+### 2.5 RosterUpdated
+
+A Registrar uploads a participant list via spreadsheet import.
+
+```json
+{
+  "type": "RosterUpdated",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "participants": [
+    { "participant_id": "uuid", "name": "Billy Thompson" },
+    { "participant_id": "uuid", "name": "Sarah Chen" }
+  ],
+  "submitted_by": "cubmaster@example.com",
+  "timestamp": 1708012348901
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"RosterUpdated"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `participants` | array | yes | List of `{ participant_id, name }` |
+| `submitted_by` | string | yes | Registrar email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- **Destructive** — replaces entire roster for this Section
+- Car numbers are regenerated sequentially (1, 2, 3, ...) based on array order
+- Multiple `RosterUpdated` events for the same Section: latest wins
+
+**Warning:** If participants have already painted car numbers, uploading a new spreadsheet renumbers all cars. Use `ParticipantAdded` / `ParticipantRemoved` for surgical edits.
+
+---
+
+### 2.6 ParticipantAdded
+
+A Registrar adds a single participant without renumbering existing cars.
+
+```json
+{
+  "type": "ParticipantAdded",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "participant": { "participant_id": "uuid", "name": "Tommy Rodriguez" },
+  "car_number": 15,
+  "added_by": "cubmaster@example.com",
+  "timestamp": 1708012349012
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"ParticipantAdded"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `participant` | object | yes | `{ participant_id, name }` |
+| `car_number` | integer | yes | Next available car number (server-assigned) |
+| `added_by` | string | yes | Registrar email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+---
+
+### 2.7 ParticipantRemoved
+
+A Registrar removes a single participant.
+
+```json
+{
+  "type": "ParticipantRemoved",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "participant_id": "uuid",
+  "car_number": 7,
+  "removed_by": "cubmaster@example.com",
+  "timestamp": 1708012350123
+}
+```
+
+Car number is retired (not immediately reused). `ParticipantAdded` fills gaps but numbers don't shift.
+
+---
+
+### 2.8 SectionLocked
+
+The Organizer locks a Section's roster, preventing further changes.
+
+```json
+{
+  "type": "SectionLocked",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "locked_by": "organizer@example.com",
+  "timestamp": 1708012351234
+}
+```
+
+After this event, no `RosterUpdated`, `ParticipantAdded`, or `ParticipantRemoved` events are accepted for this Section. The roster becomes read-only and ready for race day export.
+
+---
+
+## 3. Race Day Events (Race Controller)
+
+These events occur during race day and are stored in IndexedDB, with background sync to Supabase's `domain_events` table.
+
+### 3.1 RosterLoaded
+
+The Operator imports a locked roster into the Race Controller.
+
+```json
+{
+  "type": "RosterLoaded",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "participants": [
+    { "participant_id": "uuid", "name": "Billy Thompson", "car_number": 1 },
+    { "participant_id": "uuid", "name": "Sarah Chen", "car_number": 2 }
+  ],
+  "timestamp": 1708098765432
+}
+```
+
+This is a snapshot of the locked roster. Only loaded rosters can be raced.
+
+---
+
+### 3.2 CarArrived
+
+A participant checks in on race day, confirming their car is present.
+
+```json
+{
+  "type": "CarArrived",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "car_number": 7,
+  "timestamp": 1708098766543
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"CarArrived"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `car_number` | integer | yes | Car being checked in |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Only cars with `CarArrived` events are included in heat scheduling
+- No-shows are automatically excluded
+- Late arrivals can check in; schedule regenerates for remaining heats
+
+**Clarification:** This operates on the locked roster. It does not add new participants or edit names/car numbers. The pre-race roster is immutable on race day; `CarArrived` and `CarRemoved` only affect which cars from the roster participate in racing.
+
+---
+
+### 3.3 SectionStarted
+
+The Operator begins racing a Section.
+
+```json
+{
+  "type": "SectionStarted",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "timestamp": 1708098767654
+}
+```
+
+**Behavior:**
+- Heat schedule is generated using arrived cars only
+- Audience Display switches from Welcome to Heat 1 Staging
+- See `06-race-day-state-machine.md` for state transition details
+
+---
+
+### 3.4 HeatStaged
+
+The Race Controller stages the next heat, assigning participants to lanes.
+
+```json
+{
+  "type": "HeatStaged",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "heat": 1,
+  "lanes": [
+    { "lane": 1, "car_number": 3, "name": "Tommy" },
+    { "lane": 2, "car_number": 7, "name": "Alice" },
+    { "lane": 3, "car_number": 1, "name": "Billy" },
+    { "lane": 4, "car_number": 5, "name": "Emma" },
+    { "lane": 5, "car_number": 2, "name": "Sarah" },
+    { "lane": 6, "car_number": 8, "name": "Jake" }
+  ],
+  "timestamp": 1708098768000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"HeatStaged"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `heat` | integer | yes | Heat number |
+| `lanes` | array | yes | Lane assignments: `{ lane, car_number, name }` |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Audience Display shows staging screen with lane assignments
+- Track Operator uses this to load cars onto lanes
+- Emitted when a Section starts (heat 1) and after each heat completes (next heat)
+
+---
+
+### 3.5 RaceCompleted
+
+The Track Controller reports that a race has finished.
+
+```json
+{
+  "type": "RaceCompleted",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "heat": 16,
+  "race_id": "uuid",
+  "times_ms": {
+    "1": 2150,
+    "2": 2320,
+    "3": 2401,
+    "4": 3010,
+    "5": 2875,
+    "6": 2601
+  },
+  "timestamp": 1708098768765
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"RaceCompleted"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `heat` | integer | yes | Heat number |
+| `race_id` | UUID | yes | Unique ID from Track Controller |
+| `times_ms` | object | yes | Lane → finish time (ms since start). Absent lanes are unused. |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Audience Display shows results screen
+- Result is accepted unless superseded by a later `RaceCompleted` for the same heat (after a `RerunDeclared`)
+
+**Supersession logic:** If multiple `RaceCompleted` events exist for the same heat, the latest (by timestamp) is the accepted result. Earlier results are marked superseded. A re-run that completes is simply another `RaceCompleted` for the same heat — no separate event type needed.
+
+---
+
+### 3.6 RerunDeclared
+
+The Operator declares that the current heat must be re-run.
+
+```json
+{
+  "type": "RerunDeclared",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "heat": 16,
+  "reason": "car fell off track",
+  "timestamp": 1708098769000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"RerunDeclared"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `heat` | integer | yes | Heat number to re-run |
+| `reason` | string | optional | Human-readable reason |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Audience Display returns to staging for this heat
+- The next `RaceCompleted` for this heat supersedes the previous result
+- This is an operator intent event; the actual result comes from the next `RaceCompleted`
+
+---
+
+### 3.7 ResultManuallyEntered
+
+The Operator manually ranked a heat without times (fallback when track hardware fails).
+
+```json
+{
+  "type": "ResultManuallyEntered",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "heat": 16,
+  "rankings": [
+    { "place": 1, "lane": 3, "car_number": 7 },
+    { "place": 2, "lane": 6, "car_number": 12 },
+    { "place": 3, "lane": 1, "car_number": 4 },
+    { "place": 4, "lane": 5, "car_number": 9 },
+    { "place": 5, "lane": 2, "car_number": 15 },
+    { "place": 6, "lane": 4, "car_number": 3 }
+  ],
+  "timestamp": 1708098770987
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"ResultManuallyEntered"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `heat` | integer | yes | |
+| `rankings` | array | yes | Ordered finish: `{ place, lane, car_number }` |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- No times are recorded
+- Audience Display shows results with ranks only (no times)
+- Scoring uses rank-based fallback (see `08-scoring-and-leaderboard.md`)
+
+**Supersession:** Operator can still re-run after manual entry. A subsequent `RaceCompleted` for this heat supersedes the manual result.
+
+---
+
+### 3.8 CarRemoved
+
+A car is removed from the Event mid-race (destroyed or disqualified).
+
+```json
+{
+  "type": "CarRemoved",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "car_number": 7,
+  "heat": 12,
+  "reason": "destroyed",
+  "timestamp": 1708098771098
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"CarRemoved"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `car_number` | integer | yes | |
+| `heat` | integer | yes | Heat number when removed |
+| `reason` | enum | yes | `"destroyed"` or `"disqualified"` |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Car is excluded from all future heats
+- Heat schedule regenerates for remaining heats
+- Partial results remain in leaderboard, marked incomplete (see `08-scoring-and-leaderboard.md`)
+
+**Note:** Early departures due to family emergencies are NOT removed. The Track Operator runs those cars on behalf of the family.
+
+---
+
+### 3.9 SectionCompleted
+
+All heats for a Section have been run.
+
+```json
+{
+  "type": "SectionCompleted",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "total_heats": 24,
+  "timestamp": 1708098780000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"SectionCompleted"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `total_heats` | integer | yes | Total heats run |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Audience Display shows final leaderboard / section complete screen
+- Operator can start next Section or end Event
+- See `06-race-day-state-machine.md` for state transition
+
+---
+
+## 4. Event Ordering and Consistency
+
+### 4.1 Event Constraints
+
+Certain events can only occur after others:
+
+**Pre-race:**
+- `SectionCreated` requires `EventCreated`
+- `RegistrarInvited` requires `SectionCreated`
+- `OperatorInvited` requires `EventCreated`
+- `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` require `RegistrarInvited`
+- `SectionLocked` requires at least one roster event
+- `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` are rejected after `SectionLocked`
+
+**Race day:**
+- `SectionStarted` requires `RosterLoaded`
+- `HeatStaged` requires `SectionStarted`
+- `RaceCompleted`, `RerunDeclared`, `ResultManuallyEntered` require `HeatStaged`
+- `SectionCompleted` requires all heats to have accepted results
+
+### 4.2 Timestamp Semantics
+
+- All timestamps are Unix milliseconds (UTC)
+- Timestamps reflect when the event was recorded, not when it occurred physically
+- Events are ordered by timestamp within their scope (event_id, section_id)
+
+### 4.3 Idempotency
+
+Events with the same payload written multiple times should be deduplicated:
+
+- Pre-race: Use `(event_id, section_id, event_type, timestamp)` as deduplication key
+- Race day: Use `(event_id, section_id, client_event_id)` as deduplication key
+
+---
+
+## 5. Derived State
+
+The following state is **never stored in events** and is always computed by replaying the event log:
+
+### 5.1 Car Numbers
+
+- Derived from roster events
+- `RosterUpdated` → sequential assignment (1, 2, 3, ...)
+- `ParticipantAdded` → next available number (fills gaps)
+- `ParticipantRemoved` → number retired
+
+### 5.2 Heat Schedule
+
+- Derived from arrived cars + results (for speed matching)
+- Regenerated on demand
+- See `07-heat-scheduling.md` for algorithm
+
+### 5.3 Leaderboard
+
+- Derived from accepted race results
+- Average time across accepted heats
+- Superseded results are excluded
+- See `08-scoring-and-leaderboard.md` for scoring algorithm
+
+### 5.4 Current Heat Number
+
+- Derived from count of completed heats + 1
+- Not stored as an event
+
+### 5.5 Accepted Results
+
+- Derived by finding latest result for each heat
+- Multiple results for same heat → latest by timestamp wins
+- Earlier results marked `superseded: true`
+
+---
+
+## 6. Event Storage
+
+### 6.1 Supabase (PostgreSQL)
+
+All events — pre-race and race day — live in a single table:
+
+```sql
+CREATE TABLE domain_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_id UUID NOT NULL,
+  section_id UUID,                -- null for EventCreated
+  event_type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  created_by UUID REFERENCES auth.users(id),
+  client_event_id BIGINT,         -- set for race day events (sync dedup)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Dedup index for race day sync (client_event_id is null for pre-race)
+CREATE UNIQUE INDEX idx_race_day_dedup
+  ON domain_events(event_id, section_id, client_event_id)
+  WHERE client_event_id IS NOT NULL;
+
+CREATE INDEX idx_domain_events_lookup
+  ON domain_events(event_id, section_id);
+```
+
+See `05-pre-race-data.md` for RLS policies and access control.
+
+### 6.2 Race Controller (IndexedDB)
+
+```javascript
+// Object store: 'events'
+{
+  id: 1,                    // auto-increment
+  type: 'RaceCompleted',    // PascalCase
+  payload: { /* event fields */ },
+  timestamp: 1708098768765
+}
+```
+
+---
+
+## 7. Event Catalog Summary
+
+| Event Type | Scope | Trigger |
+|------------|-------|---------|
+| `EventCreated` | Pre-race | Organizer creates Event |
+| `SectionCreated` | Pre-race | Organizer creates Section |
+| `RegistrarInvited` | Pre-race | Organizer invites Registrar |
+| `OperatorInvited` | Pre-race | Organizer invites Operator |
+| `RosterUpdated` | Pre-race | Registrar uploads spreadsheet |
+| `ParticipantAdded` | Pre-race | Registrar adds one participant |
+| `ParticipantRemoved` | Pre-race | Registrar removes one participant |
+| `SectionLocked` | Pre-race | Organizer locks roster |
+| `RosterLoaded` | Race day | Operator imports roster |
+| `CarArrived` | Race day | Operator checks in car |
+| `SectionStarted` | Race day | Operator starts racing |
+| `HeatStaged` | Race day | System stages next heat |
+| `RaceCompleted` | Race day | Track Controller reports finish |
+| `RerunDeclared` | Race day | Operator declares re-run |
+| `ResultManuallyEntered` | Race day | Operator manually ranks heat |
+| `CarRemoved` | Race day | Car destroyed or disqualified |
+| `SectionCompleted` | Race day | All heats completed |
+
+**Total: 17 domain events** (8 pre-race, 9 race day)
+
+---
+
+**End of Domain Events Catalog v2.0**

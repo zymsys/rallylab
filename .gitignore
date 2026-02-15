@@ -1,0 +1,6 @@
+# Working drafts (superseded by specs/)
+docs/
+old/
+
+# OS
+.DS_Store
