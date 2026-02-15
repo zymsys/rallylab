@@ -1,7 +1,7 @@
 # Kub Kars — Heat Scheduling Algorithm
 
-**Version:** 1.1
-**Status:** Specification
+**Version:** 2.0
+**Status:** Implemented
 
 ---
 
@@ -14,7 +14,7 @@ The Heat Scheduling Algorithm generates a sequence of heats for a Section such t
 3. No participant races alone (minimum 2 per heat)
 4. Lane fairness is maximized even when perfect balance is impossible
 
-**Strategy:** Hybrid approach using proven tournament algorithms when possible, falling back to greedy heuristic otherwise.
+**Strategy:** Hybrid approach using a cyclic construction for perfect lane balance when the roster size is known solvable, falling back to a greedy heuristic with optimal lane assignment otherwise.
 
 The scheduler runs as derived state — it is computed from the event log, never stored as an event. See `06-race-day-state-machine.md` for when scheduling runs.
 
@@ -26,7 +26,6 @@ The scheduler runs as derived state — it is computed from the event log, never
 
 ```javascript
 {
-  section_id: "uuid",
   participants: [
     { car_number: 1, name: "Billy" },
     { car_number: 2, name: "Sarah" },
@@ -37,13 +36,13 @@ The scheduler runs as derived state — it is computed from the event log, never
 }
 ```
 
+Note: `section_id` is not passed to the scheduler. The caller scopes participants and results to the section before invoking.
+
 ### 2.2 Optional Inputs
 
 ```javascript
 {
-  min_cars_per_heat: 2,    // default 2
-  speed_matching: true,    // default true (uses results if available)
-  algorithm_preference: "hybrid"  // "hybrid", "perfect", or "greedy"
+  speed_matching: true     // default true (uses results if available)
 }
 ```
 
@@ -68,7 +67,7 @@ The scheduler runs as derived state — it is computed from the event log, never
     // ... more heats
   ],
   metadata: {
-    algorithm_used: "circle_method",  // or "greedy_heuristic"
+    algorithm_used: "circle_method",  // or "greedy_heuristic" or "speed_matched_greedy"
     total_heats: 12,
     cars_per_heat: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
     lane_balance_perfect: true,
@@ -82,18 +81,15 @@ The scheduler runs as derived state — it is computed from the event log, never
 ## 4. Algorithm Selection Logic
 
 ```javascript
-function selectAlgorithm(participantCount, laneCount, results) {
-  const N = participantCount;
-  const L = laneCount;
+function selectAlgorithm(participantCount, laneCount, results, options = {}) {
   const hasResults = results && results.length > 0;
+  const speedMatchingEnabled = options.speed_matching !== false;
 
-  const isPerfectlySolvable = isKnownSolvable(N, L);
-
-  if (!hasResults && isPerfectlySolvable) {
+  if (!hasResults && isKnownSolvable(participantCount, laneCount)) {
     return "circle_method";
   }
 
-  if (hasResults) {
+  if (hasResults && speedMatchingEnabled) {
     return "speed_matched_greedy";
   }
 
@@ -111,92 +107,67 @@ function isKnownSolvable(N, L) {
 }
 ```
 
+When `speed_matching` is explicitly `false`, results are ignored for algorithm selection and the scheduler uses the greedy heuristic without speed tiers.
+
 ---
 
-## 5. Circle Method Algorithm (Perfect Balance)
+## 5. Cyclic Method Algorithm (Perfect Balance)
 
 Used when roster size is known solvable and no speed matching is needed.
 
 ### 5.1 How It Works
 
-The Circle Method is a classic round-robin tournament algorithm that guarantees:
-- Every participant races every other participant exactly once (in pair-wise terms)
-- Perfect lane rotation (every participant runs each lane exactly once)
+The Cyclic Method uses a direct construction that guarantees every participant runs each lane exactly once. In heat `h`, lane `l` is assigned participant `(h + l) mod N`. This produces a Latin-square-like structure where:
+
+- Each column (lane) contains every participant exactly once across all heats
+- Each row (heat) contains `L` distinct participants (where `L = min(lane_count, N)`)
+- Each participant races exactly `L` times total
 
 **Visual explanation for 8 participants, 6 lanes:**
 
 ```
-Round 1:  1-2  3-4  5-6  7-8
-Round 2:  1-3  4-5  6-7  8-2
-Round 3:  1-4  5-6  7-8  2-3
-Round 4:  1-5  6-7  8-2  3-4
-Round 5:  1-6  7-8  2-3  4-5
-Round 6:  1-7  8-2  3-4  5-6
-Round 7:  1-8  2-3  4-5  6-7
+Heat 1:  P1  P2  P3  P4  P5  P6
+Heat 2:  P2  P3  P4  P5  P6  P7
+Heat 3:  P3  P4  P5  P6  P7  P8
+Heat 4:  P4  P5  P6  P7  P8  P1
+Heat 5:  P5  P6  P7  P8  P1  P2
+Heat 6:  P6  P7  P8  P1  P2  P3
+Heat 7:  P7  P8  P1  P2  P3  P4
+Heat 8:  P8  P1  P2  P3  P4  P5
 ```
 
-Participant 1 stays fixed. Others rotate clockwise around the circle.
+Each participant appears in exactly 6 heats (once per lane) and sits out 2 heats.
 
-### 5.2 Implementation Sketch
+### 5.2 Implementation
 
 ```javascript
 function circleMethod(participants, laneCount) {
   const N = participants.length;
+  const L = Math.min(laneCount, N);
   const heats = [];
 
-  const hasBye = N % 2 === 1;
-  const adjusted = hasBye
-    ? [...participants, { car_number: null }]
-    : participants;
-
-  for (let round = 0; round < N; round++) {
-    const heat = { heat_number: round + 1, lanes: [] };
-    const pairings = generateCirclePairings(adjusted, round);
-
-    let laneNum = 1;
-    for (const [car1, car2] of pairings) {
-      if (laneNum > laneCount) break;
-      if (car1.car_number !== null) {
-        heat.lanes.push({ lane: laneNum++, ...car1 });
-      }
-      if (car2.car_number !== null && laneNum <= laneCount) {
-        heat.lanes.push({ lane: laneNum++, ...car2 });
-      }
+  for (let h = 0; h < N; h++) {
+    const lanes = [];
+    for (let l = 0; l < L; l++) {
+      const idx = (h + l) % N;
+      lanes.push({
+        lane: l + 1,
+        car_number: participants[idx].car_number,
+        name: participants[idx].name
+      });
     }
-
-    if (heat.lanes.length >= 2) {
-      heats.push(heat);
-    }
+    heats.push({ heat_number: h + 1, lanes });
   }
 
   return heats;
 }
 ```
 
-### 5.3 Lane Assignment
+### 5.3 Why Cyclic Over Pairing-Based
 
-Rotate lane assignments across heats for perfect balance:
+The original spec proposed a pairing-based round-robin (circle method with fixed participant and clockwise rotation). During implementation, this approach was found to not achieve perfect lane balance — the pairing algorithm only produces `N-1` unique rounds for even `N`, and lane assignment via rotation does not guarantee each participant visits each lane exactly once.
 
-```javascript
-function assignLanes(pairings, round, laneCount) {
-  const lanes = [];
-  const startingLane = (round % laneCount) + 1;
-
-  let currentLane = startingLane;
-  for (const [car1, car2] of pairings) {
-    if (car1) {
-      lanes.push({ lane: currentLane, ...car1 });
-      currentLane = (currentLane % laneCount) + 1;
-    }
-    if (car2) {
-      lanes.push({ lane: currentLane, ...car2 });
-      currentLane = (currentLane % laneCount) + 1;
-    }
-  }
-
-  return lanes;
-}
-```
+The cyclic construction is provably correct for all `N ≥ L`, simpler to implement, and deterministic. No bye handling is needed.
 
 ---
 
@@ -206,62 +177,27 @@ Used when roster size is not known solvable OR when speed matching is enabled.
 
 ### 6.1 Algorithm Logic
 
-1. **Initialize tracking:** Track how many times each participant has run on each lane (2D matrix). Track total heats run per participant.
+1. **Initialize tracking:** Track how many times each participant has run on each lane (2D matrix: `laneUsage[car_number][lane] = count`). Track total heats run per participant.
 
-2. **For each heat:** Select participants that need the most races remaining. Assign each participant to the lane they have run the least. Resolve conflicts by checking next-least-run lane.
+2. **Target heats:** `targetHeats = N` (number of participants). Each participant races `effectiveLanes` times (where `effectiveLanes = min(lane_count, N)`), producing `N × effectiveLanes` total slots across `N` heats of `effectiveLanes` cars each.
 
-3. **Speed matching (if results available):** Sort participants by average time. Group consecutive participants in speed tiers. Schedule heats from speed tiers to maximize within-tier racing.
+3. **Car selection per heat:** Sort participants by fewest heats run (ascending), then by car number for deterministic tie-breaking. Select the first `effectiveLanes` participants.
 
-### 6.2 Implementation Sketch
+4. **Lane assignment per heat:** Use backtracking search to find the assignment of cars to lanes that minimizes the maximum imbalance (`max_usage - min_usage`) across all participants. This considers all car-lane combinations simultaneously rather than assigning one car at a time.
 
-```javascript
-function greedyHeuristic(participants, laneCount, results = null) {
-  const N = participants.length;
-  const L = laneCount;
-  const targetHeats = N;
+5. **Speed groups (if provided):** Each speed tier is scheduled independently with its own lane usage tracking and heat count (`groupTargetHeats = group.length`).
 
-  const laneUsage = {};
-  participants.forEach(p => {
-    laneUsage[p.car_number] = {};
-    for (let lane = 1; lane <= L; lane++) {
-      laneUsage[p.car_number][lane] = 0;
-    }
-  });
+### 6.2 Lane Assignment: Backtracking Search
 
-  const heatsRun = {};
-  participants.forEach(p => heatsRun[p.car_number] = 0);
+A simple per-car greedy ("assign each car to its least-used lane") fails for certain roster sizes (e.g., 15 participants on 6 lanes) because the last-assigned car in each heat repeatedly gets suboptimal leftover lanes.
 
-  const heats = [];
+The implementation instead uses a backtracking search with pruning over all possible car-to-lane assignments within a heat. For each candidate assignment, it computes an imbalance score (the maximum `max_usage - min_usage` across all cars after applying the assignment) and keeps the assignment with the lowest score. Early pruning terminates branches that cannot improve on the current best.
 
-  let speedGroups = null;
-  if (results && results.length > 0) {
-    speedGroups = groupBySpeed(participants, results, laneCount);
-  }
+This is fast for typical lane counts (≤ 8 lanes = at most 8! = 40,320 branches before pruning).
 
-  for (let heatNum = 1; heatNum <= targetHeats; heatNum++) {
-    const heat = { heat_number: heatNum, lanes: [] };
-    const carsForHeat = selectCarsForHeat(
-      participants, heatsRun, L, speedGroups, heatNum
-    );
+### 6.3 Guarantee
 
-    const usedLanes = new Set();
-    for (const car of carsForHeat) {
-      const lane = findLeastUsedLane(car.car_number, laneUsage, usedLanes);
-      heat.lanes.push({ lane, ...car });
-      usedLanes.add(lane);
-      laneUsage[car.car_number][lane]++;
-      heatsRun[car.car_number]++;
-    }
-
-    heat.lanes.sort((a, b) => a.lane - b.lane);
-    if (heat.lanes.length >= 2) {
-      heats.push(heat);
-    }
-  }
-
-  return heats;
-}
-```
+`max(lane_usage) - min(lane_usage) <= 1` for every participant across the full schedule.
 
 ---
 
@@ -275,41 +211,58 @@ Speed matching is enabled when:
 
 ### 7.2 Speed Calculation
 
+Accepted results are determined by finding the latest result per heat by timestamp (superseded results are those with an earlier timestamp for the same heat number). No `status` field is needed on the result objects.
+
 ```javascript
 function calculateAverageTimes(participants, results) {
-  const times = {};
-  const counts = {};
+  // Find accepted (latest by timestamp) result for each heat
+  const acceptedByHeat = {};
+  for (const r of results) {
+    if (!acceptedByHeat[r.heat] || r.timestamp > acceptedByHeat[r.heat].timestamp) {
+      acceptedByHeat[r.heat] = r;
+    }
+  }
 
+  const totalTimes = {};
+  const counts = {};
   participants.forEach(p => {
-    times[p.car_number] = 0;
+    totalTimes[p.car_number] = 0;
     counts[p.car_number] = 0;
   });
 
-  // Only use accepted results (superseded results excluded)
-  const acceptedResults = results.filter(r => r.status === 'accepted');
-
-  acceptedResults.forEach(result => {
-    if (result.times_ms) {
-      Object.entries(result.times_ms).forEach(([lane, time_ms]) => {
-        const car = result.lanes[lane - 1];
-        if (car && car.car_number) {
-          times[car.car_number] += time_ms;
+  for (const result of Object.values(acceptedByHeat)) {
+    if (result.type === 'RaceCompleted' && result.times_ms && result.lanes) {
+      // result.lanes maps lane index to { car_number }
+      Object.entries(result.times_ms).forEach(([laneStr, timeMs]) => {
+        const car = result.lanes[parseInt(laneStr, 10) - 1];
+        if (car && car.car_number != null && totalTimes[car.car_number] !== undefined) {
+          totalTimes[car.car_number] += timeMs;
           counts[car.car_number]++;
         }
       });
+    } else if (result.type === 'ResultManuallyEntered' && result.rankings) {
+      // Rank as speed proxy: place * 1000 (1st=1000, 2nd=2000, etc.)
+      for (const { car_number, place } of result.rankings) {
+        if (totalTimes[car_number] !== undefined) {
+          totalTimes[car_number] += place * 1000;
+          counts[car_number]++;
+        }
+      }
     }
-  });
+  }
 
   const averages = {};
   participants.forEach(p => {
     averages[p.car_number] = counts[p.car_number] > 0
-      ? times[p.car_number] / counts[p.car_number]
+      ? totalTimes[p.car_number] / counts[p.car_number]
       : Infinity;  // No data yet = slowest group
   });
 
   return averages;
 }
 ```
+
+**Result input format:** `RaceCompleted` results must include a `lanes` array mapping lane position to car: `[{ car_number: 3 }, { car_number: 7 }, ...]`. This is derived from the `HeatStaged` event's lane assignments and attached by the caller.
 
 ### 7.3 Speed Grouping Strategy
 
@@ -337,38 +290,43 @@ Only the final accepted time for each heat is used for speed calculation. Supers
 
 ### 7.5 Manual Rank Results
 
-When a heat has only a `ResultManuallyEntered` (rank, no times), speed matching uses rank as a proxy: 1st place = fastest in group. See `08-scoring-and-leaderboard.md` for rank-to-time conversion.
+When a heat has only a `ResultManuallyEntered` (rank, no times), speed matching uses rank as a speed proxy: `place * 1000` milliseconds (1st = 1000, 2nd = 2000, etc.). This preserves relative ordering without requiring actual times.
 
 ---
 
-## 8. Car Removal Mid-Event
+## 8. Schedule Modifications Mid-Event
 
-When a car is removed (`CarRemoved` event):
+### 8.1 Car Removal
+
+When a car is removed (`CarRemoved` event), the caller filters the participant list and calls `regenerateAfterRemoval`:
 
 ```javascript
-function handleCarRemoval(schedule, removedCarNumber, currentHeatNumber) {
-  const remaining = schedule.participants.filter(
-    p => p.car_number !== removedCarNumber
-  );
-
-  const futureHeats = generateSchedule({
-    participants: remaining,
-    lane_count: schedule.lane_count,
-    results: schedule.results,
-    starting_heat_number: currentHeatNumber + 1
+function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, laneCount, results) {
+  const completedHeats = schedule.heats.filter(h => h.heat_number <= currentHeatNumber);
+  const newSchedule = generateSchedule({
+    participants: remainingParticipants,
+    lane_count: laneCount,
+    results
   });
 
+  // Renumber new heats to continue after completed heats
+  const renumberedHeats = newSchedule.heats.map((heat, i) => ({
+    ...heat,
+    heat_number: currentHeatNumber + i + 1
+  }));
+
   return {
-    ...schedule,
-    heats: [
-      ...schedule.heats.slice(0, currentHeatNumber),
-      ...futureHeats.heats
-    ]
+    heats: [...completedHeats, ...renumberedHeats],
+    metadata: { ...newSchedule.metadata, total_heats: completedHeats.length + renumberedHeats.length }
   };
 }
 ```
 
 Removed car's partial results remain in the leaderboard but are marked incomplete (see `08-scoring-and-leaderboard.md`).
+
+### 8.2 Late Arrival
+
+When a `CarArrived` event occurs after `SectionStarted`, the caller adds the participant and calls `regenerateAfterLateArrival` with the same signature as removal. Completed heats are preserved; the new participant appears in regenerated heats.
 
 ---
 
@@ -396,28 +354,32 @@ When a `CarArrived` event occurs after `SectionStarted`, the schedule regenerate
 
 ### 10.1 Lane Balance Validation
 
+`validateLaneBalance(schedule)` returns `{ valid: boolean, errors: string[] }`. For circle method schedules, it checks `max === min` (perfect balance). For greedy schedules, it checks `max - min <= 1`.
+
 ```javascript
 function validateLaneBalance(schedule) {
   const laneUsage = {};
-
-  schedule.heats.forEach(heat => {
-    heat.lanes.forEach(({ car_number, lane }) => {
+  for (const heat of schedule.heats) {
+    for (const { car_number, lane } of heat.lanes) {
       if (!laneUsage[car_number]) laneUsage[car_number] = {};
       laneUsage[car_number][lane] = (laneUsage[car_number][lane] || 0) + 1;
-    });
-  });
+    }
+  }
 
-  Object.entries(laneUsage).forEach(([carNumber, lanes]) => {
+  const errors = [];
+  const isPerfect = schedule.metadata?.algorithm_used === 'circle_method';
+  const maxDiff = isPerfect ? 0 : 1;
+
+  for (const [carNumber, lanes] of Object.entries(laneUsage)) {
     const counts = Object.values(lanes);
     const max = Math.max(...counts);
     const min = Math.min(...counts);
-
-    if (schedule.metadata.algorithm_used === "circle_method") {
-      assert(max === 1 && min === 1, `Perfect balance failed for car ${carNumber}`);
-    } else {
-      assert(max - min <= 1, `Lane imbalance for car ${carNumber}: ${max} vs ${min}`);
+    if (max - min > maxDiff) {
+      errors.push(`Car ${carNumber}: lane imbalance ${max - min}`);
     }
-  });
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 ```
 
@@ -440,35 +402,41 @@ function validateLaneBalance(schedule) {
 
 ---
 
-## 11. Open Questions
+## 11. Resolved Questions
 
-1. **Berger Tables vs Circle Method:** For certain roster sizes, Berger Tables may give better lane distribution. Research needed.
+1. **Berger Tables vs Circle Method:** Resolved — the cyclic construction (`participant = (heat + lane) % N`) is simpler than both and provably achieves perfect lane balance for all `N ≥ L`. No need for Berger Tables or pairing-based round-robin.
 
-2. **Re-run impact:** Only use final accepted time for speed matching. Confirmed.
+2. **Re-run impact:** Resolved — only the latest result per heat (by timestamp) is used for speed matching. Superseded results are excluded.
 
-3. **Manual rank results and speed matching:** Use rank as proxy for speed (1st place = fastest). Confirmed.
+3. **Manual rank results and speed matching:** Resolved — rank is converted to pseudo-time (`place * 1000`) for consistent sorting with timed results.
 
 ---
 
-## 12. Implementation Phases
+## 12. Implementation
 
-### Phase 1: Greedy Heuristic Only
-- Works for any roster size
-- No speed matching
-- Validates lane balance (max difference of 1)
+All phases are implemented in `public/js/scheduler.js` with Cucumber.js tests in `test/features/`.
 
-### Phase 2: Circle Method for Perfect Cases
-- Auto-detect known solvable roster sizes
-- Fall back to greedy for others
+**Module:** `public/js/scheduler.js` — pure functions, zero DOM/IndexedDB dependencies, deterministic (no `Math.random()`).
 
-### Phase 3: Speed Matching
-- Calculate average times from accepted results
-- Group participants by speed tiers
-- Regenerate schedule after initial round
+**Exported API:**
 
-### Phase 4: Car Removal
-- Regenerate schedule for remaining participants
-- Mark removed participant as incomplete in results
+```javascript
+// Public API
+export function generateSchedule({ participants, lane_count, results, options })
+export function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, laneCount, results)
+export function regenerateAfterLateArrival(schedule, allParticipants, currentHeatNumber, laneCount, results)
+
+// Exported internals (for direct testing)
+export function selectAlgorithm(participantCount, laneCount, results, options)
+export function isKnownSolvable(N, L)
+export function circleMethod(participants, laneCount)
+export function greedyHeuristic(participants, laneCount, speedGroups)
+export function calculateAverageTimes(participants, results)
+export function groupBySpeed(participants, results, laneCount)
+export function validateLaneBalance(schedule)
+```
+
+**Tests:** `npx cucumber-js` — 49 scenarios across 6 feature files covering all algorithms, edge cases, and schedule modifications.
 
 ---
 
@@ -480,4 +448,4 @@ function validateLaneBalance(schedule) {
 
 ---
 
-**End of Heat Scheduling Algorithm v1.1**
+**End of Heat Scheduling Algorithm v2.0**

@@ -1,0 +1,13 @@
+{
+  "name": "kubkars",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/state-manager.test.mjs",
+    "test:cucumber": "cucumber-js",
+    "test:all": "node --test test/state-manager.test.mjs && cucumber-js"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^11.0.0"
+  }
+}
