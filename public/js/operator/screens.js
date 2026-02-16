@@ -6,8 +6,8 @@
 
 import { computeLeaderboard } from '../scoring.js';
 import { deriveRaceDayPhase, getCurrentHeat, getAcceptedResult } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog } from './dialogs.js';
-import { loadDemoData } from './demo-data.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog } from './dialogs.js';
+import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Event List ────────────────────────────────────────
 
@@ -37,19 +37,7 @@ export function renderEventList(container, params, ctx) {
   const demoBtn = document.createElement('button');
   demoBtn.className = 'btn btn-primary';
   demoBtn.textContent = 'Load Demo Data';
-  demoBtn.onclick = async () => {
-    demoBtn.disabled = true;
-    demoBtn.textContent = 'Loading...';
-    try {
-      await loadDemoData(ctx);
-      showToast('Demo data loaded', 'success');
-      navigate('event-home', {});
-    } catch (e) {
-      showToast(e.message, 'error');
-      demoBtn.disabled = false;
-      demoBtn.textContent = 'Load Demo Data';
-    }
-  };
+  demoBtn.onclick = () => showDemoDataDialog(ctx);
   actions.appendChild(demoBtn);
 
   if (!rd.loaded || sections.length === 0) {
@@ -165,7 +153,7 @@ export function renderEventHome(container, params, ctx) {
       const startBtn = document.createElement('button');
       startBtn.className = 'btn btn-sm btn-primary';
       startBtn.textContent = 'Start Section';
-      startBtn.onclick = () => ctx.startSection(sec.section_id);
+      startBtn.onclick = () => showStartSectionDialog(sec.section_id, ctx);
       actionsCell.appendChild(startBtn);
     }
 
@@ -232,7 +220,7 @@ export function renderCheckIn(container, params, ctx) {
     startBtn.className = 'btn btn-primary';
     startBtn.style.marginBottom = '1rem';
     startBtn.textContent = 'Start This Section';
-    startBtn.onclick = () => startSection(sectionId);
+    startBtn.onclick = () => showStartSectionDialog(sectionId, ctx);
     container.appendChild(startBtn);
   } else if (!sec.started) {
     const hint = document.createElement('p');
@@ -342,12 +330,15 @@ export function renderLiveConsole(container, params, ctx) {
   else if (phase === 'section-complete') stateLabel = 'Complete';
   else stateLabel = 'Ready';
 
+  const activeLanes = ctx.getAvailableLanes(sectionId);
+  const lanesStr = activeLanes.join(', ');
+
   header.innerHTML = `
     <div class="console-title-row">
       <h2 class="screen-title">${esc(sec.section_name)}</h2>
       <span class="console-state-label">${stateLabel}</span>
     </div>
-    <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'}</p>
+    <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'} &middot; Lanes: ${lanesStr}</p>
   `;
   container.appendChild(header);
 
@@ -531,6 +522,15 @@ export function renderLiveConsole(container, params, ctx) {
     controls.appendChild(rerunBtn);
   }
 
+  // Correct Lanes button
+  if (currentHeat > 0 && phase === 'results') {
+    const correctBtn = document.createElement('button');
+    correctBtn.className = 'btn btn-secondary';
+    correctBtn.textContent = 'Correct Lanes';
+    correctBtn.onclick = () => showCorrectLanesDialog(sectionId, currentHeat, sec, ctx);
+    controls.appendChild(correctBtn);
+  }
+
   // Manual Rank button
   if (currentHeat > 0 && phase === 'staging') {
     const manualBtn = document.createElement('button');
@@ -538,6 +538,15 @@ export function renderLiveConsole(container, params, ctx) {
     manualBtn.textContent = 'Manual Rank';
     manualBtn.onclick = () => showManualRankDialog(sectionId, currentHeat, sec, ctx);
     controls.appendChild(manualBtn);
+  }
+
+  // Change Lanes button
+  if (!sec.completed) {
+    const changeLanesBtn = document.createElement('button');
+    changeLanesBtn.className = 'btn btn-secondary';
+    changeLanesBtn.textContent = 'Change Lanes';
+    changeLanesBtn.onclick = () => showChangeLanesDialog(sectionId, sec, ctx);
+    controls.appendChild(changeLanesBtn);
   }
 
   // Remove Car button

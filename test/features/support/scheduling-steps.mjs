@@ -28,7 +28,7 @@ Given('{int} participants', function (count) {
 });
 
 Given('a {int}-lane track', function (lanes) {
-  this.laneCount = lanes;
+  this.availableLanes = Array.from({ length: lanes }, (_, i) => i + 1);
 });
 
 Given('no race results', function () {
@@ -86,7 +86,7 @@ Given('a schedule has been generated', function () {
   try {
     this.schedule = generateSchedule({
       participants: this.participants,
-      lane_count: this.laneCount,
+      available_lanes: this.availableLanes,
       results: this.results,
       options: this.options
     });
@@ -111,7 +111,7 @@ When('a schedule is generated', function () {
     this.error = null;
     this.schedule = generateSchedule({
       participants: this.participants,
-      lane_count: this.laneCount,
+      available_lanes: this.availableLanes,
       results: this.results,
       options: this.options
     });
@@ -125,7 +125,7 @@ When('the algorithm is selected', function () {
     this.error = null;
     this.algorithmSelected = selectAlgorithm(
       this.participants.length,
-      this.laneCount,
+      this.availableLanes.length,
       this.results,
       this.options
     );
@@ -142,7 +142,7 @@ When('car {int} is removed', function (carNumber) {
       this.schedule,
       remaining,
       this.currentHeatNumber,
-      this.laneCount,
+      this.availableLanes,
       this.results
     );
     this.participants = remaining;
@@ -159,7 +159,7 @@ When('car {int} named {string} arrives late', function (carNumber, name) {
       this.schedule,
       this.participants,
       this.currentHeatNumber,
-      this.laneCount,
+      this.availableLanes,
       this.results
     );
   } catch (e) {
@@ -206,7 +206,7 @@ Then('lane balance should be within {int}', function (tolerance) {
 });
 
 Then('lane balance should be perfect', function () {
-  assertPerfectLaneBalance(this.schedule, this.laneCount);
+  assertPerfectLaneBalance(this.schedule, this.availableLanes);
 });
 
 Then('the metadata should show algorithm {string}', function (algorithm) {

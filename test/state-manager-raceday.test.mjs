@@ -67,6 +67,11 @@ describe('RosterLoaded', () => {
     assert.strictEqual(alice.car_number, 1);
   });
 
+  it('initializes available_lanes as null', () => {
+    const s = applyEvent(initialState(), makeEvent(baseRosterPayload()));
+    assert.strictEqual(s.race_day.sections.s1.available_lanes, null);
+  });
+
   it('loads multiple sections', () => {
     const s = buildState([
       baseRosterPayload(),
@@ -134,6 +139,43 @@ describe('SectionStarted', () => {
     ]);
     assert.strictEqual(s.race_day.sections.s1.started, true);
     assert.strictEqual(s.race_day.active_section_id, 's1');
+  });
+
+  it('stores available_lanes when provided', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1', available_lanes: [1, 3, 5] }
+    ]);
+    assert.deepStrictEqual(s.race_day.sections.s1.available_lanes, [1, 3, 5]);
+  });
+
+  it('keeps available_lanes as null when not provided', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.available_lanes, null);
+  });
+});
+
+// ─── LanesChanged ───────────────────────────────────────────────
+
+describe('LanesChanged', () => {
+  it('updates available_lanes on the section', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1', available_lanes: [1, 2, 3, 4, 5, 6] },
+      { type: 'LanesChanged', section_id: 's1', available_lanes: [1, 3, 5] }
+    ]);
+    assert.deepStrictEqual(s.race_day.sections.s1.available_lanes, [1, 3, 5]);
+  });
+
+  it('ignores unknown section', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'LanesChanged', section_id: 'unknown', available_lanes: [1, 2] }
+    ]);
+    assert.strictEqual(s.race_day.sections.unknown, undefined);
   });
 });
 
@@ -556,6 +598,156 @@ describe('ParticipantAdded in race_day context', () => {
     assert.strictEqual(s.sections.s1.participants[0].name, 'Dave');
     // Race day section
     assert.strictEqual(s.race_day.sections.s1.participants.length, 4);
+  });
+});
+
+// ─── HeatStaged catch_up flag ────────────────────────────────────
+
+describe('HeatStaged catch_up flag', () => {
+  it('defaults catch_up to false when not provided', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      { type: 'HeatStaged', section_id: 's1', heat_number: 1, lanes: [] }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.heats[0].catch_up, false);
+  });
+
+  it('stores catch_up: true when provided', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      {
+        type: 'HeatStaged',
+        section_id: 's1',
+        heat_number: 1,
+        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        catch_up: true
+      }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.heats[0].catch_up, true);
+  });
+});
+
+// ─── ResultCorrected ────────────────────────────────────────────
+
+describe('ResultCorrected', () => {
+  it('replaces lane assignments for matching heat', () => {
+    const originalLanes = [
+      { lane: 1, car_number: 1, name: 'Alice' },
+      { lane: 2, car_number: 2, name: 'Bob' }
+    ];
+    const correctedLanes = [
+      { lane: 1, car_number: 2, name: 'Bob' },
+      { lane: 2, car_number: 1, name: 'Alice' }
+    ];
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      { type: 'HeatStaged', section_id: 's1', heat_number: 1, lanes: originalLanes },
+      {
+        type: 'RaceCompleted',
+        section_id: 's1',
+        heat_number: 1,
+        times_ms: { '1': 2500, '2': 2700 },
+        timestamp: 1000
+      },
+      {
+        type: 'ResultCorrected',
+        section_id: 's1',
+        heat_number: 1,
+        corrected_lanes: correctedLanes,
+        reason: 'Cars were swapped'
+      }
+    ]);
+    const heat = s.race_day.sections.s1.heats[0];
+    assert.deepStrictEqual(heat.lanes, correctedLanes);
+  });
+
+  it('does not affect results/times', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      {
+        type: 'HeatStaged', section_id: 's1', heat_number: 1,
+        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }, { lane: 2, car_number: 2, name: 'Bob' }]
+      },
+      {
+        type: 'RaceCompleted',
+        section_id: 's1',
+        heat_number: 1,
+        times_ms: { '1': 2500, '2': 2700 },
+        timestamp: 1000
+      },
+      {
+        type: 'ResultCorrected',
+        section_id: 's1',
+        heat_number: 1,
+        corrected_lanes: [{ lane: 1, car_number: 2, name: 'Bob' }, { lane: 2, car_number: 1, name: 'Alice' }]
+      }
+    ]);
+    const result = s.race_day.sections.s1.results[1];
+    assert.strictEqual(result.times_ms['1'], 2500);
+    assert.strictEqual(result.times_ms['2'], 2700);
+  });
+
+  it('does not affect other heats', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      {
+        type: 'HeatStaged', section_id: 's1', heat_number: 1,
+        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }]
+      },
+      {
+        type: 'HeatStaged', section_id: 's1', heat_number: 2,
+        lanes: [{ lane: 1, car_number: 2, name: 'Bob' }]
+      },
+      {
+        type: 'ResultCorrected',
+        section_id: 's1',
+        heat_number: 1,
+        corrected_lanes: [{ lane: 1, car_number: 3, name: 'Carol' }]
+      }
+    ]);
+    assert.deepStrictEqual(s.race_day.sections.s1.heats[1].lanes, [{ lane: 1, car_number: 2, name: 'Bob' }]);
+  });
+
+  it('multiple corrections to same heat — last wins', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'SectionStarted', section_id: 's1' },
+      {
+        type: 'HeatStaged', section_id: 's1', heat_number: 1,
+        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }, { lane: 2, car_number: 2, name: 'Bob' }]
+      },
+      {
+        type: 'ResultCorrected',
+        section_id: 's1',
+        heat_number: 1,
+        corrected_lanes: [{ lane: 1, car_number: 2, name: 'Bob' }, { lane: 2, car_number: 1, name: 'Alice' }]
+      },
+      {
+        type: 'ResultCorrected',
+        section_id: 's1',
+        heat_number: 1,
+        corrected_lanes: [{ lane: 1, car_number: 3, name: 'Carol' }, { lane: 2, car_number: 1, name: 'Alice' }]
+      }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.heats[0].lanes[0].car_number, 3);
+  });
+
+  it('ignores unknown section', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      {
+        type: 'ResultCorrected',
+        section_id: 'unknown',
+        heat_number: 1,
+        corrected_lanes: []
+      }
+    ]);
+    assert.strictEqual(s.race_day.sections.unknown, undefined);
   });
 });
 

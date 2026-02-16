@@ -88,14 +88,6 @@ body {
   opacity: 0.8;
 }
 
-#user-info .user-role {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
 
 /* ===== Main Content ===== */
 #app {
@@ -335,21 +327,6 @@ tbody tr:hover {
   margin-top: 0.25rem;
 }
 
-.radio-group {
-  display: flex;
-  gap: 1.25rem;
-  margin-top: 0.25rem;
-}
-
-.radio-group label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-  font-weight: 400;
-  color: var(--color-text);
-  cursor: pointer;
-}
 
 /* ===== Toasts ===== */
 #toast-container {
@@ -454,6 +431,31 @@ tbody tr:hover {
 
 .upload-area input[type="file"] {
   display: none;
+}
+
+/* ===== Lane Grid ===== */
+.lane-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.lane-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.9rem;
+  user-select: none;
+}
+.lane-checkbox:has(input:checked) {
+  border-color: var(--color-accent);
+  background: rgba(37, 99, 235, 0.08);
+}
+.lane-checkbox input[type="checkbox"] {
+  accent-color: var(--color-accent);
 }
 
 /* ===== Preview Table ===== */

@@ -12,28 +12,29 @@
  * Generate a complete heat schedule for a section.
  * @param {Object} params
  * @param {Array<{car_number: number, name: string}>} params.participants
- * @param {number} params.lane_count
+ * @param {Array<number>} params.available_lanes - Physical lane numbers (e.g. [1,2,3,4,5,6] or [1,3,5])
  * @param {Array} [params.results=[]]
  * @param {Object} [params.options={}]
  * @returns {{heats: Array, metadata: Object}}
  */
-export function generateSchedule({ participants, lane_count, results = [], options = {} }) {
+export function generateSchedule({ participants, available_lanes, results = [], options = {} }) {
   if (!participants || participants.length < 2) {
     throw new Error('Cannot generate schedule: at least 2 participants required');
   }
 
-  const algorithm = selectAlgorithm(participants.length, lane_count, results, options);
+  const laneCount = available_lanes.length;
+  const algorithm = selectAlgorithm(participants.length, laneCount, results, options);
   let heats;
   let speedMatched = false;
 
   if (algorithm === 'circle_method') {
-    heats = circleMethod(participants, lane_count);
+    heats = circleMethod(participants, available_lanes);
   } else if (algorithm === 'speed_matched_greedy') {
-    const groups = groupBySpeed(participants, results, lane_count);
-    heats = greedyHeuristic(participants, lane_count, groups);
+    const groups = groupBySpeed(participants, results, laneCount);
+    heats = greedyHeuristic(participants, available_lanes, groups);
     speedMatched = true;
   } else {
-    heats = greedyHeuristic(participants, lane_count);
+    heats = greedyHeuristic(participants, available_lanes);
   }
 
   const laneBalancePerfect = algorithm === 'circle_method';
@@ -45,7 +46,8 @@ export function generateSchedule({ participants, lane_count, results = [], optio
       total_heats: heats.length,
       cars_per_heat: heats.map(h => h.lanes.length),
       lane_balance_perfect: laneBalancePerfect,
-      speed_matched: speedMatched
+      speed_matched: speedMatched,
+      available_lanes
     }
   };
 }
@@ -56,11 +58,11 @@ export function generateSchedule({ participants, lane_count, results = [], optio
  * @param {Object} schedule - Current schedule
  * @param {Array} remainingParticipants - Participants still racing
  * @param {number} currentHeatNumber - Last completed heat
- * @param {number} laneCount
+ * @param {Array<number>} availableLanes - Physical lane numbers
  * @param {Array} [results=[]]
  * @returns {Object} Updated schedule
  */
-export function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, laneCount, results = []) {
+export function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, availableLanes, results = []) {
   if (remainingParticipants.length < 2) {
     throw new Error('Cannot generate schedule: at least 2 participants required');
   }
@@ -68,7 +70,7 @@ export function regenerateAfterRemoval(schedule, remainingParticipants, currentH
   const completedHeats = schedule.heats.filter(h => h.heat_number <= currentHeatNumber);
   const newSchedule = generateSchedule({
     participants: remainingParticipants,
-    lane_count: laneCount,
+    available_lanes: availableLanes,
     results,
     options: {}
   });
@@ -94,15 +96,15 @@ export function regenerateAfterRemoval(schedule, remainingParticipants, currentH
  * @param {Object} schedule - Current schedule
  * @param {Array} allParticipants - All participants including new arrival
  * @param {number} currentHeatNumber - Last completed heat
- * @param {number} laneCount
+ * @param {Array<number>} availableLanes - Physical lane numbers
  * @param {Array} [results=[]]
  * @returns {Object} Updated schedule
  */
-export function regenerateAfterLateArrival(schedule, allParticipants, currentHeatNumber, laneCount, results = []) {
+export function regenerateAfterLateArrival(schedule, allParticipants, currentHeatNumber, availableLanes, results = []) {
   const completedHeats = schedule.heats.filter(h => h.heat_number <= currentHeatNumber);
   const newSchedule = generateSchedule({
     participants: allParticipants,
-    lane_count: laneCount,
+    available_lanes: availableLanes,
     results,
     options: {}
   });
@@ -119,6 +121,32 @@ export function regenerateAfterLateArrival(schedule, allParticipants, currentHea
       total_heats: completedHeats.length + renumberedHeats.length
     }
   };
+}
+
+/**
+ * Generate solo catch-up heats for a late participant.
+ * Each heat puts the participant alone in a different lane, cycling through available lanes.
+ * @param {Object} participant - { car_number, name }
+ * @param {number} catchUpCount - Number of catch-up heats needed
+ * @param {Array<number>} availableLanes - Physical lane numbers
+ * @param {number} startHeatNumber - First heat number to use
+ * @returns {Array} Array of catch-up heat objects with catch_up: true
+ */
+export function generateCatchUpHeats(participant, catchUpCount, availableLanes, startHeatNumber) {
+  const heats = [];
+  for (let i = 0; i < catchUpCount; i++) {
+    const lane = availableLanes[i % availableLanes.length];
+    heats.push({
+      heat_number: startHeatNumber + i,
+      catch_up: true,
+      lanes: [{
+        lane,
+        car_number: participant.car_number,
+        name: participant.name
+      }]
+    });
+  }
+  return heats;
 }
 
 // ─── Algorithm Selection ─────────────────────────────────────────────
@@ -169,12 +197,12 @@ export function isKnownSolvable(N, L) {
  * Uses a cyclic construction: in heat h, lane l gets participant (h + l) mod N.
  * This guarantees every participant runs each lane exactly once.
  * @param {Array<{car_number: number, name: string}>} participants
- * @param {number} laneCount
+ * @param {Array<number>} availableLanes - Physical lane numbers
  * @returns {Array} heats
  */
-export function circleMethod(participants, laneCount) {
+export function circleMethod(participants, availableLanes) {
   const N = participants.length;
-  const L = Math.min(laneCount, N);
+  const L = Math.min(availableLanes.length, N);
   const heats = [];
 
   for (let h = 0; h < N; h++) {
@@ -182,7 +210,7 @@ export function circleMethod(participants, laneCount) {
     for (let l = 0; l < L; l++) {
       const idx = (h + l) % N;
       lanes.push({
-        lane: l + 1,
+        lane: availableLanes[l],
         car_number: participants[idx].car_number,
         name: participants[idx].name
       });
@@ -199,21 +227,21 @@ export function circleMethod(participants, laneCount) {
  * Greedy heuristic algorithm for lane-balanced scheduling.
  * Guarantees max(lane_usage) - min(lane_usage) <= 1 per participant.
  * @param {Array<{car_number: number, name: string}>} participants
- * @param {number} laneCount
+ * @param {Array<number>} availableLanes - Physical lane numbers
  * @param {Array<Array>} [speedGroups=null] - Optional speed tier groupings
  * @returns {Array} heats
  */
-export function greedyHeuristic(participants, laneCount, speedGroups = null) {
+export function greedyHeuristic(participants, availableLanes, speedGroups = null) {
   const N = participants.length;
-  const L = laneCount;
-  const effectiveLanes = Math.min(L, N);
+  const L = availableLanes.length;
+  const effectiveLanes = availableLanes.slice(0, Math.min(L, N));
   const targetHeats = N;
 
   // Track lane usage per participant: { car_number: { lane: count } }
   const laneUsage = {};
   for (const p of participants) {
     laneUsage[p.car_number] = {};
-    for (let lane = 1; lane <= effectiveLanes; lane++) {
+    for (const lane of effectiveLanes) {
       laneUsage[p.car_number][lane] = 0;
     }
   }
@@ -229,23 +257,23 @@ export function greedyHeuristic(participants, laneCount, speedGroups = null) {
   if (speedGroups) {
     // Schedule within speed tiers
     for (const group of speedGroups) {
-      const groupLanes = Math.min(L, group.length);
+      const groupEffectiveLanes = availableLanes.slice(0, Math.min(L, group.length));
       const groupTargetHeats = group.length;
       const groupLaneUsage = {};
       const groupHeatsRun = {};
       for (const p of group) {
         groupLaneUsage[p.car_number] = {};
-        for (let lane = 1; lane <= groupLanes; lane++) {
+        for (const lane of groupEffectiveLanes) {
           groupLaneUsage[p.car_number][lane] = 0;
         }
         groupHeatsRun[p.car_number] = 0;
       }
 
       for (let h = 0; h < groupTargetHeats; h++) {
-        const cars = selectCarsForHeat(group, groupHeatsRun, groupLanes);
+        const cars = selectCarsForHeat(group, groupHeatsRun, groupEffectiveLanes.length);
         if (cars.length < 2) continue;
 
-        const heatLanes = assignLanesBalanced(cars, groupLaneUsage, groupLanes);
+        const heatLanes = assignLanesBalanced(cars, groupLaneUsage, groupEffectiveLanes);
         for (const entry of heatLanes) {
           groupLaneUsage[entry.car_number][entry.lane]++;
           groupHeatsRun[entry.car_number]++;
@@ -258,7 +286,7 @@ export function greedyHeuristic(participants, laneCount, speedGroups = null) {
   } else {
     // No speed groups: schedule all participants together
     for (let heatNum = 1; heatNum <= targetHeats; heatNum++) {
-      const cars = selectCarsForHeat(participants, heatsRun, effectiveLanes);
+      const cars = selectCarsForHeat(participants, heatsRun, effectiveLanes.length);
       if (cars.length < 2) continue;
 
       const heatLanes = assignLanesBalanced(cars, laneUsage, effectiveLanes);
@@ -298,12 +326,12 @@ function selectCarsForHeat(participants, heatsRun, maxCars) {
  * Uses backtracking search with pruning — fast for typical lane counts (≤ 8).
  * @param {Array} cars - Selected participants for this heat
  * @param {Object} laneUsage - { car_number: { lane: count } }
- * @param {number} effectiveLanes
+ * @param {Array<number>} effectiveLanes - Physical lane numbers to use
  * @returns {Array<{lane: number, car_number: number, name: string}>}
  */
 function assignLanesBalanced(cars, laneUsage, effectiveLanes) {
   const n = cars.length;
-  const bestAssignment = new Array(n).fill(1);
+  const bestAssignment = new Array(n).fill(effectiveLanes[0]);
   let bestScore = Infinity;
 
   /**
@@ -315,7 +343,7 @@ function assignLanesBalanced(cars, laneUsage, effectiveLanes) {
     for (let i = 0; i < n; i++) {
       const cn = cars[i].car_number;
       let maxU = 0, minU = Infinity;
-      for (let l = 1; l <= effectiveLanes; l++) {
+      for (const l of effectiveLanes) {
         let u = laneUsage[cn][l] || 0;
         if (l === assignment[i]) u++;
         if (u > maxU) maxU = u;
@@ -343,7 +371,7 @@ function assignLanesBalanced(cars, laneUsage, effectiveLanes) {
       for (let i = 0; i < idx; i++) {
         const cn = cars[i].car_number;
         let maxU = 0, minU = Infinity;
-        for (let l = 1; l <= effectiveLanes; l++) {
+        for (const l of effectiveLanes) {
           let u = laneUsage[cn][l] || 0;
           if (l === current[i]) u++;
           if (u > maxU) maxU = u;
@@ -354,7 +382,7 @@ function assignLanesBalanced(cars, laneUsage, effectiveLanes) {
       if (partialMax >= bestScore) return;
     }
 
-    for (let lane = 1; lane <= effectiveLanes; lane++) {
+    for (const lane of effectiveLanes) {
       if (used.has(lane)) continue;
       current[idx] = lane;
       used.add(lane);

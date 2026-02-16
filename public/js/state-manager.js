@@ -202,6 +202,7 @@ export function applyEvent(state, event) {
         })),
         arrived: [],
         removed: [],
+        available_lanes: null,
         started: false,
         completed: false,
         heats: [],
@@ -249,7 +250,30 @@ export function applyEvent(state, event) {
           active_section_id: payload.section_id,
           sections: {
             ...rd.sections,
-            [payload.section_id]: { ...sec, started: true }
+            [payload.section_id]: {
+              ...sec,
+              started: true,
+              available_lanes: payload.available_lanes || sec.available_lanes
+            }
+          }
+        }
+      };
+    }
+
+    case 'LanesChanged': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: {
+              ...sec,
+              available_lanes: payload.available_lanes
+            }
           }
         }
       };
@@ -269,7 +293,8 @@ export function applyEvent(state, event) {
               ...sec,
               heats: [...sec.heats, {
                 heat_number: payload.heat_number,
-                lanes: payload.lanes
+                lanes: payload.lanes,
+                catch_up: payload.catch_up || false
               }]
             }
           }
@@ -384,6 +409,27 @@ export function applyEvent(state, event) {
           sections: {
             ...rd.sections,
             [payload.section_id]: { ...sec, completed: true }
+          }
+        }
+      };
+    }
+
+    case 'ResultCorrected': {
+      const rd = state.race_day;
+      const sec = rd.sections[payload.section_id];
+      if (!sec) return state;
+      const updatedHeats = sec.heats.map(h =>
+        h.heat_number === payload.heat_number
+          ? { ...h, lanes: payload.corrected_lanes }
+          : h
+      );
+      return {
+        ...state,
+        race_day: {
+          ...rd,
+          sections: {
+            ...rd.sections,
+            [payload.section_id]: { ...sec, heats: updatedHeats }
           }
         }
       };

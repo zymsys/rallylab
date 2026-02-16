@@ -49,15 +49,15 @@ export function assertLaneBalanceWithin(schedule, maxDifference = 1) {
 /**
  * Assert perfect lane balance: every participant uses each lane exactly once.
  * @param {Object} schedule
- * @param {number} laneCount
+ * @param {Array<number>} availableLanes - Physical lane numbers
  * @throws {Error} if any participant doesn't have exactly 1 use per lane
  */
-export function assertPerfectLaneBalance(schedule, laneCount) {
+export function assertPerfectLaneBalance(schedule, availableLanes) {
   const matrix = buildLaneUsageMatrix(schedule);
   const errors = [];
 
   for (const [carNumber, lanes] of Object.entries(matrix)) {
-    for (let lane = 1; lane <= laneCount; lane++) {
+    for (const lane of availableLanes) {
       const count = lanes[lane] || 0;
       if (count !== 1) {
         errors.push(

@@ -5,8 +5,8 @@ class SchedulerWorld extends World {
     super(options);
     /** @type {Array<{car_number: number, name: string}>} */
     this.participants = [];
-    /** @type {number} */
-    this.laneCount = 6;
+    /** @type {Array<number>} */
+    this.availableLanes = [1, 2, 3, 4, 5, 6];
     /** @type {Array} */
     this.results = [];
     /** @type {Object} */

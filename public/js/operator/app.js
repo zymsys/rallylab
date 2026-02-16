@@ -6,13 +6,14 @@
 
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
 import { rebuildState, deriveRaceDayPhase, getCurrentHeat } from '../state-manager.js';
-import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival } from '../scheduler.js';
+import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, generateCatchUpHeats } from '../scheduler.js';
 import {
   connect as trackConnect, waitForRace, waitForGate,
   getInfo as trackInfo, isConnected, isUsingFakeTrack,
   triggerManualRace, triggerManualGate
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
+import { getUser, signOut } from '../supabase.js';
 import {
   renderEventList, renderEventHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -20,6 +21,29 @@ import {
 
 const app = () => document.getElementById('app');
 const breadcrumbs = () => document.getElementById('breadcrumbs');
+
+// ─── Lane Helpers ─────────────────────────────────────────────────
+
+/**
+ * Get the available lanes for a section, falling back to a contiguous
+ * range derived from the track hardware lane_count.
+ * @param {string} sectionId
+ * @returns {Array<number>}
+ */
+function getAvailableLanes(sectionId) {
+  const sec = _state?.race_day.sections[sectionId];
+  if (sec?.available_lanes) return sec.available_lanes;
+  const count = trackInfo().lane_count;
+  return Array.from({ length: count }, (_, i) => i + 1);
+}
+
+/**
+ * Get the hardware track lane count (for UI lane pickers).
+ * @returns {number}
+ */
+function getTrackLaneCount() {
+  return trackInfo().lane_count;
+}
 
 // ─── Module State ────────────────────────────────────────────────
 
@@ -96,9 +120,12 @@ function renderScreen(screenName, params) {
     resumeSection,
     declareRerun,
     removeCar,
+    changeLanes,
+    correctLanes,
     showToast,
     getSchedule: () => _liveSection?.schedule,
-    getLaneCount: () => trackInfo().lane_count,
+    getAvailableLanes,
+    getTrackLaneCount,
     isUsingFakeTrack,
     triggerManualRace,
     triggerManualGate
@@ -230,8 +257,9 @@ export async function clearAndRebuild() {
  * Reconstruct the schedule for a started section by replaying events.
  * The scheduler is fully deterministic, so replaying the same sequence
  * of generate/regenerate calls produces the identical schedule.
+ * Derives availableLanes from SectionStarted + LanesChanged events.
  */
-async function reconstructSchedule(sectionId, laneCount) {
+async function reconstructSchedule(sectionId) {
   const events = await getAllEvents();
   const sectionEvents = events.filter(e => e.section_id === sectionId);
 
@@ -240,6 +268,9 @@ async function reconstructSchedule(sectionId, laneCount) {
   let schedule = null;
   let started = false;
   let currentHeat = 0;
+  let availableLanes = null;
+  const completedCarNumbers = new Set();
+  let completedResultCount = 0;
 
   // We also need participant data — pull from state (loaded from RosterLoaded)
   const sec = _state.race_day.sections[sectionId];
@@ -251,7 +282,21 @@ async function reconstructSchedule(sectionId, laneCount) {
       if (started && schedule) {
         const allParticipants = sec.participants
           .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
-        schedule = regenerateAfterLateArrival(schedule, allParticipants, currentHeat, laneCount);
+        schedule = regenerateAfterLateArrival(schedule, allParticipants, currentHeat, availableLanes);
+
+        // Generate catch-up heats for participants who missed completed heats
+        for (const p of allParticipants) {
+          if (!completedCarNumbers.has(p.car_number) && completedResultCount > 0) {
+            const catchUpHeats = generateCatchUpHeats(
+              p, completedResultCount, availableLanes,
+              schedule.heats.length > 0
+                ? schedule.heats[schedule.heats.length - 1].heat_number + 1
+                : currentHeat + 1
+            );
+            schedule.heats.push(...catchUpHeats);
+            schedule.metadata.total_heats = schedule.heats.length;
+          }
+        }
       }
     } else if (evt.type === 'CarRemoved') {
       removed.add(evt.car_number);
@@ -259,16 +304,48 @@ async function reconstructSchedule(sectionId, laneCount) {
         const remaining = sec.participants
           .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
         if (remaining.length >= 2) {
-          schedule = regenerateAfterRemoval(schedule, remaining, currentHeat, laneCount);
+          schedule = regenerateAfterRemoval(schedule, remaining, currentHeat, availableLanes);
         }
       }
     } else if (evt.type === 'SectionStarted') {
       started = true;
+      availableLanes = evt.available_lanes || getAvailableLanes(sectionId);
       const participants = sec.participants
         .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
-      schedule = generateSchedule({ participants, lane_count: laneCount });
+      schedule = generateSchedule({ participants, available_lanes: availableLanes });
+    } else if (evt.type === 'LanesChanged') {
+      availableLanes = evt.available_lanes;
+      if (started && schedule) {
+        const participants = sec.participants
+          .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
+        if (participants.length >= 2) {
+          schedule = generateSchedule({ participants, available_lanes: availableLanes });
+          // Renumber after completed heats
+          const renumbered = schedule.heats.map((heat, i) => ({
+            ...heat, heat_number: currentHeat + i + 1
+          }));
+          const completedHeats = schedule.heats.length > 0 ? [] : [];
+          schedule = { ...schedule, heats: renumbered, metadata: { ...schedule.metadata, total_heats: renumbered.length } };
+        }
+      }
     } else if (evt.type === 'HeatStaged') {
       currentHeat = evt.heat_number;
+      // Track which cars have been in completed heats
+      const heat = sec.heats.find(h => h.heat_number === evt.heat_number);
+      if (heat && sec.results[evt.heat_number]) {
+        for (const lane of heat.lanes) {
+          completedCarNumbers.add(lane.car_number);
+        }
+      }
+    } else if (evt.type === 'RaceCompleted' || evt.type === 'ResultManuallyEntered') {
+      completedResultCount++;
+      // Update completedCarNumbers from the heat's lanes
+      const heat = sec.heats.find(h => h.heat_number === evt.heat_number);
+      if (heat) {
+        for (const lane of heat.lanes) {
+          completedCarNumbers.add(lane.car_number);
+        }
+      }
     }
   }
 
@@ -277,7 +354,7 @@ async function reconstructSchedule(sectionId, laneCount) {
 
 // ─── Section Start + Race Loop ───────────────────────────────────
 
-async function startSection(sectionId) {
+async function startSection(sectionId, availableLanes) {
   if (_raceAbort) _raceAbort.abort();
 
   if (!isConnected()) {
@@ -285,7 +362,11 @@ async function startSection(sectionId) {
   }
 
   const sec = _state.race_day.sections[sectionId];
-  const laneCount = trackInfo().lane_count;
+
+  // Use provided lanes or fall back to full track
+  if (!availableLanes) {
+    availableLanes = getAvailableLanes(sectionId);
+  }
 
   // Get arrived, non-removed participants
   const arrivedSet = new Set(sec.arrived);
@@ -298,15 +379,16 @@ async function startSection(sectionId) {
     return;
   }
 
-  // Emit SectionStarted
+  // Emit SectionStarted with lane configuration
   await appendAndRebuild({
     type: 'SectionStarted',
     section_id: sectionId,
+    available_lanes: availableLanes,
     timestamp: Date.now()
   });
 
   // Generate schedule
-  const schedule = generateSchedule({ participants, lane_count: laneCount });
+  const schedule = generateSchedule({ participants, available_lanes: availableLanes });
 
   _liveSection = { sectionId, schedule };
 
@@ -326,8 +408,7 @@ async function resumeSection(sectionId) {
     await trackConnect();
   }
 
-  const laneCount = trackInfo().lane_count;
-  const schedule = await reconstructSchedule(sectionId, laneCount);
+  const schedule = await reconstructSchedule(sectionId);
 
   if (!schedule) {
     showToast('Could not reconstruct schedule', 'error');
@@ -487,7 +568,7 @@ async function removeCar(sectionId, carNumber, reason) {
 
   // Regenerate schedule
   const sec = _state.race_day.sections[sectionId];
-  const laneCount = trackInfo().lane_count;
+  const availableLanes = getAvailableLanes(sectionId);
   const arrivedSet = new Set(sec.arrived);
   const removedSet = new Set(sec.removed);
   const remaining = sec.participants
@@ -496,7 +577,7 @@ async function removeCar(sectionId, carNumber, reason) {
   if (remaining.length >= 2) {
     const currentHeat = getCurrentHeat(_state, sectionId);
     _liveSection.schedule = regenerateAfterRemoval(
-      _liveSection.schedule, remaining, currentHeat, laneCount
+      _liveSection.schedule, remaining, currentHeat, availableLanes
     );
   }
 
@@ -510,22 +591,115 @@ async function removeCar(sectionId, carNumber, reason) {
   }
 }
 
+// ─── Change Lanes ────────────────────────────────────────────────
+
+async function changeLanes(sectionId, newLanes, reason) {
+  if (_raceAbort) _raceAbort.abort();
+
+  await appendAndRebuild({
+    type: 'LanesChanged',
+    section_id: sectionId,
+    available_lanes: newLanes,
+    reason,
+    timestamp: Date.now()
+  });
+
+  // Regenerate schedule with new lane configuration
+  const sec = _state.race_day.sections[sectionId];
+  const arrivedSet = new Set(sec.arrived);
+  const removedSet = new Set(sec.removed);
+  const participants = sec.participants
+    .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
+
+  if (participants.length >= 2) {
+    const currentHeat = getCurrentHeat(_state, sectionId);
+    const completedHeats = _liveSection?.schedule?.heats.filter(h => h.heat_number <= currentHeat) || [];
+    const newSchedule = generateSchedule({ participants, available_lanes: newLanes });
+
+    // Renumber new heats to continue after completed heats
+    const renumberedHeats = newSchedule.heats.map((heat, i) => ({
+      ...heat,
+      heat_number: currentHeat + i + 1
+    }));
+
+    _liveSection = {
+      sectionId,
+      schedule: {
+        heats: [...completedHeats, ...renumberedHeats],
+        metadata: {
+          ...newSchedule.metadata,
+          total_heats: completedHeats.length + renumberedHeats.length,
+          available_lanes: newLanes
+        }
+      }
+    };
+  }
+
+  renderCurrentScreen();
+
+  // Restart race loop
+  if (_liveSection) {
+    runRaceLoop(sectionId);
+  }
+}
+
 // ─── Late Arrival ────────────────────────────────────────────────
 
 export function handleLateArrival(sectionId) {
   if (!_liveSection || _liveSection.sectionId !== sectionId) return;
 
   const sec = _state.race_day.sections[sectionId];
-  const laneCount = trackInfo().lane_count;
+  const availableLanes = getAvailableLanes(sectionId);
   const arrivedSet = new Set(sec.arrived);
   const removedSet = new Set(sec.removed);
   const allParticipants = sec.participants
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
   const currentHeat = getCurrentHeat(_state, sectionId);
+
+  // Regenerate schedule with all current participants
   _liveSection.schedule = regenerateAfterLateArrival(
-    _liveSection.schedule, allParticipants, currentHeat, laneCount
+    _liveSection.schedule, allParticipants, currentHeat, availableLanes
   );
+
+  // Detect new participants who missed completed heats and need catch-up runs
+  const completedCarNumbers = new Set();
+  for (const heat of sec.heats) {
+    if (sec.results[heat.heat_number]) {
+      for (const lane of heat.lanes) {
+        completedCarNumbers.add(lane.car_number);
+      }
+    }
+  }
+  const completedResultCount = Object.keys(sec.results).length;
+
+  for (const p of allParticipants) {
+    if (!completedCarNumbers.has(p.car_number) && completedResultCount > 0) {
+      const catchUpHeats = generateCatchUpHeats(
+        p, completedResultCount, availableLanes,
+        _liveSection.schedule.heats.length > 0
+          ? _liveSection.schedule.heats[_liveSection.schedule.heats.length - 1].heat_number + 1
+          : currentHeat + 1
+      );
+      _liveSection.schedule.heats.push(...catchUpHeats);
+      _liveSection.schedule.metadata.total_heats = _liveSection.schedule.heats.length;
+    }
+  }
+}
+
+// ─── Correct Lanes ───────────────────────────────────────────────
+
+async function correctLanes(sectionId, heatNumber, correctedLanes, reason) {
+  await appendAndRebuild({
+    type: 'ResultCorrected',
+    section_id: sectionId,
+    heat_number: heatNumber,
+    corrected_lanes: correctedLanes,
+    reason,
+    timestamp: Date.now()
+  });
+
+  renderCurrentScreen();
 }
 
 // ─── Render Helper ───────────────────────────────────────────────
@@ -537,9 +711,48 @@ function renderCurrentScreen() {
   }
 }
 
+// ─── User Info ──────────────────────────────────────────────
+
+function updateUserInfo() {
+  const el = document.getElementById('user-info');
+  const user = getUser();
+
+  const buttons = [
+    { label: 'Registrar', href: 'registrar.html' },
+    { label: 'Audience', href: 'audience.html' },
+    { label: 'Fake Track', href: 'fake-track.html' }
+  ];
+
+  for (const { label, href } of buttons) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-ghost';
+    btn.textContent = label;
+    btn.onclick = () => window.open(href);
+    el.appendChild(btn);
+  }
+
+  if (user) {
+    const email = document.createElement('span');
+    email.className = 'user-email';
+    email.textContent = user.email;
+    el.appendChild(email);
+  }
+
+  const signOutBtn = document.createElement('button');
+  signOutBtn.className = 'btn btn-sm btn-ghost';
+  signOutBtn.style.color = 'rgba(255,255,255,0.7)';
+  signOutBtn.textContent = 'Sign Out';
+  signOutBtn.onclick = () => {
+    signOut();
+    window.location.href = 'index.html';
+  };
+  el.appendChild(signOutBtn);
+}
+
 // ─── Init ────────────────────────────────────────────────────────
 
 async function init() {
+  updateUserInfo();
   await openStore();
   await rebuildFromStore();
 

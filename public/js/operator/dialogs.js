@@ -205,6 +205,242 @@ export function showRemoveCarDialog(sectionId, section, ctx) {
   };
 }
 
+// ─── Correct Lanes Dialog ────────────────────────────────────────
+
+export function showCorrectLanesDialog(sectionId, heatNumber, section, ctx) {
+  const heat = section.heats.find(h => h.heat_number === heatNumber);
+  if (!heat) return;
+
+  const lanes = [...heat.lanes].sort((a, b) => a.lane - b.lane);
+  const carsInHeat = lanes.map(l => ({ car_number: l.car_number, name: l.name }));
+
+  let laneRows = '';
+  for (const lane of lanes) {
+    const options = carsInHeat.map(c =>
+      `<option value="${c.car_number}"${c.car_number === lane.car_number ? ' selected' : ''}>#${c.car_number} ${esc(c.name)}</option>`
+    ).join('');
+    laneRows += `
+      <tr>
+        <td>Lane ${lane.lane}</td>
+        <td>
+          <select class="form-input" data-lane="${lane.lane}" style="width:auto">
+            ${options}
+          </select>
+        </td>
+      </tr>`;
+  }
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Correct Lanes — Heat ${heatNumber}</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p class="form-hint" style="margin-bottom:0.75rem">Reassign which car was in each lane. Times stay the same — only the car-to-lane mapping changes.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Lane</th><th>Car</th></tr></thead>
+          <tbody id="dlg-correct-body">${laneRows}</tbody>
+        </table>
+      </div>
+      <div class="form-group" style="margin-top:0.75rem">
+        <label for="dlg-correct-reason">Reason</label>
+        <input id="dlg-correct-reason" class="form-input" type="text" placeholder="e.g. Cars 3 and 7 were swapped">
+      </div>
+      <div id="dlg-correct-error" class="form-error" style="margin-top:0.5rem"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="submit">Save Correction</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="submit"]').onclick = async () => {
+    const errorEl = d.querySelector('#dlg-correct-error');
+    errorEl.textContent = '';
+
+    const selects = d.querySelectorAll('select[data-lane]');
+    const correctedLanes = [];
+    const usedCars = new Set();
+
+    for (const sel of selects) {
+      const laneNum = parseInt(sel.dataset.lane, 10);
+      const carNumber = parseInt(sel.value, 10);
+      if (usedCars.has(carNumber)) {
+        errorEl.textContent = `Car #${carNumber} assigned to multiple lanes`;
+        return;
+      }
+      usedCars.add(carNumber);
+      const car = carsInHeat.find(c => c.car_number === carNumber);
+      correctedLanes.push({ lane: laneNum, car_number: carNumber, name: car.name });
+    }
+
+    // Check if anything actually changed
+    const unchanged = lanes.every(orig => {
+      const corrected = correctedLanes.find(c => c.lane === orig.lane);
+      return corrected && corrected.car_number === orig.car_number;
+    });
+    if (unchanged) {
+      errorEl.textContent = 'No changes made';
+      return;
+    }
+
+    const reason = d.querySelector('#dlg-correct-reason').value.trim();
+
+    const btn = d.querySelector('[data-action="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+      closeDialog();
+      await ctx.correctLanes(sectionId, heatNumber, correctedLanes, reason);
+      ctx.showToast('Lane correction saved', 'success');
+    } catch (e) {
+      ctx.showToast(e.message, 'error');
+    }
+  };
+}
+
+// ─── Start Section Dialog ────────────────────────────────────────
+
+export function showStartSectionDialog(sectionId, ctx) {
+  const trackLaneCount = ctx.getTrackLaneCount();
+  const allLanes = Array.from({ length: trackLaneCount }, (_, i) => i + 1);
+
+  let checkboxes = '';
+  for (const lane of allLanes) {
+    checkboxes += `
+      <label class="lane-checkbox">
+        <input type="checkbox" value="${lane}" checked>
+        Lane ${lane}
+      </label>`;
+  }
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Start Section</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p class="form-hint" style="margin-bottom:0.75rem">Select which lanes to use for this section. Uncheck any lanes that are unavailable.</p>
+      <div class="lane-grid" id="dlg-lane-grid">${checkboxes}</div>
+      <div id="dlg-start-error" class="form-error" style="margin-top:0.5rem"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="start">Start Racing</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="start"]').onclick = async () => {
+    const errorEl = d.querySelector('#dlg-start-error');
+    errorEl.textContent = '';
+
+    const selected = [];
+    for (const cb of d.querySelectorAll('#dlg-lane-grid input[type="checkbox"]')) {
+      if (cb.checked) selected.push(parseInt(cb.value, 10));
+    }
+
+    if (selected.length < 2) {
+      errorEl.textContent = 'At least 2 lanes required';
+      return;
+    }
+
+    const btn = d.querySelector('[data-action="start"]');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    try {
+      closeDialog();
+      await ctx.startSection(sectionId, selected);
+    } catch (e) {
+      ctx.showToast(e.message, 'error');
+    }
+  };
+}
+
+// ─── Change Lanes Dialog ─────────────────────────────────────────
+
+export function showChangeLanesDialog(sectionId, section, ctx) {
+  const trackLaneCount = ctx.getTrackLaneCount();
+  const allLanes = Array.from({ length: trackLaneCount }, (_, i) => i + 1);
+  const currentLanes = new Set(ctx.getAvailableLanes(sectionId));
+
+  let checkboxes = '';
+  for (const lane of allLanes) {
+    const checked = currentLanes.has(lane) ? ' checked' : '';
+    checkboxes += `
+      <label class="lane-checkbox">
+        <input type="checkbox" value="${lane}"${checked}>
+        Lane ${lane}
+      </label>`;
+  }
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Change Lanes</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p class="form-hint" style="margin-bottom:0.75rem">Select which lanes to use going forward. The schedule will be regenerated for remaining heats.</p>
+      <div class="lane-grid" id="dlg-lane-grid">${checkboxes}</div>
+      <div class="form-group" style="margin-top:0.75rem">
+        <label for="dlg-lanes-reason">Reason</label>
+        <input id="dlg-lanes-reason" class="form-input" type="text" placeholder="e.g. Lane 4 sensor broken">
+      </div>
+      <div id="dlg-lanes-error" class="form-error" style="margin-top:0.5rem"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="apply">Apply Changes</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="apply"]').onclick = async () => {
+    const errorEl = d.querySelector('#dlg-lanes-error');
+    errorEl.textContent = '';
+
+    const selected = [];
+    for (const cb of d.querySelectorAll('#dlg-lane-grid input[type="checkbox"]')) {
+      if (cb.checked) selected.push(parseInt(cb.value, 10));
+    }
+
+    if (selected.length < 2) {
+      errorEl.textContent = 'At least 2 lanes required';
+      return;
+    }
+
+    // Check if anything changed
+    if (selected.length === currentLanes.size && selected.every(l => currentLanes.has(l))) {
+      errorEl.textContent = 'No changes made';
+      return;
+    }
+
+    const reason = d.querySelector('#dlg-lanes-reason').value.trim();
+
+    const btn = d.querySelector('[data-action="apply"]');
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+
+    try {
+      closeDialog();
+      await ctx.changeLanes(sectionId, selected, reason);
+      ctx.showToast('Lanes updated — schedule regenerated', 'success');
+    } catch (e) {
+      ctx.showToast(e.message, 'error');
+    }
+  };
+}
+
 // ─── Load Roster Dialog ──────────────────────────────────────────
 
 export function showLoadRosterDialog(ctx) {
