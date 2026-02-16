@@ -284,18 +284,25 @@ async function reconstructSchedule(sectionId) {
           .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
         schedule = regenerateAfterLateArrival(schedule, allParticipants, currentHeat, availableLanes);
 
-        // Generate catch-up heats for participants who missed completed heats
+        // Generate catch-up heats, inserted immediately after currentHeat
+        const allCatchUpHeats = [];
         for (const p of allParticipants) {
           if (!completedCarNumbers.has(p.car_number) && completedResultCount > 0) {
             const catchUpHeats = generateCatchUpHeats(
-              p, completedResultCount, availableLanes,
-              schedule.heats.length > 0
-                ? schedule.heats[schedule.heats.length - 1].heat_number + 1
-                : currentHeat + 1
+              p, completedResultCount, availableLanes, 0
             );
-            schedule.heats.push(...catchUpHeats);
-            schedule.metadata.total_heats = schedule.heats.length;
+            allCatchUpHeats.push(...catchUpHeats);
           }
+        }
+
+        if (allCatchUpHeats.length > 0) {
+          const completed = schedule.heats.filter(h => h.heat_number <= currentHeat);
+          const remaining = schedule.heats.filter(h => h.heat_number > currentHeat);
+          let nextNum = currentHeat + 1;
+          for (const h of allCatchUpHeats) { h.heat_number = nextNum++; }
+          for (const h of remaining) { h.heat_number = nextNum++; }
+          schedule.heats = [...completed, ...allCatchUpHeats, ...remaining];
+          schedule.metadata.total_heats = schedule.heats.length;
         }
       }
     } else if (evt.type === 'CarRemoved') {
@@ -673,17 +680,30 @@ export function handleLateArrival(sectionId) {
   }
   const completedResultCount = Object.keys(sec.results).length;
 
+  // Collect all catch-up heats, then insert them immediately after currentHeat
+  const allCatchUpHeats = [];
   for (const p of allParticipants) {
     if (!completedCarNumbers.has(p.car_number) && completedResultCount > 0) {
       const catchUpHeats = generateCatchUpHeats(
-        p, completedResultCount, availableLanes,
-        _liveSection.schedule.heats.length > 0
-          ? _liveSection.schedule.heats[_liveSection.schedule.heats.length - 1].heat_number + 1
-          : currentHeat + 1
+        p, completedResultCount, availableLanes, 0 // temp numbering, renumbered below
       );
-      _liveSection.schedule.heats.push(...catchUpHeats);
-      _liveSection.schedule.metadata.total_heats = _liveSection.schedule.heats.length;
+      allCatchUpHeats.push(...catchUpHeats);
     }
+  }
+
+  if (allCatchUpHeats.length > 0) {
+    const schedule = _liveSection.schedule;
+    // Split: completed heats (≤ currentHeat) and remaining group heats (> currentHeat)
+    const completed = schedule.heats.filter(h => h.heat_number <= currentHeat);
+    const remaining = schedule.heats.filter(h => h.heat_number > currentHeat);
+
+    // Renumber: catch-up heats first, then remaining group heats
+    let nextNum = currentHeat + 1;
+    for (const h of allCatchUpHeats) { h.heat_number = nextNum++; }
+    for (const h of remaining) { h.heat_number = nextNum++; }
+
+    schedule.heats = [...completed, ...allCatchUpHeats, ...remaining];
+    schedule.metadata.total_heats = schedule.heats.length;
   }
 }
 

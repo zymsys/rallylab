@@ -31,10 +31,12 @@ The scheduler runs as derived state — it is computed from the event log, never
     { car_number: 2, name: "Sarah" },
     // ... only participants with CarArrived events
   ],
-  lane_count: 6,  // from Track Controller info command
+  available_lanes: [1, 2, 3, 4, 5, 6],  // from SectionStarted / LanesChanged
   results: []     // empty for initial schedule
 }
 ```
+
+`available_lanes` is an array of physical lane numbers. It defaults to all lanes reported by the Track Controller `info` command, but may be a subset (e.g., `[1, 3, 5]` for Scout Trucks, or `[1, 3, 4, 5, 6]` after a lane failure). The scheduler assigns participants to these specific lane numbers — not to sequential 1..N.
 
 Note: `section_id` is not passed to the scheduler. The caller scopes participants and results to the section before invoking.
 
@@ -68,8 +70,32 @@ Note: `section_id` is not passed to the scheduler. The caller scopes participant
   ],
   metadata: {
     algorithm_used: "circle_method",  // or "greedy_heuristic" or "speed_matched_greedy"
+    available_lanes: [1, 2, 3, 4, 5, 6],
     total_heats: 12,
     cars_per_heat: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+    lane_balance_perfect: true,
+    speed_matched: false
+  }
+}
+
+// With alternate lanes (e.g., Scout Trucks):
+{
+  heats: [
+    {
+      heat_number: 1,
+      lanes: [
+        { lane: 1, car_number: 3, name: "Tommy" },
+        { lane: 3, car_number: 7, name: "Alice" },
+        { lane: 5, car_number: 1, name: "Billy" }
+      ]
+    },
+    // ...
+  ],
+  metadata: {
+    algorithm_used: "circle_method",
+    available_lanes: [1, 3, 5],
+    total_heats: 6,
+    cars_per_heat: [3, 3, 3, 3, 3, 3],
     lane_balance_perfect: true,
     speed_matched: false
   }
@@ -81,7 +107,8 @@ Note: `section_id` is not passed to the scheduler. The caller scopes participant
 ## 4. Algorithm Selection Logic
 
 ```javascript
-function selectAlgorithm(participantCount, laneCount, results, options = {}) {
+function selectAlgorithm(participantCount, availableLanes, results, options = {}) {
+  const laneCount = availableLanes.length;
   const hasResults = results && results.length > 0;
   const speedMatchingEnabled = options.speed_matching !== false;
 
@@ -106,6 +133,8 @@ function isKnownSolvable(N, L) {
   return false;
 }
 ```
+
+Note: `isKnownSolvable` operates on the **count** of available lanes (`availableLanes.length`), not on the physical lane numbers.
 
 When `speed_matching` is explicitly `false`, results are ignored for algorithm selection and the scheduler uses the greedy heuristic without speed tiers.
 
@@ -141,9 +170,9 @@ Each participant appears in exactly 6 heats (once per lane) and sits out 2 heats
 ### 5.2 Implementation
 
 ```javascript
-function circleMethod(participants, laneCount) {
+function circleMethod(participants, availableLanes) {
   const N = participants.length;
-  const L = Math.min(laneCount, N);
+  const L = Math.min(availableLanes.length, N);
   const heats = [];
 
   for (let h = 0; h < N; h++) {
@@ -151,7 +180,7 @@ function circleMethod(participants, laneCount) {
     for (let l = 0; l < L; l++) {
       const idx = (h + l) % N;
       lanes.push({
-        lane: l + 1,
+        lane: availableLanes[l],  // physical lane number
         car_number: participants[idx].car_number,
         name: participants[idx].name
       });
@@ -162,6 +191,8 @@ function circleMethod(participants, laneCount) {
   return heats;
 }
 ```
+
+The key difference: `lane: availableLanes[l]` maps the logical position `l` to the physical lane number. With `availableLanes = [1, 3, 5]`, position 0 → lane 1, position 1 → lane 3, position 2 → lane 5.
 
 ### 5.3 Why Cyclic Over Pairing-Based
 
@@ -177,13 +208,13 @@ Used when roster size is not known solvable OR when speed matching is enabled.
 
 ### 6.1 Algorithm Logic
 
-1. **Initialize tracking:** Track how many times each participant has run on each lane (2D matrix: `laneUsage[car_number][lane] = count`). Track total heats run per participant.
+1. **Initialize tracking:** Track how many times each participant has run on each lane (2D matrix: `laneUsage[car_number][lane] = count`, where `lane` is a physical lane number from `availableLanes`). Track total heats run per participant.
 
-2. **Target heats:** `targetHeats = N` (number of participants). Each participant races `effectiveLanes` times (where `effectiveLanes = min(lane_count, N)`), producing `N × effectiveLanes` total slots across `N` heats of `effectiveLanes` cars each.
+2. **Target heats:** `targetHeats = N` (number of participants). Each participant races `effectiveLanes` times (where `effectiveLanes = min(availableLanes.length, N)`), producing `N × effectiveLanes` total slots across `N` heats of `effectiveLanes` cars each.
 
 3. **Car selection per heat:** Sort participants by fewest heats run (ascending), then by car number for deterministic tie-breaking. Select the first `effectiveLanes` participants.
 
-4. **Lane assignment per heat:** Use backtracking search to find the assignment of cars to lanes that minimizes the maximum imbalance (`max_usage - min_usage`) across all participants. This considers all car-lane combinations simultaneously rather than assigning one car at a time.
+4. **Lane assignment per heat:** Use backtracking search to find the assignment of cars to the physical lanes in `availableLanes` that minimizes the maximum imbalance (`max_usage - min_usage`) across all participants. This considers all car-lane combinations simultaneously rather than assigning one car at a time.
 
 5. **Speed groups (if provided):** Each speed tier is scheduled independently with its own lane usage tracking and heat count (`groupTargetHeats = group.length`).
 
@@ -267,14 +298,15 @@ function calculateAverageTimes(participants, results) {
 ### 7.3 Speed Grouping Strategy
 
 ```javascript
-function groupBySpeed(participants, results, laneCount) {
+function groupBySpeed(participants, results, availableLanes) {
   const averages = calculateAverageTimes(participants, results);
+  const laneCount = availableLanes.length;
 
   const sorted = participants
     .slice()
     .sort((a, b) => averages[a.car_number] - averages[b.car_number]);
 
-  // Group into speed tiers (group size = lane count)
+  // Group into speed tiers (group size = number of available lanes)
   const groups = [];
   for (let i = 0; i < sorted.length; i += laneCount) {
     groups.push(sorted.slice(i, i + laneCount));
@@ -301,11 +333,11 @@ When a heat has only a `ResultManuallyEntered` (rank, no times), speed matching 
 When a car is removed (`CarRemoved` event), the caller filters the participant list and calls `regenerateAfterRemoval`:
 
 ```javascript
-function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, laneCount, results) {
+function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, availableLanes, results) {
   const completedHeats = schedule.heats.filter(h => h.heat_number <= currentHeatNumber);
   const newSchedule = generateSchedule({
     participants: remainingParticipants,
-    lane_count: laneCount,
+    available_lanes: availableLanes,
     results
   });
 
@@ -326,7 +358,18 @@ Removed car's partial results remain in the leaderboard but are marked incomplet
 
 ### 8.2 Late Arrival
 
-When a `CarArrived` event occurs after `SectionStarted`, the caller adds the participant and calls `regenerateAfterLateArrival` with the same signature as removal. Completed heats are preserved; the new participant appears in regenerated heats.
+When a `CarArrived` event occurs after `SectionStarted`:
+
+1. **Regenerate** — call `regenerateAfterLateArrival` (same signature as removal). Completed heats are preserved; the new participant appears in regenerated group heats.
+2. **Catch-up heats** — for each new participant who missed completed heats, generate solo catch-up heats via `generateCatchUpHeats(participant, missedCount, availableLanes, startHeatNumber)`. Each catch-up heat runs the participant alone, cycling through available lanes. These heats are marked `catch_up: true`.
+3. **Insertion order** — catch-up heats are inserted *immediately after* the current heat, *before* the remaining group heats. This lets the late participant run right away and catch up before rejoining group competition. All heats after the insertion point are renumbered.
+
+The resulting schedule order is:
+```
+[completed heats] [catch-up heats] [remaining group heats]
+```
+
+Catch-up times are included in the participant's scoring average like any other heat. More runs produce a more stable average, so catch-up heats improve scoring fairness for late arrivals.
 
 ---
 
@@ -336,9 +379,9 @@ When a `CarArrived` event occurs after `SectionStarted`, the caller adds the par
 
 Cannot schedule heats. Minimum 2 participants required.
 
-### 9.2 Roster Size < Lane Count
+### 9.2 Roster Size < Available Lane Count
 
-Example: 4 participants, 6 lanes. All heats have 4 participants max. Lanes 5-6 remain empty. Each participant still runs each used lane exactly once.
+Example: 4 participants, `available_lanes = [1, 2, 3, 4, 5, 6]`. All heats have 4 participants max. Only 4 of the 6 available lanes are used per heat. Each participant still runs each used lane exactly once.
 
 ### 9.3 Roster Size > 100
 
@@ -346,7 +389,7 @@ Warn Organizer that this creates 100+ heats. Suggest splitting into multiple Sec
 
 ### 9.4 Late Arrival
 
-When a `CarArrived` event occurs after `SectionStarted`, the schedule regenerates for remaining heats to include the new participant. Completed heats are not affected.
+When a `CarArrived` event occurs after `SectionStarted`, the schedule regenerates for remaining heats to include the new participant. Solo catch-up heats are inserted immediately after the current heat so the late participant races right away (see §8.2). Completed heats are not affected.
 
 ---
 
@@ -392,13 +435,16 @@ function validateLaneBalance(schedule) {
 - 15 participants, 6 lanes (greedy fallback)
 - 32 participants, 6 lanes (perfect)
 - 50 participants, 6 lanes (greedy)
+- 6 participants, 3 alternate lanes `[1, 3, 5]` (Scout Trucks)
+- 10 participants, 5 lanes `[1, 3, 4, 5, 6]` (lane 2 disabled)
 
 ### 10.3 Integration Tests
 
 - Generate schedule → run all heats → verify every participant ran N times
 - Remove car at heat 5 → verify schedule regenerates correctly
 - Speed matching: run 6 heats → verify next 6 heats group by speed
-- Late arrival at heat 3 → verify new participant appears in remaining heats
+- Late arrival at heat 3 → verify catch-up heats inserted before remaining group heats
+- Late arrival at heat 3 → verify new participant appears in remaining group heats
 
 ---
 
@@ -422,19 +468,21 @@ All phases are implemented in `public/js/scheduler.js` with Cucumber.js tests in
 
 ```javascript
 // Public API
-export function generateSchedule({ participants, lane_count, results, options })
-export function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, laneCount, results)
-export function regenerateAfterLateArrival(schedule, allParticipants, currentHeatNumber, laneCount, results)
+export function generateSchedule({ participants, available_lanes, results, options })
+export function regenerateAfterRemoval(schedule, remainingParticipants, currentHeatNumber, availableLanes, results)
+export function regenerateAfterLateArrival(schedule, allParticipants, currentHeatNumber, availableLanes, results)
 
 // Exported internals (for direct testing)
-export function selectAlgorithm(participantCount, laneCount, results, options)
+export function selectAlgorithm(participantCount, availableLanes, results, options)
 export function isKnownSolvable(N, L)
-export function circleMethod(participants, laneCount)
-export function greedyHeuristic(participants, laneCount, speedGroups)
+export function circleMethod(participants, availableLanes)
+export function greedyHeuristic(participants, availableLanes, speedGroups)
 export function calculateAverageTimes(participants, results)
-export function groupBySpeed(participants, results, laneCount)
+export function groupBySpeed(participants, results, availableLanes)
 export function validateLaneBalance(schedule)
 ```
+
+Note: `isKnownSolvable` still takes `L` as a count (integer). All other functions take `availableLanes` as an array of physical lane numbers.
 
 **Tests:** `npx cucumber-js` — 49 scenarios across 6 feature files covering all algorithms, edge cases, and schedule modifications.
 
