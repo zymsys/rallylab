@@ -1,6 +1,6 @@
 /**
  * operator/demo-data.js — Race day demo data seeder.
- * Loads roster + auto-checks-in ~80% of cars.
+ * Loads roster only — no auto check-in so the check-in flow can be tested.
  */
 
 export async function loadDemoData(ctx) {
@@ -73,16 +73,6 @@ export async function loadDemoData(ctx) {
       timestamp: now + 1
     });
 
-    // Auto check-in ~80% of cars
-    for (const p of sec.participants) {
-      if (Math.random() < 0.8) {
-        await appendAndRebuild({
-          type: 'CarArrived',
-          section_id: sec.id,
-          car_number: p.car_number,
-          timestamp: now + 2
-        });
-      }
-    }
+    // No auto check-in — test the check-in flow manually
   }
 }

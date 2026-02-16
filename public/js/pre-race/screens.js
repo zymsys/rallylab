@@ -186,6 +186,12 @@ export async function renderEventHome(container, params) {
     raceDayBtn.textContent = 'Race Day';
     raceDayBtn.onclick = () => window.open('operator.html', 'kubkars-operator');
     actions.appendChild(raceDayBtn);
+  } else {
+    const checkInBtn = document.createElement('button');
+    checkInBtn.className = 'btn btn-primary';
+    checkInBtn.textContent = 'Race Day Check-In';
+    checkInBtn.onclick = () => window.open('registrar.html', 'kubkars-registrar');
+    actions.appendChild(checkInBtn);
   }
 
   if (isOrganizer) {
@@ -307,7 +313,7 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
   `;
   container.appendChild(regHeading);
 
-  if (groups.length > 0 && sections.length > 0) {
+  if (sections.length > 0) {
     const inviteBtn = document.createElement('button');
     inviteBtn.className = 'btn btn-sm btn-primary';
     inviteBtn.textContent = '+ Invite Registrar';
@@ -318,8 +324,8 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
   if (registrars.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = groups.length === 0 || sections.length === 0
-      ? 'Add groups and sections before inviting registrars.'
+    empty.textContent = sections.length === 0
+      ? 'Add sections before inviting registrars.'
       : 'No registrars invited yet.';
     container.appendChild(empty);
   } else {
@@ -376,64 +382,67 @@ function renderRegistrarEventHome(container, params, state, sections, groups) {
   const user = getUser();
   const reg = state.registrars[user.email];
 
-  if (!reg || reg.group_ids.length === 0 || reg.section_ids.length === 0) {
+  if (!reg) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = 'You have no assigned groups or sections. Contact your organizer.';
+    empty.textContent = 'You are not registered for this event. Contact your organizer.';
     container.appendChild(empty);
     return;
   }
 
-  // Build combo list: group x section
-  const combos = [];
-  for (const groupId of reg.group_ids) {
-    for (const sectionId of reg.section_ids) {
-      const group = state.groups[groupId];
-      const section = state.sections[sectionId];
-      if (!group || !section) continue;
-      const count = section.participants.filter(p => p.group_id === groupId).length;
-      combos.push({ groupId, sectionId, groupName: group.group_name, sectionName: section.section_name, count });
+  // Registrar with groups + sections: show combo table for pre-race roster management
+  if (reg.group_ids.length > 0 && reg.section_ids.length > 0) {
+    const combos = [];
+    for (const groupId of reg.group_ids) {
+      for (const sectionId of reg.section_ids) {
+        const group = state.groups[groupId];
+        const section = state.sections[sectionId];
+        if (!group || !section) continue;
+        const count = section.participants.filter(p => p.group_id === groupId).length;
+        combos.push({ groupId, sectionId, groupName: group.group_name, sectionName: section.section_name, count });
+      }
     }
-  }
 
-  if (combos.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.textContent = 'No valid group/section assignments found.';
-    container.appendChild(empty);
-    return;
-  }
+    if (combos.length > 0) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>Group</th><th>Section</th><th>Participants</th><th></th></tr></thead>
+          <tbody id="combos-body"></tbody>
+        </table>
+      `;
+      container.appendChild(wrap);
 
-  const wrap = document.createElement('div');
-  wrap.className = 'table-wrap';
-  wrap.innerHTML = `
-    <table>
-      <thead><tr><th>Group</th><th>Section</th><th>Participants</th><th></th></tr></thead>
-      <tbody id="combos-body"></tbody>
-    </table>
-  `;
-  container.appendChild(wrap);
+      const tbody = wrap.querySelector('#combos-body');
+      for (const combo of combos) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${esc(combo.groupName)}</strong></td>
+          <td>${esc(combo.sectionName)}</td>
+          <td>${combo.count}</td>
+          <td class="table-actions"></td>
+        `;
 
-  const tbody = wrap.querySelector('#combos-body');
-  for (const combo of combos) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${esc(combo.groupName)}</strong></td>
-      <td>${esc(combo.sectionName)}</td>
-      <td>${combo.count}</td>
-      <td class="table-actions"></td>
-    `;
-
-    const manageBtn = document.createElement('button');
-    manageBtn.className = 'btn btn-sm btn-secondary';
-    manageBtn.textContent = 'Manage';
-    manageBtn.onclick = () => navigate('section-detail', {
-      eventId,
-      sectionId: combo.sectionId,
-      groupId: combo.groupId
-    });
-    tr.querySelector('.table-actions').appendChild(manageBtn);
-    tbody.appendChild(tr);
+        const manageBtn = document.createElement('button');
+        manageBtn.className = 'btn btn-sm btn-secondary';
+        manageBtn.textContent = 'Manage';
+        manageBtn.onclick = () => navigate('section-detail', {
+          eventId,
+          sectionId: combo.sectionId,
+          groupId: combo.groupId
+        });
+        tr.querySelector('.table-actions').appendChild(manageBtn);
+        tbody.appendChild(tr);
+      }
+    }
+  } else {
+    // No groups — race day check-in only
+    const hint = document.createElement('p');
+    hint.className = 'info-line';
+    hint.style.marginTop = '1rem';
+    hint.textContent = 'You are set up for race day check-in. Use the "Race Day Check-In" button above when ready.';
+    container.appendChild(hint);
   }
 }
 

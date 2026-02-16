@@ -3,33 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kub Kars — Operator</title>
+  <title>Kub Kars — Registrar</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header id="site-header">
     <div class="header-brand">
       <h1 class="logo">Kub Kars</h1>
-      <span class="header-mode">Operator</span>
+      <span class="header-mode">Registrar</span>
       <nav id="breadcrumbs" aria-label="Breadcrumb"></nav>
     </div>
     <div id="user-info">
-      <button class="btn btn-sm btn-ghost" onclick="window.open('registrar.html','kubkars-registrar')">Registrar</button>
-      <button class="btn btn-sm btn-ghost" onclick="window.open('audience.html','kubkars-audience')">Audience</button>
-      <button class="btn btn-sm btn-ghost" onclick="window.open('fake-track.html','kubkars-fake-track')">Fake Track</button>
       <a href="index.html" class="btn btn-sm btn-ghost" style="color:rgba(255,255,255,0.7)">Exit</a>
     </div>
   </header>
-  <div id="live-bar" class="live-bar hidden">
-    <span class="live-badge"></span>
-    <span id="live-bar-text">Race in progress</span>
-    <button class="btn btn-sm" id="live-bar-btn">Return to Live Console</button>
-  </div>
   <main id="app"></main>
   <div id="dialog-backdrop" class="dialog-backdrop hidden" aria-hidden="true">
     <div id="dialog" class="dialog" role="dialog" aria-modal="true"></div>
   </div>
   <div id="toast-container" aria-live="polite"></div>
-  <script type="module" src="js/operator/app.js"></script>
+  <script type="module" src="js/registrar/app.js"></script>
 </body>
 </html>

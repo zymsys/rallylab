@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   initialState, applyEvent, rebuildState,
-  deriveRaceDayPhase, getCurrentHeat, getAcceptedResult
+  nextAvailableCarNumber, deriveRaceDayPhase, getCurrentHeat, getAcceptedResult
 } from '../public/js/state-manager.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -458,6 +458,104 @@ describe('getAcceptedResult', () => {
     const result = getAcceptedResult(sec, 1);
     assert.ok(result);
     assert.strictEqual(result.type, 'RaceCompleted');
+  });
+});
+
+// ─── ParticipantAdded (race day context) ─────────────────────────
+
+describe('ParticipantAdded in race_day context', () => {
+  it('adds participant to race_day.sections with correct auto car number', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        participant: { participant_id: 'p4', name: 'Dave' }
+      }
+    ]);
+    const rdSec = s.race_day.sections.s1;
+    assert.strictEqual(rdSec.participants.length, 4);
+    const dave = rdSec.participants.find(p => p.participant_id === 'p4');
+    assert.ok(dave);
+    assert.strictEqual(dave.name, 'Dave');
+    assert.strictEqual(dave.car_number, 4); // next after 1, 2, 3
+  });
+
+  it('works when only race_day section exists (no pre-race section)', () => {
+    // RosterLoaded creates race_day section but not pre-race section
+    const s = buildState([
+      baseRosterPayload(),
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        participant: { participant_id: 'p4', name: 'Dave' }
+      }
+    ]);
+    const rdSec = s.race_day.sections.s1;
+    assert.strictEqual(rdSec.participants.length, 4);
+    // Pre-race section doesn't exist for 's1' (no SectionCreated event)
+    assert.strictEqual(s.sections.s1, undefined);
+  });
+
+  it('fills gaps in car numbers', () => {
+    const s = buildState([
+      {
+        type: 'RosterLoaded',
+        section_id: 's1',
+        section_name: 'Kub Kars',
+        participants: [
+          { participant_id: 'p1', name: 'Alice', car_number: 1 },
+          { participant_id: 'p3', name: 'Carol', car_number: 3 }
+        ]
+      },
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        participant: { participant_id: 'p4', name: 'Dave' }
+      }
+    ]);
+    const dave = s.race_day.sections.s1.participants.find(p => p.participant_id === 'p4');
+    assert.strictEqual(dave.car_number, 2); // fills gap
+  });
+
+  it('full late-registration flow: ParticipantAdded + CarArrived', () => {
+    const s = buildState([
+      baseRosterPayload(),
+      { type: 'CarArrived', section_id: 's1', car_number: 1 },
+      { type: 'CarArrived', section_id: 's1', car_number: 2 },
+      { type: 'SectionStarted', section_id: 's1' },
+      // Late registration
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        participant: { participant_id: 'p4', name: 'Dave' }
+      },
+      { type: 'CarArrived', section_id: 's1', car_number: 4 }
+    ]);
+    const rdSec = s.race_day.sections.s1;
+    assert.strictEqual(rdSec.participants.length, 4);
+    assert.deepStrictEqual(rdSec.arrived, [1, 2, 4]);
+    assert.strictEqual(rdSec.started, true);
+    const dave = rdSec.participants.find(p => p.participant_id === 'p4');
+    assert.strictEqual(dave.car_number, 4);
+    assert.strictEqual(dave.name, 'Dave');
+  });
+
+  it('updates both pre-race and race_day when both sections exist', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      baseRosterPayload(),
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        participant: { participant_id: 'p4', name: 'Dave' }
+      }
+    ]);
+    // Pre-race section should have the participant too
+    assert.strictEqual(s.sections.s1.participants.length, 1);
+    assert.strictEqual(s.sections.s1.participants[0].name, 'Dave');
+    // Race day section
+    assert.strictEqual(s.race_day.sections.s1.participants.length, 4);
   });
 });
 

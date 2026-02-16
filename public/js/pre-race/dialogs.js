@@ -313,15 +313,6 @@ export function showInviteRegistrarDialog(eventId, state, existingEmail, onDone)
     if (groupsErr) groupsErr.textContent = '';
     if (sectionsErr) sectionsErr.textContent = '';
 
-    if (groups.length > 0 && selectedGroupIds.length === 0) {
-      if (groupsErr) groupsErr.textContent = 'Select at least one group';
-      return;
-    }
-    if (sections.length > 0 && selectedSectionIds.length === 0) {
-      if (sectionsErr) sectionsErr.textContent = 'Select at least one section';
-      return;
-    }
-
     const btn = d.querySelector('[data-action="invite"]');
     btn.disabled = true;
     btn.textContent = isEdit ? 'Saving...' : 'Sending...';

@@ -12,7 +12,7 @@ import {
   getInfo as trackInfo, isConnected, isUsingFakeTrack,
   triggerManualRace, triggerManualGate
 } from '../track-connection.js';
-import { sendWelcome, sendStaging, sendResults } from '../broadcast.js';
+import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import {
   renderEventList, renderEventHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -209,6 +209,7 @@ export function showToast(message, type = 'info') {
 export async function appendAndRebuild(payload) {
   await storeAppend(payload);
   await rebuildFromStore();
+  notifyEventsChanged();
   return _state;
 }
 
@@ -544,6 +545,18 @@ async function init() {
 
   // Connect track
   await trackConnect();
+
+  // Listen for sync messages from other tabs (e.g. registrar)
+  onSyncMessage(async (msg) => {
+    if (msg.type === 'EVENTS_CHANGED') {
+      await rebuildFromStore();
+      // If a section is live, handle potential late arrivals
+      if (_liveSection) {
+        handleLateArrival(_liveSection.sectionId);
+      }
+      renderCurrentScreen();
+    }
+  });
 
   // Route to current hash or event list
   const route = decodeHash(location.hash);

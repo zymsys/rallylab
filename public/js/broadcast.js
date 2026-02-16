@@ -76,7 +76,30 @@ export function onMessage(callback) {
   _audienceChannel.onmessage = (e) => callback(e.data);
 }
 
+// ─── Inter-Tab Sync (operator ↔ registrar) ──────────────────────
+
+const SYNC_CHANNEL_NAME = 'kubkars-sync';
+let _syncChannel = null;
+
+function getSyncChannel() {
+  if (!_syncChannel) {
+    _syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  }
+  return _syncChannel;
+}
+
+export function notifyEventsChanged() {
+  getSyncChannel().postMessage({ type: 'EVENTS_CHANGED' });
+}
+
+export function onSyncMessage(callback) {
+  getSyncChannel().onmessage = (e) => callback(e.data);
+}
+
+// ─── Cleanup ────────────────────────────────────────────────────
+
 export function close() {
   if (_operatorChannel) { _operatorChannel.close(); _operatorChannel = null; }
   if (_audienceChannel) { _audienceChannel.close(); _audienceChannel = null; }
+  if (_syncChannel) { _syncChannel.close(); _syncChannel = null; }
 }

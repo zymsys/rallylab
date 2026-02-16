@@ -114,27 +114,60 @@ export function applyEvent(state, event) {
     }
 
     case 'ParticipantAdded': {
+      let newState = state;
+
+      // Update pre-race sections
       const section = state.sections[payload.section_id];
-      if (!section) return state;
-      const carNumber = nextAvailableCarNumber(section);
-      return {
-        ...state,
-        sections: {
-          ...state.sections,
-          [payload.section_id]: {
-            ...section,
-            participants: [
-              ...section.participants,
-              {
-                participant_id: payload.participant.participant_id,
-                name: payload.participant.name,
-                car_number: carNumber,
-                group_id: payload.group_id || null
-              }
-            ]
+      if (section) {
+        const carNumber = nextAvailableCarNumber(section);
+        newState = {
+          ...newState,
+          sections: {
+            ...newState.sections,
+            [payload.section_id]: {
+              ...section,
+              participants: [
+                ...section.participants,
+                {
+                  participant_id: payload.participant.participant_id,
+                  name: payload.participant.name,
+                  car_number: carNumber,
+                  group_id: payload.group_id || null
+                }
+              ]
+            }
           }
-        }
-      };
+        };
+      }
+
+      // Update race_day sections (late registration)
+      const rdSec = state.race_day.sections[payload.section_id];
+      if (rdSec) {
+        const rdCarNumber = nextAvailableCarNumber(rdSec);
+        newState = {
+          ...newState,
+          race_day: {
+            ...newState.race_day,
+            sections: {
+              ...newState.race_day.sections,
+              [payload.section_id]: {
+                ...rdSec,
+                participants: [
+                  ...rdSec.participants,
+                  {
+                    participant_id: payload.participant.participant_id,
+                    name: payload.participant.name,
+                    car_number: rdCarNumber,
+                    group_id: payload.group_id || null
+                  }
+                ]
+              }
+            }
+          }
+        };
+      }
+
+      return newState;
     }
 
     case 'ParticipantRemoved': {
