@@ -10,3 +10,9 @@ node_modules/
 
 # Test reports
 test/reports/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.features-gen/

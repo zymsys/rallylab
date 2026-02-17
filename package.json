@@ -5,9 +5,13 @@
   "scripts": {
     "test": "node --test test/state-manager.test.mjs",
     "test:cucumber": "cucumber-js",
-    "test:all": "node --test test/state-manager.test.mjs && cucumber-js"
+    "test:e2e": "npx bddgen && npx playwright test",
+    "test:e2e:headed": "npx bddgen && npx playwright test --headed",
+    "test:all": "node --test test/state-manager.test.mjs && cucumber-js && npx bddgen && npx playwright test"
   },
   "devDependencies": {
-    "@cucumber/cucumber": "^11.0.0"
+    "@cucumber/cucumber": "^11.0.0",
+    "@playwright/test": "^1.58.2",
+    "playwright-bdd": "^8.4.2"
   }
 }
