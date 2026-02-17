@@ -1,4 +1,4 @@
-# Kub Kars — Architecture
+# RallyLab — Architecture
 
 **Version:** 2.0
 **Status:** Specification
@@ -7,7 +7,7 @@
 
 ## 1. Overview
 
-Kub Kars is an event-sourced, offline-first race management system. It consists of three layers:
+RallyLab is an event-sourced, offline-first race management system. It consists of three layers:
 
 1. **Track Controller** — Microcontroller firmware that reads physical track sensors
 2. **Race Controller** — Browser-based application that manages race logic and state
@@ -165,7 +165,7 @@ See `05-pre-race-data.md` for schema, RLS policies, and client usage.
 ### 6.1 IndexedDB Schema (Race Day)
 
 ```javascript
-// Database: 'kubkars-races'
+// Database: 'rallylab-races'
 
 // Object store: 'events' (append-only event log)
 {
@@ -391,7 +391,7 @@ If offline, the Operator can import from a previously downloaded JSON file.
 
 The Operator Display pushes display state to the Audience Display via BroadcastChannel. The Audience Display is stateless — it only renders what it receives.
 
-Channel name: `kubkars-race`
+Channel name: `rallylab-race`
 
 ### Message Types
 
@@ -554,7 +554,7 @@ All data access is controlled by Supabase RLS policies:
 
 ## 17. Supabase Free Tier Fit
 
-| Resource | Free Tier Limit | Kub Kars Usage |
+| Resource | Free Tier Limit | RallyLab Usage |
 |----------|----------------|----------------|
 | Database | 500 MB | <1 MB per event (trivial) |
 | Auth users | Unlimited | ~10-20 per event |

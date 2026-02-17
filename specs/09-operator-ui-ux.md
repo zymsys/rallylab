@@ -1,4 +1,4 @@
-# Kub Kars — Operator UI/UX
+# RallyLab — Operator UI/UX
 
 **Version:** 1.1
 **Status:** Specification

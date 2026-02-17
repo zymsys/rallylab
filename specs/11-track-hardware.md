@@ -1,4 +1,4 @@
-# Kub Kars — Track Hardware Interface
+# RallyLab — Track Hardware Interface
 
 **Source:** SuperTimer manual, Appendix B ("Fixing the cable or making a test box")
 

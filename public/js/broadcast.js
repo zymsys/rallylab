@@ -2,7 +2,7 @@
  * broadcast.js — BroadcastChannel wrapper for operator→audience messaging.
  */
 
-const CHANNEL_NAME = 'kubkars-race';
+const CHANNEL_NAME = 'rallylab-race';
 
 // ─── Operator Side ──────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export function onMessage(callback) {
 
 // ─── Inter-Tab Sync (operator ↔ registrar) ──────────────────────
 
-const SYNC_CHANNEL_NAME = 'kubkars-sync';
+const SYNC_CHANNEL_NAME = 'rallylab-sync';
 let _syncChannel = null;
 
 function getSyncChannel() {

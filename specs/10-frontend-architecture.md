@@ -1,4 +1,4 @@
-# Kub Kars — Frontend Architecture
+# RallyLab — Frontend Architecture
 
 **Version:** 1.1
 **Status:** Specification
@@ -7,7 +7,7 @@
 
 ## 1. Overview
 
-The Kub Kars frontend is a vanilla JavaScript browser application with no build step and no framework. It consists of three HTML entry points sharing a common set of JavaScript modules: a main app (`index.html`) for login and pre-race registration, a race day Operator Display (`operator.html`), and a race day Audience Display (`audience.html`).
+The RallyLab frontend is a vanilla JavaScript browser application with no build step and no framework. It consists of three HTML entry points sharing a common set of JavaScript modules: a main app (`index.html`) for login and pre-race registration, a race day Operator Display (`operator.html`), and a race day Audience Display (`audience.html`).
 
 ### 1.1 Design Principles
 
@@ -86,7 +86,7 @@ See `05-pre-race-data.md` for Supabase tables, RLS policies, and client usage pa
 
 ### 3.3 event-store.js
 
-The IndexedDB wrapper. Owns the `kubkars-races` database.
+The IndexedDB wrapper. Owns the `rallylab-races` database.
 
 **Exports:**
 - `openStore()` — Initialize/open the database
@@ -171,7 +171,7 @@ BroadcastChannel wrapper for inter-tab communication.
 **Exports (Audience side):**
 - `onMessage(callback)` — Listen for display updates
 
-Channel name: `kubkars-race`
+Channel name: `rallylab-race`
 
 See `02-architecture.md` for the message contract.
 
@@ -213,7 +213,7 @@ The unified entry point for login, pre-race registration, and navigation to race
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kub Kars</title>
+  <title>RallyLab</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="manifest" href="manifest.json">
 </head>
@@ -234,7 +234,7 @@ The race day operator interface. This page does **not** require authentication t
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kub Kars — Operator</title>
+  <title>RallyLab — Operator</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="manifest" href="manifest.json">
 </head>
@@ -253,7 +253,7 @@ The race day operator interface. This page does **not** require authentication t
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kub Kars — Audience</title>
+  <title>RallyLab — Audience</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="audience">
@@ -323,7 +323,7 @@ The Operator Display owns the event store and state manager. The Audience Displa
 Caches all static assets for offline use. Uses a **cache-first** strategy: cached assets are served immediately, with updates applied on the next visit.
 
 ```javascript
-const CACHE_NAME = 'kubkars-v1';  // Bump version to force update
+const CACHE_NAME = 'rallylab-v1';  // Bump version to force update
 const ASSETS = [
   '/',
   '/index.html',
@@ -376,7 +376,7 @@ self.addEventListener('fetch', event => {
 
 #### Update Strategy
 
-When `CACHE_NAME` is bumped (e.g., `kubkars-v2`), the browser detects the changed `sw.js` and installs the new service worker. With `skipWaiting()` and `clients.claim()`, the new version takes effect immediately.
+When `CACHE_NAME` is bumped (e.g., `rallylab-v2`), the browser detects the changed `sw.js` and installs the new service worker. With `skipWaiting()` and `clients.claim()`, the new version takes effect immediately.
 
 To avoid disrupting an active race, the app should detect updates and handle them gracefully:
 
@@ -404,8 +404,8 @@ if ('serviceWorker' in navigator) {
 
 ```json
 {
-  "name": "Kub Kars Race Controller",
-  "short_name": "KubKars",
+  "name": "RallyLab Race Controller",
+  "short_name": "RallyLab",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

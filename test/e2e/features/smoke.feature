@@ -4,7 +4,7 @@ Feature: Smoke tests
 
   Scenario: Login page loads
     Given I am on the login page
-    Then I should see the page title "Kub Kars — Registration"
+    Then I should see the page title "RallyLab — Registration"
     And I should see "Pinewood Derby Race Management"
 
   Scenario: Email sign-in reaches event list
@@ -26,4 +26,4 @@ Feature: Smoke tests
 
   Scenario: Operator page loads
     Given I am on the operator page
-    Then I should see the page title "Kub Kars — Operator"
+    Then I should see the page title "RallyLab — Operator"

@@ -1,4 +1,4 @@
-# Kub Kars — Track Controller Protocol
+# RallyLab — Track Controller Protocol
 
 **Version:** 1.0
 **Status:** Specification

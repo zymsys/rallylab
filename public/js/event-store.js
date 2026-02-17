@@ -3,7 +3,7 @@
  * Offline-first: events written to IndexedDB, synced to Supabase later.
  */
 
-const DB_NAME = 'kubkars-races';
+const DB_NAME = 'rallylab-races';
 const DB_VERSION = 1;
 const EVENTS_STORE = 'events';
 const SETTINGS_STORE = 'settings';

@@ -1,5 +1,5 @@
 /**
- * state-manager.js — Event reducer for Kub Kars.
+ * state-manager.js — Event reducer for RallyLab.
  * Pure functions, zero DOM/Supabase dependencies.
  * Shared between pre-race and race day.
  */

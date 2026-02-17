@@ -8,8 +8,8 @@
 const USE_MOCK = true;
 
 // ─── Storage helpers ───────────────────────────────────────────────
-const EVENTS_KEY = 'kubkars_domain_events';
-const SESSION_KEY = 'kubkars_session';
+const EVENTS_KEY = 'rallylab_domain_events';
+const SESSION_KEY = 'rallylab_session';
 
 function loadEvents() {
   try {

@@ -1,5 +1,5 @@
 /**
- * scheduler.js — Heat scheduling algorithm for Kub Kars.
+ * scheduler.js — Heat scheduling algorithm for RallyLab.
  * Pure functions, zero DOM/IndexedDB dependencies.
  * Deterministic: same input always produces same schedule.
  *

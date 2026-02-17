@@ -1,4 +1,4 @@
-# Kub Kars — Domain Language
+# RallyLab — Domain Language
 
 **Version:** 1.0
 **Status:** Specification

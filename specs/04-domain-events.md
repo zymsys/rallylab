@@ -1,4 +1,4 @@
-# Kub Kars — Domain Events Catalog
+# RallyLab — Domain Events Catalog
 
 **Version:** 2.0
 **Status:** Specification
@@ -7,7 +7,7 @@
 
 ## 1. Overview
 
-This document catalogs all domain events in the Kub Kars system. Events represent facts that have occurred and are the source of truth for all derived state.
+This document catalogs all domain events in the RallyLab system. Events represent facts that have occurred and are the source of truth for all derived state.
 
 ### 1.1 Event Sourcing Principles
 

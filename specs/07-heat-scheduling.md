@@ -1,4 +1,4 @@
-# Kub Kars — Heat Scheduling Algorithm
+# RallyLab — Heat Scheduling Algorithm
 
 **Version:** 2.0
 **Status:** Implemented

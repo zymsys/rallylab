@@ -1,4 +1,4 @@
-# Kub Kars — Pre-Race Data (Supabase)
+# RallyLab — Pre-Race Data (Supabase)
 
 **Version:** 2.0
 **Status:** Specification
@@ -558,7 +558,7 @@ const { data } = await supabase
 
 ## 8. Supabase Free Tier Fit
 
-| Resource | Free Tier Limit | Kub Kars Usage |
+| Resource | Free Tier Limit | RallyLab Usage |
 |----------|----------------|----------------|
 | Database | 500 MB | <1 MB per Event (trivial) |
 | Auth users | Unlimited | ~10-20 per Event |

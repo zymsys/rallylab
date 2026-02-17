@@ -1,5 +1,5 @@
 /**
- * scoring.js — Leaderboard computation for Kub Kars.
+ * scoring.js — Leaderboard computation for RallyLab.
  * Pure functions, zero DOM dependencies.
  * See specs/08-scoring-and-leaderboard.md for algorithm specification.
  */

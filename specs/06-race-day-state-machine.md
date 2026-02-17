@@ -1,4 +1,4 @@
-# Kub Kars — Race Day State Machine
+# RallyLab — Race Day State Machine
 
 **Version:** 1.0
 **Status:** Specification

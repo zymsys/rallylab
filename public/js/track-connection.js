@@ -6,7 +6,7 @@
  * See specs/03-track-controller-protocol.md for real protocol.
  */
 
-const TRACK_CHANNEL = 'kubkars-track';
+const TRACK_CHANNEL = 'rallylab-track';
 const RESPONSE_TIMEOUT = 30000; // 30s fallback timeout
 
 let _connected = false;

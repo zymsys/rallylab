@@ -1,4 +1,4 @@
-# Kub Kars — Scoring and Leaderboard
+# RallyLab — Scoring and Leaderboard
 
 **Version:** 1.0
 **Status:** Specification

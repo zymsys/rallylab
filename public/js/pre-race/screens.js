@@ -20,7 +20,7 @@ import { loadDemoData } from './demo-data.js';
 export function renderLogin(container) {
   container.innerHTML = `
     <div class="login-container">
-      <div class="logo-large">Kub Kars</div>
+      <div class="logo-large">RallyLab</div>
       <p class="tagline">Pinewood Derby Race Management</p>
       <form class="login-form" id="login-form">
         <div class="form-group">

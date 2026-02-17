@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-KubKars is a pinewood derby race management system for Scouts Canada. It is event-sourced, offline-first, and runs entirely in the browser with no custom server.
+RallyLab is a pinewood derby race management system for Scouting. It is event-sourced, offline-first, and runs entirely in the browser with no custom server.
 
 ## Architecture
 

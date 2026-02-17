@@ -10,7 +10,7 @@ import {
   showResetButton, resetTrack, showIdle
 } from './track-renderer.js';
 
-const TRACK_CHANNEL = 'kubkars-track';
+const TRACK_CHANNEL = 'rallylab-track';
 const LANE_COUNT = 6;
 
 // ─── State ──────────────────────────────────────────────────────

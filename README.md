@@ -1,10 +1,10 @@
-# KubKars
+# RallyLab
 
-A pinewood derby race management system for Scouts Canada. Event-sourced, offline-first, and runs entirely in the browser.
+A pinewood derby race management system for Scouting. Event-sourced, offline-first, and runs entirely in the browser.
 
 ## What It Does
 
-KubKars handles the full lifecycle of a pinewood derby event:
+RallyLab handles the full lifecycle of a pinewood derby event:
 
 - **Pre-race** — Create events, define sections (Beaver Buggies, Kub Kars, Scout Trucks), register participants, assign car numbers, import rosters from CSV/XLSX
 - **Race day check-in** — Registrars verify participant attendance and handle late registration
@@ -97,7 +97,7 @@ The `specs/` folder is the authoritative source of truth for the system design:
 
 ## Status
 
-KubKars is under active development. The pre-race workflow, race day operator, registrar check-in, audience display, and heat scheduling are functional in mock mode. Supabase integration (auth, persistence, sync) is not yet wired up.
+RallyLab is under active development. The pre-race workflow, race day operator, registrar check-in, audience display, and heat scheduling are functional in mock mode. Supabase integration (auth, persistence, sync) is not yet wired up.
 
 ## License
 
