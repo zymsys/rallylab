@@ -39,15 +39,15 @@ function _notifyAuth(event, session) {
 }
 
 /**
- * Mock sign-in: provide email and role ('organizer' | 'registrar').
+ * Mock sign-in: provide email.
  * In real mode this would send a magic link via Supabase Auth.
+ * Roles are derived per-event from the event stream, not stored on the session.
  */
-export function signIn(email, role) {
+export function signIn(email) {
   _session = {
     user: {
       id: _deterministicId(email),
-      email,
-      role  // mock-only field for role switching
+      email
     }
   };
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(_session));
@@ -232,6 +232,33 @@ export function getClient() {
   // import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
   // return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   throw new Error('Set SUPABASE_URL and SUPABASE_ANON_KEY for real mode');
+}
+
+/**
+ * Check if the current user is an organizer.
+ * Organizer is a global role: true if user has created any event.
+ * Also true for new users who haven't been invited as registrars (so they can bootstrap).
+ */
+export function isOrganizer() {
+  const user = getUser();
+  if (!user) return false;
+
+  let createdAny = false;
+  let invitedAsRegistrar = false;
+
+  for (const e of _events) {
+    const p = e.payload || {};
+    if (e.event_type === 'EventCreated' && p.created_by === user.email) {
+      createdAny = true;
+    }
+    if (e.event_type === 'RegistrarInvited' && p.registrar_email === user.email) {
+      invitedAsRegistrar = true;
+    }
+  }
+
+  // Registrar-only users cannot create/manage events.
+  // New users (neither organizer nor registrar) can create their first event.
+  return createdAny || !invitedAsRegistrar;
 }
 
 /**

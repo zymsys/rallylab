@@ -310,14 +310,24 @@ The Operator begins racing a Section.
   "type": "SectionStarted",
   "event_id": "uuid",
   "section_id": "uuid",
+  "available_lanes": [1, 2, 3, 4, 5, 6],
   "timestamp": 1708098767654
 }
 ```
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"SectionStarted"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `available_lanes` | array of int | no | Lanes to use for this Section. Defaults to all lanes reported by Track Controller `info`. Example: `[1, 3, 5]` for Scout Trucks (alternate lanes due to car width). |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
 **Behavior:**
-- Heat schedule is generated using arrived cars only
+- Heat schedule is generated using arrived cars and `available_lanes`
 - Audience Display switches from Welcome to Heat 1 Staging
 - See `06-race-day-state-machine.md` for state transition details
+- See `11-track-hardware.md` §8 for physical lane constraints (e.g., Scout Trucks)
 
 ---
 
@@ -506,7 +516,79 @@ A car is removed from the Event mid-race (destroyed or disqualified).
 
 ---
 
-### 3.9 SectionCompleted
+### 3.9 ResultCorrected
+
+The Operator corrects the lane-to-car mapping for a completed heat. Times are physically correct (the timer records by lane), but were attributed to the wrong cars because cars were placed in the wrong lanes.
+
+```json
+{
+  "type": "ResultCorrected",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "heat_number": 5,
+  "corrected_lanes": [
+    { "lane": 1, "car_number": 7, "name": "Alice" },
+    { "lane": 2, "car_number": 3, "name": "Tommy" }
+  ],
+  "reason": "Cars 7 and 3 were swapped",
+  "timestamp": 1708098769000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"ResultCorrected"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `heat_number` | integer | yes | Heat whose lane assignments are corrected |
+| `corrected_lanes` | array | yes | Updated lane assignments: `{ lane, car_number, name }` |
+| `reason` | string | optional | Human-readable reason for the correction |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Replaces the `lanes` array on the matching `HeatStaged` heat entry
+- Does NOT modify times — `RaceCompleted.times_ms` remains unchanged
+- Leaderboard recomputes automatically since scoring reads from corrected `heats[].lanes`
+- Multiple corrections to the same heat are allowed; each replaces the previous lanes
+
+---
+
+### 3.10 LanesChanged
+
+The Operator changes which lanes are available mid-section (e.g., a lane sensor fails).
+
+```json
+{
+  "type": "LanesChanged",
+  "event_id": "uuid",
+  "section_id": "uuid",
+  "available_lanes": [1, 3, 4, 5, 6],
+  "reason": "Lane 2 sensor failure",
+  "timestamp": 1708098769500
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"LanesChanged"` |
+| `event_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `available_lanes` | array of int | yes | New set of available lanes (replaces previous set) |
+| `reason` | string | optional | Human-readable reason |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+**Behavior:**
+- Replaces the current `available_lanes` for the active Section
+- Heat schedule regenerates for remaining heats using the new lane set
+- Completed heats are not affected
+- Track Controller receives the new lane set on the next `wait_race` call
+- Follows the same pattern as `CarRemoved`: modify inputs, regenerate schedule
+
+**Derived state:** Current available lanes = `SectionStarted.available_lanes`, then apply each `LanesChanged` in timestamp order. The last value wins.
+
+---
+
+### 3.11 SectionCompleted
 
 All heats for a Section have been run.
 
@@ -553,6 +635,8 @@ Certain events can only occur after others:
 - `SectionStarted` requires `RosterLoaded`
 - `HeatStaged` requires `SectionStarted`
 - `RaceCompleted`, `RerunDeclared`, `ResultManuallyEntered` require `HeatStaged`
+- `ResultCorrected` requires `HeatStaged` for the referenced heat
+- `LanesChanged` requires `SectionStarted` (Section must be active)
 - `SectionCompleted` requires all heats to have accepted results
 
 ### 4.2 Timestamp Semantics
@@ -670,9 +754,11 @@ See `05-pre-race-data.md` for RLS policies and access control.
 | `RerunDeclared` | Race day | Operator declares re-run |
 | `ResultManuallyEntered` | Race day | Operator manually ranks heat |
 | `CarRemoved` | Race day | Car destroyed or disqualified |
+| `ResultCorrected` | Race day | Operator fixes lane-to-car mapping |
+| `LanesChanged` | Race day | Operator changes available lanes mid-section |
 | `SectionCompleted` | Race day | All heats completed |
 
-**Total: 17 domain events** (8 pre-race, 9 race day)
+**Total: 19 domain events** (8 pre-race, 11 race day)
 
 ---
 

@@ -3,7 +3,7 @@
  * Uses hash-based routing (#screen/param=value) for back/forward and reload.
  */
 
-import { initAuth, onAuthChange, getUser, signOut } from '../supabase.js';
+import { initAuth, onAuthChange, getUser, signOut, isOrganizer, getAccessibleEventIds } from '../supabase.js';
 import { renderLogin, renderEventList, renderEventHome, renderSectionDetail } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -157,7 +157,6 @@ function updateUserInfo() {
 
   el.innerHTML = `
     <span class="user-email">${user.email}</span>
-    <span class="user-role">${user.role}</span>
   `;
 
   const signOutBtn = document.createElement('button');
@@ -196,7 +195,13 @@ onAuthChange((event, session) => {
     if (route && route.screenName !== 'login' && screens[route.screenName]) {
       navigate(route.screenName, route.params, { replace: true });
     } else {
-      navigate('event-list', {}, { replace: true });
+      // Registrar with exactly one event: skip the list, go straight to it
+      const eventIds = getAccessibleEventIds();
+      if (!isOrganizer() && eventIds.length === 1) {
+        navigate('event-home', { eventId: eventIds[0] }, { replace: true });
+      } else {
+        navigate('event-list', {}, { replace: true });
+      }
     }
   } else {
     navigate('login', {}, { replace: true });

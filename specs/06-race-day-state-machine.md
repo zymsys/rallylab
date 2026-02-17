@@ -133,7 +133,24 @@ EventLoaded  ◄── (loop for next section)
 - `SectionCompleted` event emitted
 - Audience Display shows final leaderboard / Section Complete screen
 
-### 3.8 SectionComplete → EventLoaded
+### 3.8 SectionActive:* → SectionActive:* (lanes changed)
+
+**Trigger:** `LanesChanged` event (Operator disables or re-enables a lane)
+
+**Guard:** Section must be active. New `available_lanes` must contain at least 1 lane.
+
+**Effect:**
+- Current `available_lanes` updated
+- Heat schedule regenerates for remaining heats using the new lane set
+- Completed heats are not affected
+- If in Staging state, current heat is re-staged with updated lane assignments
+- Track Controller receives the new lane set on the next `wait_race` call
+
+This can occur in any SectionActive sub-state (CheckIn, Staging, or Results). The sub-state does not change.
+
+---
+
+### 3.9 SectionComplete → EventLoaded
 
 **Trigger:** Operator navigates back to Event Home (to start another Section or end)
 
@@ -192,9 +209,9 @@ The Operator can trigger "Replay Last Results" to re-show results without affect
 |-------|-------------------|
 | Idle | Load Roster Package (file upload or server fetch) |
 | EventLoaded | Select Section, browse rosters |
-| SectionActive:CheckIn | Check in cars, Start Section |
-| SectionActive:Staging | (waiting for race) Manual Rank (fallback) |
-| SectionActive:Results | Re-Run, Replay Last Results, Manual Rank, Remove Car |
+| SectionActive:CheckIn | Check in cars, Start Section, Change Lanes |
+| SectionActive:Staging | (waiting for race) Manual Rank (fallback), Change Lanes |
+| SectionActive:Results | Re-Run, Correct Lanes, Replay Last Results, Manual Rank, Remove Car, Change Lanes |
 | SectionComplete | Start next Section, view final standings |
 
 ### 6.1 Admin Plane (Always Available)
@@ -213,6 +230,7 @@ While a Section is active, the Operator can browse other Sections' rosters in th
 | Complete Section | All scheduled heats have accepted results |
 | Re-Run | Must be in Results state for current heat |
 | Remove Car | Section must be active; car must not already be removed |
+| Change Lanes | Section must be active; new set must have at least 1 lane |
 
 ---
 
@@ -221,6 +239,33 @@ While a Section is active, the Operator can browse other Sections' rosters in th
 If a car arrives (`CarArrived`) after `SectionStarted`, the heat schedule is regenerated for remaining heats to include the late arrival. Completed heats are not affected.
 
 This does not change the current state — it modifies the derived heat schedule.
+
+### 8.1 Catch-Up Heats for New Late Registrations
+
+When a newly registered participant arrives after racing has already begun (via `ParticipantAdded` + `CarArrived`), they have missed all completed heats. To ensure their average time is comparable to everyone else's, the system generates **solo catch-up heats**:
+
+- **Count:** One catch-up heat per completed result at the time of arrival
+- **Format:** Solo runs — only the late participant races, one lane per heat
+- **Lane cycling:** Heats cycle through lanes 1, 2, ..., L, 1, 2, ... to maintain lane fairness
+- **Scheduling:** Catch-up heats are appended after the regenerated schedule
+- **Flagging:** Each catch-up heat has `catch_up: true` in its `HeatStaged` event
+- **Scoring:** Catch-up heats produce normal `HeatStaged` + `RaceCompleted` events; the scoring system processes them identically to regular heats
+
+**Edge cases:**
+- Late arrival before any heats complete → 0 catch-up heats; participant joins future heats normally
+- Multiple late arrivals → each gets their own catch-up heats, appended sequentially
+- Schedule reconstruction (browser refresh) replays catch-up generation deterministically
+
+---
+
+## 8.2 Result Correction (Lane Reassignment)
+
+When cars are placed in the wrong lanes, the timer records correct times but attributes them to the wrong cars. The Operator can fix this with a `ResultCorrected` event:
+
+- **Action:** "Correct Lanes" button, available in Results phase
+- **Effect:** Replaces the `lanes` array on the matching heat; does NOT modify times
+- **Scoring impact:** Leaderboard recomputes automatically since `computeLeaderboard()` reads from `heats[].lanes`
+- **Multiple corrections:** Each `ResultCorrected` replaces the previous lanes for that heat
 
 ---
 

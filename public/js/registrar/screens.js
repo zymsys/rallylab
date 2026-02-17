@@ -3,7 +3,7 @@
  * Registrar-only: no Start Section, no operator controls.
  */
 
-import { showAddParticipantDialog } from './dialogs.js';
+import { showAddParticipantDialog, showCheckInConfirmDialog } from './dialogs.js';
 
 // ─── Screen: Section List ────────────────────────────────────────
 
@@ -144,14 +144,14 @@ export function renderSectionCheckIn(container, params, ctx) {
     container.appendChild(addBtn);
   }
 
-  // Roster table with checkboxes
+  // Roster table with check-in buttons
   const sorted = [...sec.participants].sort((a, b) => a.car_number - b.car_number);
 
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
   wrap.innerHTML = `
     <table>
-      <thead><tr><th style="width:3rem"></th><th>Car #</th><th>Name</th><th>Status</th></tr></thead>
+      <thead><tr><th>Car #</th><th>Name</th><th></th></tr></thead>
       <tbody id="reg-checkin-body"></tbody>
     </table>
   `;
@@ -164,33 +164,35 @@ export function renderSectionCheckIn(container, params, ctx) {
     const tr = document.createElement('tr');
     if (isRemoved) tr.style.opacity = '0.5';
 
-    const checkTd = document.createElement('td');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'checkin-toggle';
-    checkbox.checked = isArrived;
-    checkbox.disabled = isRemoved || sec.completed;
-    checkbox.onchange = async () => {
-      if (checkbox.checked && !isArrived) {
-        await appendEvent({
-          type: 'CarArrived',
-          section_id: sectionId,
-          car_number: p.car_number,
-          timestamp: Date.now()
-        });
-        renderSectionCheckIn(container, params, ctx);
-      }
-    };
-    checkTd.appendChild(checkbox);
-    tr.appendChild(checkTd);
-
-    tr.innerHTML += `
+    tr.innerHTML = `
       <td><strong>#${p.car_number}</strong></td>
       <td>${esc(p.name)}</td>
-      <td>${isRemoved ? '<span class="status-badge status-removed">Removed</span>' :
-             isArrived ? '<span class="status-badge status-arrived">Arrived</span>' :
-             '<span class="status-badge status-idle">Waiting</span>'}</td>
+      <td class="table-actions"></td>
     `;
+
+    const actionsCell = tr.querySelector('.table-actions');
+    if (isRemoved) {
+      actionsCell.innerHTML = '<span class="status-badge status-removed">Removed</span>';
+    } else if (isArrived) {
+      actionsCell.innerHTML = '<span class="status-badge status-arrived">Arrived</span>';
+    } else if (!sec.completed) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-primary';
+      btn.textContent = 'Check In';
+      btn.onclick = () => {
+        showCheckInConfirmDialog(p, async () => {
+          ctx.state = await appendEvent({
+            type: 'CarArrived',
+            section_id: sectionId,
+            car_number: p.car_number,
+            timestamp: Date.now()
+          });
+          showToast(`#${p.car_number} ${p.name} checked in`, 'success');
+          renderSectionCheckIn(container, params, ctx);
+        });
+      };
+      actionsCell.appendChild(btn);
+    }
 
     tbody.appendChild(tr);
   }

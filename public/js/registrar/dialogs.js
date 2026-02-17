@@ -39,6 +39,35 @@ function esc(str) {
   return d.innerHTML;
 }
 
+// ─── Check-In Confirmation Dialog ────────────────────────────────
+
+export function showCheckInConfirmDialog(participant, onConfirm) {
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Confirm Check-In</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p>Check in <strong>#${participant.car_number} ${esc(participant.name)}</strong>?</p>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="confirm">Check In</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="confirm"]').onclick = async () => {
+    const btn = d.querySelector('[data-action="confirm"]');
+    btn.disabled = true;
+    btn.textContent = 'Checking in...';
+    await onConfirm();
+    closeDialog();
+  };
+}
+
 // ─── Add Participant Dialog ──────────────────────────────────────
 
 export function showAddParticipantDialog(sectionId, section, ctx, onComplete) {
@@ -113,7 +142,7 @@ export function showAddParticipantDialog(sectionId, section, ctx, onComplete) {
       const carNumber = added ? added.car_number : nextCarNum;
 
       // Emit CarArrived
-      await ctx.appendEvent({
+      ctx.state = await ctx.appendEvent({
         type: 'CarArrived',
         section_id: sectionId,
         car_number: carNumber,

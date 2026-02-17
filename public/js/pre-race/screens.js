@@ -3,7 +3,7 @@
  * 4 screens: Login, Event List, Event Home, Section Detail.
  */
 
-import { signIn, getUser, getAccessibleEventIds } from '../supabase.js';
+import { signIn, getUser, getAccessibleEventIds, isOrganizer } from '../supabase.js';
 import { loadEventState, appendEvent, exportRosterPackage } from './commands.js';
 import {
   showCreateEventDialog,
@@ -27,13 +27,6 @@ export function renderLogin(container) {
           <label for="login-email">Email</label>
           <input id="login-email" class="form-input" type="email" placeholder="you@example.com" required>
         </div>
-        <div class="form-group">
-          <label>Sign in as</label>
-          <div class="radio-group">
-            <label><input type="radio" name="role" value="organizer" checked> Organizer</label>
-            <label><input type="radio" name="role" value="registrar"> Registrar</label>
-          </div>
-        </div>
         <button type="submit" class="btn btn-primary">Sign In</button>
       </form>
       <div class="login-divider">or</div>
@@ -44,9 +37,8 @@ export function renderLogin(container) {
   document.getElementById('login-form').onsubmit = (e) => {
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim().toLowerCase();
-    const role = document.querySelector('input[name="role"]:checked').value;
     if (!email) return;
-    signIn(email, role);
+    signIn(email);
   };
 
   document.getElementById('demo-btn').onclick = async () => {
@@ -55,7 +47,7 @@ export function renderLogin(container) {
     btn.textContent = 'Loading...';
     try {
       await loadDemoData();
-      signIn('organizer@example.com', 'organizer');
+      signIn('organizer@example.com');
     } catch (e) {
       showToast(e.message, 'error');
       btn.disabled = false;
@@ -90,18 +82,18 @@ export async function renderEventList(container) {
   `;
   container.appendChild(toolbar);
 
-  if (user.role === 'organizer') {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-primary';
-    btn.textContent = '+ Create Event';
-    btn.onclick = () => showCreateEventDialog((newId) => navigate('event-home', { eventId: newId }));
-    toolbar.querySelector('#event-list-actions').appendChild(btn);
+  if (isOrganizer()) {
+    const createBtn = document.createElement('button');
+    createBtn.className = 'btn btn-primary';
+    createBtn.textContent = '+ Create Event';
+    createBtn.onclick = () => showCreateEventDialog((newId) => navigate('event-home', { eventId: newId }));
+    toolbar.querySelector('#event-list-actions').appendChild(createBtn);
   }
 
   if (events.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.innerHTML = user.role === 'organizer'
+    empty.innerHTML = isOrganizer()
       ? '<p>No events yet. Create your first event to get started.</p>'
       : '<p>No events found. Ask your organizer to invite you.</p>';
     container.appendChild(empty);
@@ -143,7 +135,7 @@ export async function renderEventHome(container, params) {
   container.innerHTML = '<p class="info-line">Loading event...</p>';
 
   const state = await loadEventState(eventId);
-  const isOrganizer = user.role === 'organizer';
+  const _isOrganizer = isOrganizer();
   const sections = Object.values(state.sections);
   const groups = Object.values(state.groups);
   const registrars = Object.values(state.registrars);
@@ -180,21 +172,21 @@ export async function renderEventHome(container, params) {
     actions.appendChild(exportBtn);
   }
 
-  if (isOrganizer) {
+  if (_isOrganizer) {
     const raceDayBtn = document.createElement('button');
     raceDayBtn.className = 'btn btn-primary';
     raceDayBtn.textContent = 'Race Day';
-    raceDayBtn.onclick = () => window.open('operator.html', 'kubkars-operator');
+    raceDayBtn.onclick = () => window.location.href = 'operator.html';
     actions.appendChild(raceDayBtn);
   } else {
     const checkInBtn = document.createElement('button');
     checkInBtn.className = 'btn btn-primary';
     checkInBtn.textContent = 'Race Day Check-In';
-    checkInBtn.onclick = () => window.open('registrar.html', 'kubkars-registrar');
+    checkInBtn.onclick = () => window.location.href = 'registrar.html';
     actions.appendChild(checkInBtn);
   }
 
-  if (isOrganizer) {
+  if (_isOrganizer) {
     renderOrganizerEventHome(container, params, state, sections, groups, registrars);
   } else {
     renderRegistrarEventHome(container, params, state, sections, groups);
@@ -478,11 +470,11 @@ export async function renderSectionDetail(container, params) {
     return;
   }
 
-  const isOrganizer = user.role === 'organizer';
+  const _isOrganizer = isOrganizer();
 
   // canEdit: organizer can always edit. Registrar must have group+section access.
   let canEdit = false;
-  if (isOrganizer) {
+  if (_isOrganizer) {
     canEdit = true;
   } else {
     const reg = state.registrars[user.email];
