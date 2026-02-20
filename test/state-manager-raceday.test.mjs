@@ -391,9 +391,9 @@ describe('deriveRaceDayPhase', () => {
     assert.strictEqual(deriveRaceDayPhase(s, 's1'), 'idle');
   });
 
-  it('returns event-loaded when section not found', () => {
+  it('returns rally-loaded when section not found', () => {
     const s = applyEvent(initialState(), makeEvent(baseRosterPayload()));
-    assert.strictEqual(deriveRaceDayPhase(s, 'nonexistent'), 'event-loaded');
+    assert.strictEqual(deriveRaceDayPhase(s, 'nonexistent'), 'rally-loaded');
   });
 
   it('returns check-in before section started', () => {
@@ -756,12 +756,12 @@ describe('ResultCorrected', () => {
 describe('Integration: pre-race + race day coexistence', () => {
   it('both state trees are maintained', () => {
     const s = buildState([
-      { type: 'EventCreated', event_id: 'e1', event_name: 'Rally', event_date: '2026-03-15', created_by: 'org@x.com' },
+      { type: 'RallyCreated', rally_id: 'e1', rally_name: 'Rally', rally_date: '2026-03-15', created_by: 'org@x.com' },
       { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
       baseRosterPayload(),
       { type: 'CarArrived', section_id: 's1', car_number: 1 }
     ]);
-    assert.strictEqual(s.event_name, 'Rally');
+    assert.strictEqual(s.rally_name, 'Rally');
     assert.strictEqual(s.sections.s1.section_name, 'Kub Kars');
     assert.strictEqual(s.race_day.sections.s1.section_name, 'Kub Kars');
     assert.deepStrictEqual(s.race_day.sections.s1.arrived, [1]);

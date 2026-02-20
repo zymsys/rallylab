@@ -121,7 +121,7 @@ export function showDemoDataDialog(ctx) {
       await generateDemoData(ctx, config);
       close();
       ctx.showToast('Demo data loaded', 'success');
-      ctx.navigate('event-home', {});
+      ctx.navigate('rally-home', {});
     } catch (e) {
       ctx.showToast(e.message, 'error');
       btn.disabled = false;
@@ -137,10 +137,10 @@ async function generateDemoData(ctx, sectionConfigs) {
   const now = Date.now();
 
   await appendAndRebuild({
-    type: 'EventCreated',
-    event_id: crypto.randomUUID(),
-    event_name: 'Kub Kars Rally 2026',
-    event_date: '2026-03-15',
+    type: 'RallyCreated',
+    rally_id: crypto.randomUUID(),
+    rally_name: 'Kub Kars Rally 2026',
+    rally_date: '2026-03-15',
     created_by: 'operator',
     timestamp: now
   });

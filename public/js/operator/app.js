@@ -15,7 +15,7 @@ import {
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, signOut } from '../supabase.js';
 import {
-  renderEventList, renderEventHome, renderCheckIn,
+  renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
 } from './screens.js';
 
@@ -84,8 +84,8 @@ function decodeHash(hash) {
 }
 
 const screens = {
-  'event-list': renderEventList,
-  'event-home': renderEventHome,
+  'rally-list': renderRallyList,
+  'rally-home': renderRallyHome,
   'check-in': renderCheckIn,
   'live-console': renderLiveConsole,
   'section-complete': renderSectionComplete
@@ -113,9 +113,9 @@ function renderScreen(screenName, params) {
   updateBreadcrumbs(screenName, params);
   updateLiveBar(screenName, params);
 
-  // Broadcast welcome to audience when event data is available
-  if (screenName === 'event-home' && _state?.event_name) {
-    sendWelcome(_state.event_name);
+  // Broadcast welcome to audience when rally data is available
+  if (screenName === 'rally-home' && _state?.rally_name) {
+    sendWelcome(_state.rally_name);
   }
 
   const ctx = {
@@ -154,7 +154,7 @@ window.addEventListener('popstate', () => {
   if (route && screens[route.screenName]) {
     renderScreen(route.screenName, route.params);
   } else {
-    renderScreen('event-list', {});
+    renderScreen('rally-list', {});
   }
 });
 
@@ -165,12 +165,12 @@ function updateBreadcrumbs(screenName, params) {
   bc.innerHTML = '';
 
   const items = [];
-  if (screenName !== 'event-list') {
-    items.push({ label: 'Events', screen: 'event-list' });
+  if (screenName !== 'rally-list') {
+    items.push({ label: 'Rallies', screen: 'rally-list' });
   }
 
   if (['check-in', 'live-console', 'section-complete'].includes(screenName)) {
-    items.push({ label: 'Event', screen: 'event-home' });
+    items.push({ label: 'Rally', screen: 'rally-home' });
   }
 
   if (screenName === 'check-in') items.push({ label: 'Check-In', screen: null });
@@ -798,12 +798,12 @@ async function init() {
     }
   });
 
-  // Route to current hash or event list
+  // Route to current hash or rally list
   const route = decodeHash(location.hash);
   if (route && screens[route.screenName]) {
     navigate(route.screenName, route.params, { replace: true });
   } else {
-    navigate('event-list', {}, { replace: true });
+    navigate('rally-list', {}, { replace: true });
   }
 }
 

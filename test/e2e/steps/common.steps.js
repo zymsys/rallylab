@@ -33,12 +33,12 @@ When('I click {string}', async ({ page }, text) => {
 
 // ─── Pre-Race Interactions ───────────────────────────────────────
 
-When('I create an event named {string} on {string}', async ({ page }, name, date) => {
-  await page.getByRole('button', { name: '+ Create Event' }).click();
-  await page.locator('#dlg-event-name').fill(name);
-  await page.locator('#dlg-event-date').fill(date);
+When('I create a rally named {string} on {string}', async ({ page }, name, date) => {
+  await page.getByRole('button', { name: '+ Create Rally' }).click();
+  await page.locator('#dlg-rally-name').fill(name);
+  await page.locator('#dlg-rally-date').fill(date);
   await page.locator('[data-action="create"]').click();
-  // Wait for navigation to event home
+  // Wait for navigation to rally home
   await expect(page.locator('.screen-title')).toBeVisible({ timeout: 10000 });
 });
 

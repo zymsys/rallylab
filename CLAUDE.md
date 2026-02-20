@@ -25,14 +25,14 @@ public/
     ├── state-manager.js       # Pure event reducer (shared across all contexts)
     └── pre-race/
         ├── app.js             # Entry point: hash-based routing, auth flow, toasts
-        ├── screens.js         # 4 screen renderers (login, event-list, event-home, section-detail)
+        ├── screens.js         # 4 screen renderers (login, rally-list, rally-home, section-detail)
         ├── dialogs.js         # Modal dialogs for all pre-race operations
-        ├── commands.js        # appendEvent(), loadEventState(), exportRosterPackage()
+        ├── commands.js        # appendEvent(), loadRallyState(), exportRosterPackage()
         ├── roster-import.js   # CSV/XLSX parsing with smart column detection
         └── demo-data.js       # Seed data generator
 ```
 
-Planned but not yet implemented: `event-store.js` (IndexedDB), `track-connection.js` (Web Serial), `sync-worker.js`, `broadcast.js` (BroadcastChannel), `scheduler.js`, `scoring.js`, operator and audience displays.
+Operator (`operator/`), audience (`audience/`), and supporting modules (`event-store.js`, `track-connection.js`, `broadcast.js`, `scheduler.js`, `scoring.js`) are implemented. `sync-worker.js` is not yet implemented.
 
 ## Running Tests
 
@@ -65,12 +65,12 @@ Always consult the relevant spec before implementing a feature. If code and spec
 
 Use these terms consistently in code, UI, and comments:
 
-- **Event** (not "Meet" or "Rally") — a pinewood derby competition
+- **Rally** (not "Event" or "Meet") — a pinewood derby competition
 - **Section** (not "Division") — e.g., Beaver Buggies, Kub Kars, Scout Trucks
 - **Participant** (not "Racer") — the person; **Car** — the physical object
 - **Registrar** — the Section Contact role that manages registration
 - **Operator** — runs the race day software; Organizer is implicitly an Operator, additional Operators can be invited
-- Event types are **PascalCase**: `RaceCompleted`, `HeatStaged`, `ParticipantAdded`, etc.
+- Domain event types are **PascalCase**: `RaceCompleted`, `HeatStaged`, `ParticipantAdded`, `RallyCreated`, etc.
 - Use `name` as the field name (not `display_name`)
 
 ## Conventions

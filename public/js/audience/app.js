@@ -17,7 +17,7 @@ onMessage((msg) => {
 
   switch (msg.type) {
     case 'SHOW_WELCOME':
-      renderWelcome(container, msg.event_name);
+      renderWelcome(container, msg.rally_name);
       break;
     case 'SHOW_STAGING':
       renderStaging(container, msg.section_name, msg.heat_number, msg.lanes, msg.next_heat);

@@ -514,7 +514,7 @@ export function showLoadRosterDialog(ctx) {
       }
       rosterData = data;
 
-      previewText.textContent = `${data.event_name || 'Event'} — ${data.sections.length} section(s)`;
+      previewText.textContent = `${data.rally_name || 'Rally'} — ${data.sections.length} section(s)`;
       previewBody.innerHTML = '';
       for (const sec of data.sections) {
         const tr = document.createElement('tr');
@@ -538,13 +538,13 @@ export function showLoadRosterDialog(ctx) {
       const { clearAndRebuild, appendAndRebuild } = await import('./app.js');
       await clearAndRebuild();
 
-      // Create EventCreated if data includes event info
-      if (rosterData.event_name) {
+      // Create RallyCreated if data includes rally info
+      if (rosterData.rally_name) {
         await appendAndRebuild({
-          type: 'EventCreated',
-          event_id: rosterData.event_id || crypto.randomUUID(),
-          event_name: rosterData.event_name,
-          event_date: rosterData.event_date || '',
+          type: 'RallyCreated',
+          rally_id: rosterData.rally_id || crypto.randomUUID(),
+          rally_name: rosterData.rally_name,
+          rally_date: rosterData.rally_date || '',
           created_by: 'operator',
           timestamp: Date.now()
         });
@@ -563,7 +563,7 @@ export function showLoadRosterDialog(ctx) {
 
       closeDialog();
       ctx.showToast('Roster loaded', 'success');
-      ctx.navigate('event-home', {});
+      ctx.navigate('rally-home', {});
     } catch (e) {
       ctx.showToast(e.message, 'error');
       loadBtn.disabled = false;

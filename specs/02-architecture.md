@@ -137,7 +137,7 @@ USB serial (v1). WiFi HTTP is a future option (see Phase 4).
 - **Database:** Supabase PostgreSQL
 - **Access:** `supabase-js` client with RLS policies
 - **Model:** Event-sourced — same `domain_events` table as race day
-- Pre-race events (`EventCreated`, `SectionCreated`, `RosterUpdated`, etc.) are appended directly to Supabase
+- Pre-race events (`RallyCreated`, `SectionCreated`, `RosterUpdated`, etc.) are appended directly to Supabase
 - State (rosters, car numbers, lock status) is derived client-side by replaying events
 
 See `05-pre-race-data.md` for schema, RLS policies, and client usage.
@@ -227,8 +227,8 @@ All events — pre-race and race day — share a single table:
 ```sql
 CREATE TABLE domain_events (
   id BIGSERIAL PRIMARY KEY,
-  event_id UUID NOT NULL,
-  section_id UUID,                -- null for EventCreated
+  rally_id UUID NOT NULL,
+  section_id UUID,                -- null for RallyCreated
   event_type TEXT NOT NULL,
   payload JSONB NOT NULL,
   created_by UUID REFERENCES auth.users(id),
@@ -237,14 +237,14 @@ CREATE TABLE domain_events (
 );
 
 CREATE UNIQUE INDEX idx_race_day_dedup
-  ON domain_events(event_id, section_id, client_event_id)
+  ON domain_events(rally_id, section_id, client_event_id)
   WHERE client_event_id IS NOT NULL;
 
 CREATE INDEX idx_domain_events_lookup
-  ON domain_events(event_id, section_id);
+  ON domain_events(rally_id, section_id);
 ```
 
-See `05-pre-race-data.md` for RLS policies, triggers, and the `event_roles` access control table.
+See `05-pre-race-data.md` for RLS policies, triggers, and the `rally_roles` access control table.
 
 ---
 
@@ -255,7 +255,7 @@ See `05-pre-race-data.md` for RLS policies, triggers, and the `event_roles` acce
 A background sync loop runs in the Operator Display tab using `supabase-js`:
 
 ```javascript
-async function syncOnce(supabase, store, eventId, sectionId) {
+async function syncOnce(supabase, store, rallyId, sectionId) {
   if (!navigator.onLine) return;
 
   const cursor = await store.getSyncCursor();
@@ -263,7 +263,7 @@ async function syncOnce(supabase, store, eventId, sectionId) {
   if (events.length === 0) return;
 
   const rows = events.map(e => ({
-    event_id: eventId,
+    rally_id: rallyId,
     section_id: sectionId,
     client_event_id: e.id,
     event_type: e.type,
@@ -273,7 +273,7 @@ async function syncOnce(supabase, store, eventId, sectionId) {
 
   const { error } = await supabase
     .from('domain_events')
-    .upsert(rows, { onConflict: 'event_id,section_id,client_event_id' });
+    .upsert(rows, { onConflict: 'rally_id,section_id,client_event_id' });
 
   if (!error) {
     await store.setSyncCursor(events[events.length - 1].id);
@@ -285,14 +285,14 @@ Runs every 5 seconds. Racing is never blocked by sync status.
 
 ### 7.2 Restore from Supabase
 
-When the Operator selects an Event (online):
+When the Operator selects a Rally (online):
 
 ```javascript
-async function restoreFromSupabase(supabase, store, eventId, sectionId) {
+async function restoreFromSupabase(supabase, store, rallyId, sectionId) {
   const { data: events } = await supabase
     .from('domain_events')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('rally_id', rallyId)
     .eq('section_id', sectionId)
     .not('client_event_id', 'is', null)
     .order('client_event_id');
@@ -315,11 +315,11 @@ async function restoreFromSupabase(supabase, store, eventId, sectionId) {
 On race day, the Operator replays pre-race events from Supabase to derive the roster:
 
 ```javascript
-async function importRoster(supabase, store, eventId) {
+async function importRoster(supabase, store, rallyId) {
   const { data: events } = await supabase
     .from('domain_events')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('rally_id', rallyId)
     .order('id');
 
   // Replay events to derive locked rosters
@@ -330,7 +330,7 @@ async function importRoster(supabase, store, eventId) {
     if (!section.locked) continue;
     await store.appendEvent({
       type: 'RosterLoaded',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: section.section_id,
       participants: section.participants,
       timestamp: Date.now()
@@ -356,7 +356,7 @@ If offline, the Operator can import from a previously downloaded JSON file.
 ```json
 {
   "version": 1,
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "timestamp": 1708012345678,
   "events": [ /* full event log */ ]
@@ -379,7 +379,7 @@ If offline, the Operator can import from a previously downloaded JSON file.
 |----------|--------|----------|
 | Browser refresh | None | Automatic — IndexedDB persists, state rebuilds |
 | Browser crash | None | Relaunch browser, state rebuilds from IndexedDB |
-| Laptop dies, internet available | 2-3 min downtime | New laptop → select event → restore from Supabase |
+| Laptop dies, internet available | 2-3 min downtime | New laptop → select rally → restore from Supabase |
 | Laptop dies, no internet, USB backup | 2-3 min downtime | New laptop → restore from USB stick |
 | Laptop dies, no internet, no USB | Data lost | Re-run heats, or wait for internet to restore |
 
@@ -397,7 +397,7 @@ Channel name: `rallylab-race`
 
 ```javascript
 // Welcome screen
-{ type: 'SHOW_WELCOME', event_name: '...' }
+{ type: 'SHOW_WELCOME', rally_name: '...' }
 
 // Heat staging
 {
@@ -534,7 +534,7 @@ Support Track Controller via WiFi HTTP as alternative to USB serial.
 ### 15.3 Row-Level Security
 
 All data access is controlled by Supabase RLS policies:
-- Organizers can only access their own Events
+- Organizers can only access their own Rallies
 - Registrars can only access their assigned Section
 - Race day sync uses the Organizer's session
 - See `05-pre-race-data.md` for complete RLS policies
@@ -545,7 +545,7 @@ All data access is controlled by Supabase RLS policies:
 
 | Metric | Value |
 |--------|-------|
-| Typical event log size | 200-500 events, 100-250 KB |
+| Typical rally event log size | 200-500 events, 100-250 KB |
 | State rebuild (500 events) | <50ms |
 | Supabase sync interval | 5 seconds |
 | USB backup write | ~100ms |
@@ -556,8 +556,8 @@ All data access is controlled by Supabase RLS policies:
 
 | Resource | Free Tier Limit | RallyLab Usage |
 |----------|----------------|----------------|
-| Database | 500 MB | <1 MB per event (trivial) |
-| Auth users | Unlimited | ~10-20 per event |
+| Database | 500 MB | <1 MB per rally (trivial) |
+| Auth users | Unlimited | ~10-20 per rally |
 | API requests | Unlimited | ~100/day pre-race, ~100/race day |
 | Storage | 1 GB | Not used |
 | Bandwidth | 5 GB | Negligible |

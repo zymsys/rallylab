@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'rallylab-races';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const EVENTS_STORE = 'events';
 const SETTINGS_STORE = 'settings';
 
@@ -22,10 +22,12 @@ export async function openStore() {
 
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains(EVENTS_STORE)) {
-        const store = db.createObjectStore(EVENTS_STORE, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('event_id', 'event_id', { unique: true });
+      // V1→V2: index renamed from event_id to rally_id. No production data, safe to recreate.
+      if (db.objectStoreNames.contains(EVENTS_STORE)) {
+        db.deleteObjectStore(EVENTS_STORE);
       }
+      const store = db.createObjectStore(EVENTS_STORE, { keyPath: 'id', autoIncrement: true });
+      store.createIndex('rally_id', 'rally_id', { unique: true });
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
       }
@@ -44,7 +46,7 @@ export async function openStore() {
 
 /**
  * Append a domain event to the store.
- * @param {Object} event - Domain event with at minimum { type, event_id, ... }
+ * @param {Object} event - Domain event with at minimum { type, rally_id, ... }
  * @returns {Promise<Object>} The stored event with its auto-incremented id
  */
 export async function appendEvent(event) {
@@ -52,7 +54,7 @@ export async function appendEvent(event) {
 
   const record = {
     ...event,
-    event_id: event.event_id || crypto.randomUUID(),
+    rally_id: event.rally_id || crypto.randomUUID(),
     stored_at: Date.now()
   };
 

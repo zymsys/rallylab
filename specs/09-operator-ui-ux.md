@@ -13,7 +13,7 @@ Scope: UI/UX only (implementable). For state transitions, see `06-race-day-state
 
 ## 1. Goals
 
-- Operator can run an Event with **minimal interaction**
+- Operator can run a Rally with **minimal interaction**
 - Track Operator runs the physical race; software primarily **displays staging + results**
 - Automatic progression between heats (no "Next Heat" button)
 - Provide simple intervention paths: **Re-Run**, **Replay Last Results**, **Manual Rank**
@@ -50,30 +50,30 @@ Operator may browse rosters/Sections at any time.
 
 ## 4. Screens
 
-### 4.1 Screen A — Event List
+### 4.1 Screen A — Rally List
 
-**Purpose:** Select or load an Event.
+**Purpose:** Select or load a Rally.
 
 **State:** `Idle`
 
 UI:
-- List of available Events (from server if online, or from file import)
-- Buttons: **Load Event** (file import), **Fetch from Server** (if online)
+- List of available Rallies (from server if online, or from file import)
+- Buttons: **Load Rally** (file import), **Fetch from Server** (if online)
 
 Behavior:
-- Loading an Event transitions to `EventLoaded`
+- Loading a Rally transitions to `RallyLoaded`
 - Audience Display shows **Welcome** screen
 
 ---
 
-### 4.2 Screen B — Event Home
+### 4.2 Screen B — Rally Home
 
-**Purpose:** See Sections and manage the Event.
+**Purpose:** See Sections and manage the Rally.
 
-**State:** `EventLoaded`
+**State:** `RallyLoaded`
 
 UI:
-- Event name and date
+- Rally name and date
 - Section list showing: Section name, participant count, status (not started / in progress / complete)
 
 Actions:
@@ -89,7 +89,7 @@ Audience Display:
 
 **Purpose:** View roster, check in cars, start racing.
 
-**State:** `EventLoaded` or `SectionActive:CheckIn`
+**State:** `RallyLoaded` or `SectionActive:CheckIn`
 
 UI:
 - Roster table: Car #, Name, Checked In (yes/no)
@@ -167,7 +167,7 @@ Two stacked panels (or side-by-side on wide screens):
 UI:
 - Section name with "Complete" badge
 - Final leaderboard (full standings)
-- Buttons: **Return to Event Home**, **Show Leaderboard on Display**
+- Buttons: **Return to Rally Home**, **Show Leaderboard on Display**
 
 Audience Display:
 - Shows final leaderboard / Section Complete screen
@@ -177,7 +177,7 @@ Audience Display:
 
 ## 5. Manual Rank Modal (Fallback)
 
-Purpose: allow the Event to continue if hardware fails or results cannot be trusted.
+Purpose: allow the Rally to continue if hardware fails or results cannot be trusted.
 
 UI:
 - Shows the current heat lane assignments
@@ -200,7 +200,7 @@ The Audience Display is driven entirely by BroadcastChannel messages from the Op
 
 ### 6.1 Welcome
 
-Shown when Event is loaded, before any Section starts.
+Shown when Rally is loaded, before any Section starts.
 
 ### 6.2 Heat Staging
 
@@ -244,13 +244,13 @@ Operator overrides:
 
 ## 7. Minimal Acceptance Criteria
 
-- Operator can load an Event and start a Section
+- Operator can load a Rally and start a Section
 - Audience Display shows Welcome → Heat Staging → Results → next Heat Staging automatically
 - Operator can:
   - Re-Run the current heat
   - Replay last results
   - Enter manual ranked results
-  - Remove a car mid-event
+  - Remove a car mid-rally
 - Operator can browse other Section rosters without affecting the Audience Display
 - Active Section remains visibly pinned as LIVE while browsing
 - Section completion shows final leaderboard on Audience Display

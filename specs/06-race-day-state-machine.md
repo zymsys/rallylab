@@ -18,7 +18,7 @@ Idle
   │
   │ RosterLoaded
   ▼
-EventLoaded
+RallyLoaded
   │
   │ CarArrived (one or more)
   │ SectionStarted
@@ -43,15 +43,15 @@ SectionComplete
   │
   │ (start another section or end)
   ▼
-EventLoaded  ◄── (loop for next section)
+RallyLoaded  ◄── (loop for next section)
 ```
 
 ### 2.1 State Definitions
 
 | State | Description |
 |-------|-------------|
-| **Idle** | App loaded, no Event data present. Operator must load a Roster Package. |
-| **EventLoaded** | Roster Package imported. Operator sees Section list. Audience Display shows Welcome. |
+| **Idle** | App loaded, no Rally data present. Operator must load a Roster Package. |
+| **RallyLoaded** | Roster Package imported. Operator sees Section list. Audience Display shows Welcome. |
 | **SectionActive:CheckIn** | A Section is selected. Operator checks in cars (`CarArrived`). Not yet racing. |
 | **SectionActive:Staging** | Current heat is staged. Lane assignments shown on Audience Display. Waiting for race to complete. |
 | **SectionActive:Results** | Race completed. Results shown on Audience Display. Operator can accept (advance), re-run, or enter manual result. |
@@ -61,17 +61,17 @@ EventLoaded  ◄── (loop for next section)
 
 ## 3. Transitions
 
-### 3.1 Idle → EventLoaded
+### 3.1 Idle → RallyLoaded
 
 **Trigger:** `RosterLoaded` event (one per Section in the Roster Package)
 
 **Guard:** Roster Package must contain at least one Section with participants.
 
 **Effect:**
-- Event data stored in event log
+- Rally data stored in event log
 - Audience Display shows Welcome screen
 
-### 3.2 EventLoaded → SectionActive:CheckIn
+### 3.2 RallyLoaded → SectionActive:CheckIn
 
 **Trigger:** Operator selects a Section to race
 
@@ -96,7 +96,7 @@ EventLoaded  ◄── (loop for next section)
 
 **Trigger:** `RaceCompleted` or `ResultManuallyEntered` event
 
-**Guard:** Event must be for the currently staged heat.
+**Guard:** Result must be for the currently staged heat.
 
 **Effect:**
 - Results computed (place, time)
@@ -150,9 +150,9 @@ This can occur in any SectionActive sub-state (CheckIn, Staging, or Results). Th
 
 ---
 
-### 3.9 SectionComplete → EventLoaded
+### 3.9 SectionComplete → RallyLoaded
 
-**Trigger:** Operator navigates back to Event Home (to start another Section or end)
+**Trigger:** Operator navigates back to Rally Home (to start another Section or end)
 
 **Effect:**
 - Active Section cleared
@@ -187,7 +187,7 @@ Multiple re-runs are allowed. Each cycle follows the same pattern.
 | Race Day State | Audience Display Shows |
 |----------------|----------------------|
 | Idle | Nothing (app not ready) |
-| EventLoaded | Welcome screen (Event name) |
+| RallyLoaded | Welcome screen (Rally name) |
 | SectionActive:CheckIn | Welcome screen (or check-in progress) |
 | SectionActive:Staging | Heat Staging (Section name, heat number, lane assignments) |
 | SectionActive:Results | Race Results (ranked finish, times if available) |
@@ -208,7 +208,7 @@ The Operator can trigger "Replay Last Results" to re-show results without affect
 | State | Available Actions |
 |-------|-------------------|
 | Idle | Load Roster Package (file upload or server fetch) |
-| EventLoaded | Select Section, browse rosters |
+| RallyLoaded | Select Section, browse rosters |
 | SectionActive:CheckIn | Check in cars, Start Section, Change Lanes |
 | SectionActive:Staging | (waiting for race) Manual Rank (fallback), Change Lanes |
 | SectionActive:Results | Re-Run, Correct Lanes, Replay Last Results, Manual Rank, Remove Car, Change Lanes |
@@ -224,7 +224,7 @@ While a Section is active, the Operator can browse other Sections' rosters in th
 
 | Transition | Guard |
 |------------|-------|
-| Load Event | Roster Package has at least one Section with participants |
+| Load Rally | Roster Package has at least one Section with participants |
 | Start Section | At least 2 cars checked in (`CarArrived`) |
 | Accept results / advance | `RaceCompleted` or `ResultManuallyEntered` for current heat |
 | Complete Section | All scheduled heats have accepted results |
@@ -290,7 +290,7 @@ State rebuilds from IndexedDB event log. The app returns to the correct state ba
 
 ## 10. References
 
-- `04-domain-events.md` — Event definitions and schemas
+- `04-domain-events.md` — Domain event definitions and schemas
 - `07-heat-scheduling.md` — Heat schedule generation
 - `08-scoring-and-leaderboard.md` — Scoring algorithm
 - `09-operator-ui-ux.md` — Operator interface specification

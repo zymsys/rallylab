@@ -8,7 +8,7 @@ export async function loadDemoData() {
   clearAllData();
 
   const client = getClient();
-  const eventId = crypto.randomUUID();
+  const rallyId = crypto.randomUUID();
 
   // Sections (age categories)
   const beaversId = crypto.randomUUID();
@@ -24,17 +24,17 @@ export async function loadDemoData() {
 
   const events = [
     {
-      type: 'EventCreated',
-      event_id: eventId,
-      event_name: 'Kub Kars Rally 2026',
-      event_date: '2026-03-15',
+      type: 'RallyCreated',
+      rally_id: rallyId,
+      rally_name: 'Kub Kars Rally 2026',
+      rally_date: '2026-03-15',
       created_by: 'organizer@example.com',
       timestamp: now
     },
     // Sections
     {
       type: 'SectionCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: beaversId,
       section_name: 'Beaver Buggies',
       created_by: 'organizer@example.com',
@@ -42,7 +42,7 @@ export async function loadDemoData() {
     },
     {
       type: 'SectionCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: kubkarsId,
       section_name: 'Kub Kars',
       created_by: 'organizer@example.com',
@@ -50,7 +50,7 @@ export async function loadDemoData() {
     },
     {
       type: 'SectionCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: scoutsId,
       section_name: 'Scout Trucks',
       created_by: 'organizer@example.com',
@@ -59,7 +59,7 @@ export async function loadDemoData() {
     // Groups
     {
       type: 'GroupCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       group_id: newmarketId,
       group_name: '1st Newmarket',
       created_by: 'organizer@example.com',
@@ -67,7 +67,7 @@ export async function loadDemoData() {
     },
     {
       type: 'GroupCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       group_id: aurora2Id,
       group_name: '2nd Aurora',
       created_by: 'organizer@example.com',
@@ -75,7 +75,7 @@ export async function loadDemoData() {
     },
     {
       type: 'GroupCreated',
-      event_id: eventId,
+      rally_id: rallyId,
       group_id: aurora3Id,
       group_name: '3rd Aurora',
       created_by: 'organizer@example.com',
@@ -84,7 +84,7 @@ export async function loadDemoData() {
     // Registrars — multi-scope assignments
     {
       type: 'RegistrarInvited',
-      event_id: eventId,
+      rally_id: rallyId,
       registrar_email: 'darryl@example.com',
       group_ids: [aurora2Id, aurora3Id],
       section_ids: [kubkarsId, scoutsId],
@@ -93,7 +93,7 @@ export async function loadDemoData() {
     },
     {
       type: 'RegistrarInvited',
-      event_id: eventId,
+      rally_id: rallyId,
       registrar_email: 'sarah@example.com',
       group_ids: [newmarketId],
       section_ids: [beaversId, kubkarsId, scoutsId],
@@ -103,7 +103,7 @@ export async function loadDemoData() {
     // Rosters — 1st Newmarket Kub Kars
     {
       type: 'RosterUpdated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: kubkarsId,
       group_id: newmarketId,
       participants: [
@@ -118,7 +118,7 @@ export async function loadDemoData() {
     // Rosters — 2nd Aurora Kub Kars
     {
       type: 'RosterUpdated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: kubkarsId,
       group_id: aurora2Id,
       participants: [
@@ -132,7 +132,7 @@ export async function loadDemoData() {
     // Rosters — 3rd Aurora Scout Trucks
     {
       type: 'RosterUpdated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: scoutsId,
       group_id: aurora3Id,
       participants: [
@@ -148,7 +148,7 @@ export async function loadDemoData() {
     // Rosters — 1st Newmarket Beaver Buggies
     {
       type: 'RosterUpdated',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: beaversId,
       group_id: newmarketId,
       participants: [
@@ -165,7 +165,7 @@ export async function loadDemoData() {
     await client
       .from('domain_events')
       .insert({
-        event_id: evt.event_id,
+        rally_id: evt.rally_id,
         section_id: evt.section_id || null,
         event_type: evt.type,
         payload: evt,

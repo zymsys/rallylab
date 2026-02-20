@@ -3,8 +3,8 @@
  * Uses hash-based routing (#screen/param=value) for back/forward and reload.
  */
 
-import { initAuth, onAuthChange, getUser, signOut, isOrganizer, getAccessibleEventIds } from '../supabase.js';
-import { renderLogin, renderEventList, renderEventHome, renderSectionDetail } from './screens.js';
+import { initAuth, onAuthChange, getUser, signOut, isOrganizer, getAccessibleRallyIds } from '../supabase.js';
+import { renderLogin, renderRallyList, renderRallyHome, renderSectionDetail } from './screens.js';
 
 const app = () => document.getElementById('app');
 const userInfo = () => document.getElementById('user-info');
@@ -42,8 +42,8 @@ let _currentParams = {};
 
 const screens = {
   'login': renderLogin,
-  'event-list': renderEventList,
-  'event-home': renderEventHome,
+  'rally-list': renderRallyList,
+  'rally-home': renderRallyHome,
   'section-detail': renderSectionDetail
 };
 
@@ -100,7 +100,7 @@ window.addEventListener('popstate', () => {
     _currentParams = route.params;
     renderScreen(route.screenName, route.params);
   } else {
-    renderScreen('event-list', {});
+    renderScreen('rally-list', {});
   }
 });
 
@@ -113,10 +113,10 @@ function updateBreadcrumbs(screenName, params) {
   if (screenName === 'login') return;
 
   const items = [];
-  items.push({ label: 'Events', screen: 'event-list' });
+  items.push({ label: 'Rallies', screen: 'rally-list' });
 
-  if (screenName === 'event-home' || screenName === 'section-detail') {
-    items.push({ label: 'Event', screen: 'event-home', params: { eventId: params.eventId } });
+  if (screenName === 'rally-home' || screenName === 'section-detail') {
+    items.push({ label: 'Rally', screen: 'rally-home', params: { rallyId: params.rallyId } });
   }
 
   if (screenName === 'section-detail') {
@@ -190,17 +190,17 @@ initAuth();
 onAuthChange((event, session) => {
   updateUserInfo();
   if (session && session.user) {
-    // Try to restore route from hash, otherwise go to event list
+    // Try to restore route from hash, otherwise go to rally list
     const route = decodeHash(location.hash);
     if (route && route.screenName !== 'login' && screens[route.screenName]) {
       navigate(route.screenName, route.params, { replace: true });
     } else {
-      // Registrar with exactly one event: skip the list, go straight to it
-      const eventIds = getAccessibleEventIds();
-      if (!isOrganizer() && eventIds.length === 1) {
-        navigate('event-home', { eventId: eventIds[0] }, { replace: true });
+      // Registrar with exactly one rally: skip the list, go straight to it
+      const rallyIds = getAccessibleRallyIds();
+      if (!isOrganizer() && rallyIds.length === 1) {
+        navigate('rally-home', { rallyId: rallyIds[0] }, { replace: true });
       } else {
-        navigate('event-list', {}, { replace: true });
+        navigate('rally-list', {}, { replace: true });
       }
     }
   } else {

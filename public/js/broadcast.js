@@ -19,8 +19,8 @@ function send(message) {
   getOperatorChannel().postMessage(message);
 }
 
-export function sendWelcome(eventName) {
-  send({ type: 'SHOW_WELCOME', event_name: eventName });
+export function sendWelcome(rallyName) {
+  send({ type: 'SHOW_WELCOME', rally_name: rallyName });
 }
 
 export function sendStaging(sectionName, heatNumber, lanes, nextHeat) {

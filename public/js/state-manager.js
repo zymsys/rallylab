@@ -6,9 +6,9 @@
 
 export function initialState() {
   return {
-    event_id: null,
-    event_name: null,
-    event_date: null,
+    rally_id: null,
+    rally_name: null,
+    rally_date: null,
     created_by: null,
     sections: {},
     groups: {},
@@ -25,12 +25,12 @@ export function applyEvent(state, event) {
   const payload = event.payload || event;
 
   switch (payload.type) {
-    case 'EventCreated':
+    case 'RallyCreated':
       return {
         ...state,
-        event_id: payload.event_id,
-        event_name: payload.event_name,
-        event_date: payload.event_date,
+        rally_id: payload.rally_id,
+        rally_name: payload.rally_name,
+        rally_date: payload.rally_date,
         created_by: payload.created_by
       };
 
@@ -459,14 +459,14 @@ export function nextAvailableCarNumber(section) {
  * Derive the current race day phase for a section.
  * @param {Object} state - Full application state
  * @param {string} sectionId
- * @returns {'idle'|'event-loaded'|'check-in'|'staging'|'results'|'section-complete'}
+ * @returns {'idle'|'rally-loaded'|'check-in'|'staging'|'results'|'section-complete'}
  */
 export function deriveRaceDayPhase(state, sectionId) {
   const rd = state.race_day;
   if (!rd.loaded) return 'idle';
 
   const sec = rd.sections[sectionId];
-  if (!sec) return 'event-loaded';
+  if (!sec) return 'rally-loaded';
 
   if (sec.completed) return 'section-complete';
 

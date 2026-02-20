@@ -110,8 +110,8 @@ The event reducer. Replays events to derive current state.
 **State shape:**
 ```javascript
 {
-  event_id: "uuid",
-  event_name: "Kub Kars Rally 2026",
+  rally_id: "uuid",
+  rally_name: "Kub Kars Rally 2026",
   sections: {
     "section-uuid": {
       section_id: "uuid",
@@ -148,10 +148,10 @@ See `03-track-controller-protocol.md` for the protocol.
 Background sync to Supabase via `supabase-js`.
 
 **Exports:**
-- `startSync(supabase, store, eventId, sectionId)` — Begin periodic sync
+- `startSync(supabase, store, rallyId, sectionId)` — Begin periodic sync
 - `stopSync()` — Stop periodic sync
 - `syncOnce()` — Manual sync trigger
-- `restoreFromSupabase(supabase, store, eventId, sectionId)` — Download events for disaster recovery
+- `restoreFromSupabase(supabase, store, rallyId, sectionId)` — Download events for disaster recovery
 
 Uses `supabase.from('domain_events').upsert(...)` for idempotent upload. Runs on a 5-second interval. Non-blocking — sync failures are logged but don't affect racing.
 
@@ -162,7 +162,7 @@ See `02-architecture.md` Section 7 for the sync pattern.
 BroadcastChannel wrapper for inter-tab communication.
 
 **Exports (Operator side):**
-- `sendWelcome(eventName)` — Push welcome screen
+- `sendWelcome(rallyName)` — Push welcome screen
 - `sendStaging(heat, lanes)` — Push staging info
 - `sendResults(heat, results)` — Push race results
 - `sendLeaderboard(sectionName, standings)` — Push leaderboard
@@ -204,7 +204,7 @@ See `08-scoring-and-leaderboard.md` for the algorithm.
 The unified entry point for login, pre-race registration, and navigation to race day. All users (Organizers, Registrars, Operators) sign in here. The UI adapts based on the user's role(s):
 
 - **Registrars** see only their assigned Section(s) for roster management
-- **Organizers and Operators** see the full event management UI, plus a "Race Day" link on the Event Home screen that opens `operator.html`
+- **Organizers and Operators** see the full rally management UI, plus a "Race Day" link on the Rally Home screen that opens `operator.html`
 - **Users with multiple roles** see the union of their capabilities
 
 ```html

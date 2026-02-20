@@ -7,18 +7,18 @@ Feature: Smoke tests
     Then I should see the page title "RallyLab — Registration"
     And I should see "Pinewood Derby Race Management"
 
-  Scenario: Email sign-in reaches event list
+  Scenario: Email sign-in reaches rally list
     Given I am on the login page
     When I sign in with email "tester@example.com"
-    Then I should see the heading "Your Events"
+    Then I should see the heading "Your Rallies"
 
-  Scenario: Demo data sign-in populates events
+  Scenario: Demo data sign-in populates rallies
     Given I am on the login page
     When I load demo data and sign in
-    Then I should see the heading "Your Events"
+    Then I should see the heading "Your Rallies"
     And I should see "Manage"
 
-  Scenario: Navigate to event details
+  Scenario: Navigate to rally details
     Given I am on the login page
     When I load demo data and sign in
     And I click "Manage"

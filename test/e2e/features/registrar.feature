@@ -6,17 +6,17 @@ Feature: Registrar role
   Background:
     Given demo data has been loaded
 
-  Scenario: Registrar auto-navigates to event home
+  Scenario: Registrar auto-navigates to rally home
     When I sign in with email "sarah@example.com"
     Then I should see the heading "Kub Kars Rally 2026"
-    And I should not see "Your Events"
+    And I should not see "Your Rallies"
 
   Scenario: Registrar sees combo table without create buttons
     When I sign in with email "sarah@example.com"
     Then I should see "1st Newmarket"
     And I should see "Kub Kars"
     And I should see "Manage"
-    And I should not see the button "+ Create Event"
+    And I should not see the button "+ Create Rally"
     And I should not see the button "+ Add Section"
 
   Scenario: Registrar sees Check-In button not Race Day

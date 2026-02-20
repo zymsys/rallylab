@@ -5,7 +5,7 @@ Feature: Non-adjacent lane configuration
   and the scheduler uses only those physical lanes.
 
   Background:
-    Given an event with a Scout Trucks section
+    Given a rally with a Scout Trucks section
 
   Scenario: Start section with 3 non-adjacent lanes
     Given 6 participants are checked in for Scout Trucks

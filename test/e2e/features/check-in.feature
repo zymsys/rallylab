@@ -4,7 +4,7 @@ Feature: Check-in screen
   Uses a small roster (4 participants) with no cars checked in.
 
   Background:
-    Given an event with an unstarted section and no cars checked in
+    Given a rally with an unstarted section and no cars checked in
     And I navigate to the check-in screen
 
   Scenario: Initial state shows all cars waiting

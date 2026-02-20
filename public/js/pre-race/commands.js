@@ -15,7 +15,7 @@ export async function appendEvent(payload) {
   const { data, error } = await client
     .from('domain_events')
     .insert({
-      event_id: payload.event_id,
+      rally_id: payload.rally_id,
       section_id: payload.section_id || null,
       event_type: payload.type,
       payload,
@@ -29,15 +29,15 @@ export async function appendEvent(payload) {
 }
 
 /**
- * Fetch all events for an event_id and replay through the reducer.
+ * Fetch all events for a rally_id and replay through the reducer.
  */
-export async function loadEventState(eventId) {
+export async function loadRallyState(rallyId) {
   const client = getClient();
 
   const { data: events, error } = await client
     .from('domain_events')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('rally_id', rallyId)
     .order('id');
 
   if (error) throw new Error(error.message);
@@ -73,9 +73,9 @@ export function exportRosterPackage(state) {
 
   const pkg = {
     version: 2,
-    event_id: state.event_id,
-    event_name: state.event_name,
-    event_date: state.event_date,
+    rally_id: state.rally_id,
+    rally_name: state.rally_name,
+    rally_date: state.rally_date,
     exported_at: Date.now(),
     groups,
     sections
@@ -85,7 +85,7 @@ export function exportRosterPackage(state) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${state.event_name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-roster.json`;
+  a.download = `${state.rally_name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-roster.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

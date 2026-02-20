@@ -1,6 +1,6 @@
 /**
  * operator/screens.js — 5 operator screen renderers.
- * Screen A: Event List, Screen B: Event Home, Screen C: Check-In,
+ * Screen A: Rally List, Screen B: Rally Home, Screen C: Check-In,
  * Screen D: Live Console, Screen E: Section Complete.
  */
 
@@ -9,9 +9,9 @@ import { deriveRaceDayPhase, getCurrentHeat, getAcceptedResult } from '../state-
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
-// ─── Screen A: Event List ────────────────────────────────────────
+// ─── Screen A: Rally List ────────────────────────────────────────
 
-export function renderEventList(container, params, ctx) {
+export function renderRallyList(container, params, ctx) {
   const { state, navigate, showToast } = ctx;
   const rd = state.race_day;
   const sections = rd.loaded ? Object.values(rd.sections) : [];
@@ -22,11 +22,11 @@ export function renderEventList(container, params, ctx) {
   toolbar.className = 'toolbar';
   toolbar.innerHTML = `
     <h2 class="screen-title">Race Day</h2>
-    <div class="toolbar-actions" id="event-list-actions"></div>
+    <div class="toolbar-actions" id="rally-list-actions"></div>
   `;
   container.appendChild(toolbar);
 
-  const actions = toolbar.querySelector('#event-list-actions');
+  const actions = toolbar.querySelector('#rally-list-actions');
 
   const loadBtn = document.createElement('button');
   loadBtn.className = 'btn btn-secondary';
@@ -51,20 +51,20 @@ export function renderEventList(container, params, ctx) {
   // Show loaded event info
   const info = document.createElement('p');
   info.className = 'info-line';
-  info.textContent = `${state.event_name || 'Event'} — ${sections.length} section${sections.length !== 1 ? 's' : ''}`;
+  info.textContent = `${state.rally_name || 'Rally'} — ${sections.length} section${sections.length !== 1 ? 's' : ''}`;
   container.appendChild(info);
 
   const goBtn = document.createElement('button');
   goBtn.className = 'btn btn-primary';
   goBtn.style.marginTop = '1rem';
-  goBtn.textContent = 'Go to Event Home';
-  goBtn.onclick = () => navigate('event-home', {});
+  goBtn.textContent = 'Go to Rally Home';
+  goBtn.onclick = () => navigate('rally-home', {});
   container.appendChild(goBtn);
 }
 
-// ─── Screen B: Event Home ────────────────────────────────────────
+// ─── Screen B: Rally Home ────────────────────────────────────────
 
-export function renderEventHome(container, params, ctx) {
+export function renderRallyHome(container, params, ctx) {
   const { state, navigate, showToast } = ctx;
   const rd = state.race_day;
 
@@ -80,8 +80,8 @@ export function renderEventHome(container, params, ctx) {
   header.className = 'toolbar';
   header.innerHTML = `
     <div>
-      <h2 class="screen-title">${esc(state.event_name || 'Event')}</h2>
-      <p class="screen-subtitle">${state.event_date || ''}</p>
+      <h2 class="screen-title">${esc(state.rally_name || 'Rally')}</h2>
+      <p class="screen-subtitle">${state.rally_date || ''}</p>
     </div>
   `;
   container.appendChild(header);
@@ -205,7 +205,7 @@ export function renderCheckIn(container, params, ctx) {
     <button class="back-btn" aria-label="Back">&larr;</button>
     <h2 class="screen-title">${esc(sec.section_name)} — Check-In</h2>
   `;
-  header.querySelector('.back-btn').onclick = () => navigate('event-home', {});
+  header.querySelector('.back-btn').onclick = () => navigate('rally-home', {});
   container.appendChild(header);
 
   // Counter
@@ -377,8 +377,8 @@ export function renderLiveConsole(container, params, ctx) {
     const backBtn = document.createElement('button');
     backBtn.className = 'btn btn-ghost';
     backBtn.style.marginTop = '0.5rem';
-    backBtn.textContent = 'Event Home';
-    backBtn.onclick = () => navigate('event-home', {});
+    backBtn.textContent = 'Rally Home';
+    backBtn.onclick = () => navigate('rally-home', {});
     resumeWrap.appendChild(backBtn);
 
     container.appendChild(resumeWrap);
@@ -561,11 +561,11 @@ export function renderLiveConsole(container, params, ctx) {
     controls.appendChild(removeBtn);
   }
 
-  // Back to Event Home
+  // Back to Rally Home
   const backBtn = document.createElement('button');
   backBtn.className = 'btn btn-ghost';
-  backBtn.textContent = 'Event Home';
-  backBtn.onclick = () => navigate('event-home', {});
+  backBtn.textContent = 'Rally Home';
+  backBtn.onclick = () => navigate('rally-home', {});
   controls.appendChild(backBtn);
 
   container.appendChild(controls);
@@ -631,8 +631,9 @@ export function renderSectionComplete(container, params, ctx) {
 
   const homeBtn = document.createElement('button');
   homeBtn.className = 'btn btn-secondary';
-  homeBtn.textContent = 'Return to Event Home';
-  homeBtn.onclick = () => navigate('event-home', {});
+  homeBtn.textContent = 'Return to Rally Home';
+
+  homeBtn.onclick = () => navigate('rally-home', {});
   actions.appendChild(homeBtn);
 
   // Reveal flow state

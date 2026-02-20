@@ -2,7 +2,7 @@
  * dialogs.js — Modal dialogs for pre-race screens.
  */
 
-import { appendEvent, loadEventState } from './commands.js';
+import { appendEvent, loadRallyState } from './commands.js';
 import { getUser } from '../supabase.js';
 import { parseRosterFile } from './roster-import.js';
 import { showToast } from './app.js';
@@ -49,28 +49,28 @@ function openDialog(html) {
   });
 }
 
-// ─── 1. Create Event ───────────────────────────────────────────────
-export function showCreateEventDialog(onCreated) {
+// ─── 1. Create Rally ───────────────────────────────────────────────
+export function showCreateRallyDialog(onCreated) {
   openDialog(`
     <div class="dialog-header">
-      <h2>Create Event</h2>
+      <h2>Create Rally</h2>
       <button class="dialog-close" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
       <div class="form-group">
-        <label for="dlg-event-name">Event Name</label>
-        <input id="dlg-event-name" class="form-input" type="text" placeholder="e.g. Kub Kars Rally 2026" maxlength="100">
-        <div id="dlg-event-name-error" class="form-error"></div>
+        <label for="dlg-rally-name">Rally Name</label>
+        <input id="dlg-rally-name" class="form-input" type="text" placeholder="e.g. Kub Kars Rally 2026" maxlength="100">
+        <div id="dlg-rally-name-error" class="form-error"></div>
       </div>
       <div class="form-group">
-        <label for="dlg-event-date">Event Date</label>
-        <input id="dlg-event-date" class="form-input" type="date">
-        <div id="dlg-event-date-error" class="form-error"></div>
+        <label for="dlg-rally-date">Rally Date</label>
+        <input id="dlg-rally-date" class="form-input" type="date">
+        <div id="dlg-rally-date-error" class="form-error"></div>
       </div>
     </div>
     <div class="dialog-footer">
       <button class="btn btn-secondary" data-action="cancel">Cancel</button>
-      <button class="btn btn-primary" data-action="create">Create Event</button>
+      <button class="btn btn-primary" data-action="create">Create Rally</button>
     </div>
   `);
 
@@ -78,16 +78,16 @@ export function showCreateEventDialog(onCreated) {
   d.querySelector('.dialog-close').onclick = closeDialog;
   d.querySelector('[data-action="cancel"]').onclick = closeDialog;
   d.querySelector('[data-action="create"]').onclick = async () => {
-    const name = d.querySelector('#dlg-event-name').value.trim();
-    const date = d.querySelector('#dlg-event-date').value;
-    const nameErr = d.querySelector('#dlg-event-name-error');
-    const dateErr = d.querySelector('#dlg-event-date-error');
+    const name = d.querySelector('#dlg-rally-name').value.trim();
+    const date = d.querySelector('#dlg-rally-date').value;
+    const nameErr = d.querySelector('#dlg-rally-name-error');
+    const dateErr = d.querySelector('#dlg-rally-date-error');
 
     nameErr.textContent = '';
     dateErr.textContent = '';
 
-    if (!name) { nameErr.textContent = 'Event name is required'; return; }
-    if (!date) { dateErr.textContent = 'Event date is required'; return; }
+    if (!name) { nameErr.textContent = 'Rally name is required'; return; }
+    if (!date) { dateErr.textContent = 'Rally date is required'; return; }
 
     const btn = d.querySelector('[data-action="create"]');
     btn.disabled = true;
@@ -95,28 +95,28 @@ export function showCreateEventDialog(onCreated) {
 
     try {
       const user = getUser();
-      const event_id = crypto.randomUUID();
+      const rally_id = crypto.randomUUID();
       await appendEvent({
-        type: 'EventCreated',
-        event_id,
-        event_name: name,
-        event_date: date,
+        type: 'RallyCreated',
+        rally_id,
+        rally_name: name,
+        rally_date: date,
         created_by: user.email,
         timestamp: Date.now()
       });
       closeDialog();
-      showToast('Event created', 'success');
-      if (onCreated) onCreated(event_id);
+      showToast('Rally created', 'success');
+      if (onCreated) onCreated(rally_id);
     } catch (e) {
       showToast(e.message, 'error');
       btn.disabled = false;
-      btn.textContent = 'Create Event';
+      btn.textContent = 'Create Rally';
     }
   };
 }
 
 // ─── 2. Create Section ─────────────────────────────────────────────
-export function showCreateSectionDialog(eventId, existingNames, onCreated) {
+export function showCreateSectionDialog(rallyId, existingNames, onCreated) {
   openDialog(`
     <div class="dialog-header">
       <h2>Add Section</h2>
@@ -157,7 +157,7 @@ export function showCreateSectionDialog(eventId, existingNames, onCreated) {
       const user = getUser();
       await appendEvent({
         type: 'SectionCreated',
-        event_id: eventId,
+        rally_id: rallyId,
         section_id: crypto.randomUUID(),
         section_name: name,
         created_by: user.email,
@@ -175,7 +175,7 @@ export function showCreateSectionDialog(eventId, existingNames, onCreated) {
 }
 
 // ─── 3. Create Group ────────────────────────────────────────────────
-export function showCreateGroupDialog(eventId, existingNames, onCreated) {
+export function showCreateGroupDialog(rallyId, existingNames, onCreated) {
   openDialog(`
     <div class="dialog-header">
       <h2>Add Group</h2>
@@ -216,7 +216,7 @@ export function showCreateGroupDialog(eventId, existingNames, onCreated) {
       const user = getUser();
       await appendEvent({
         type: 'GroupCreated',
-        event_id: eventId,
+        rally_id: rallyId,
         group_id: crypto.randomUUID(),
         group_name: name,
         created_by: user.email,
@@ -234,7 +234,7 @@ export function showCreateGroupDialog(eventId, existingNames, onCreated) {
 }
 
 // ─── 4. Invite / Edit Registrar ─────────────────────────────────────
-export function showInviteRegistrarDialog(eventId, state, existingEmail, onDone) {
+export function showInviteRegistrarDialog(rallyId, state, existingEmail, onDone) {
   const groups = Object.values(state.groups);
   const sections = Object.values(state.sections);
   const existing = existingEmail ? state.registrars[existingEmail] : null;
@@ -321,7 +321,7 @@ export function showInviteRegistrarDialog(eventId, state, existingEmail, onDone)
       const user = getUser();
       await appendEvent({
         type: 'RegistrarInvited',
-        event_id: eventId,
+        rally_id: rallyId,
         registrar_email: email,
         group_ids: selectedGroupIds,
         section_ids: selectedSectionIds,
@@ -340,7 +340,7 @@ export function showInviteRegistrarDialog(eventId, state, existingEmail, onDone)
 }
 
 // ─── 5. Upload Roster ──────────────────────────────────────────────
-export function showUploadRosterDialog(eventId, sectionId, groupId, section, onUploaded) {
+export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onUploaded) {
   const existingCount = groupId
     ? section.participants.filter(p => p.group_id === groupId).length
     : section.participants.length;
@@ -476,7 +476,7 @@ export function showUploadRosterDialog(eventId, sectionId, groupId, section, onU
 
       await appendEvent({
         type: 'RosterUpdated',
-        event_id: eventId,
+        rally_id: rallyId,
         section_id: sectionId,
         group_id: groupId || null,
         participants,
@@ -496,7 +496,7 @@ export function showUploadRosterDialog(eventId, sectionId, groupId, section, onU
 }
 
 // ─── 6. Add Participant ────────────────────────────────────────────
-export function showAddParticipantDialog(eventId, sectionId, groupId, section, onAdded) {
+export function showAddParticipantDialog(rallyId, sectionId, groupId, section, onAdded) {
   openDialog(`
     <div class="dialog-header">
       <h2>Add Participant</h2>
@@ -534,7 +534,7 @@ export function showAddParticipantDialog(eventId, sectionId, groupId, section, o
       const user = getUser();
       await appendEvent({
         type: 'ParticipantAdded',
-        event_id: eventId,
+        rally_id: rallyId,
         section_id: sectionId,
         group_id: groupId || null,
         participant: { participant_id: crypto.randomUUID(), name },

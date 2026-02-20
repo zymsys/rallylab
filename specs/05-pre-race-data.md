@@ -15,7 +15,7 @@ The entire system — pre-race and race day — is event-sourced. All events liv
 Organizer signs up → Supabase Auth (magic link)
          │
          ▼
-Appends EventCreated, SectionCreated events → domain_events table
+Appends RallyCreated, SectionCreated events → domain_events table
          │
          ├──► Invites Registrar(s) → RegistrarInvited event + magic link email
          │            │
@@ -58,8 +58,8 @@ All events — pre-race and race day — share a single append-only table:
 ```sql
 CREATE TABLE domain_events (
   id BIGSERIAL PRIMARY KEY,
-  event_id UUID NOT NULL,
-  section_id UUID,                -- null for EventCreated
+  rally_id UUID NOT NULL,
+  section_id UUID,                -- null for RallyCreated
   event_type TEXT NOT NULL,
   payload JSONB NOT NULL,
   created_by UUID REFERENCES auth.users(id),
@@ -69,29 +69,29 @@ CREATE TABLE domain_events (
 
 -- Dedup index for race day sync (only applies when client_event_id is set)
 CREATE UNIQUE INDEX idx_race_day_dedup
-  ON domain_events(event_id, section_id, client_event_id)
+  ON domain_events(rally_id, section_id, client_event_id)
   WHERE client_event_id IS NOT NULL;
 
 -- Lookup index for replaying events
 CREATE INDEX idx_domain_events_lookup
-  ON domain_events(event_id, section_id);
+  ON domain_events(rally_id, section_id);
 ```
 
-### 2.2 Event Roles Table (RLS Anchor)
+### 2.2 Rally Roles Table (RLS Anchor)
 
-A small derived table that tracks who has access to which Event. Populated by database triggers when relevant events are inserted.
+A small derived table that tracks who has access to which Rally. Populated by database triggers when relevant events are inserted.
 
 ```sql
-CREATE TABLE event_roles (
-  event_id UUID NOT NULL,
+CREATE TABLE rally_roles (
+  rally_id UUID NOT NULL,
   user_id UUID NOT NULL REFERENCES auth.users(id),
-  role TEXT NOT NULL CHECK (role IN ('organizer', 'operator', 'registrar')),
-  section_id UUID,                -- null for organizer, set for registrar
-  PRIMARY KEY (event_id, user_id)
+  role TEXT NOT NULL CHECK (role IN ('organizer', 'operator', 'registrar', 'checkin_volunteer')),
+  section_id UUID,                -- null for organizer/operator, set for registrar/checkin_volunteer
+  PRIMARY KEY (rally_id, user_id)
 );
 ```
 
-This table is **not a source of truth** — it is a denormalized index derived from `EventCreated` and `RegistrarInvited` events.
+This table is **not a source of truth** — it is a denormalized index derived from `RallyCreated` and invitation events.
 
 ---
 
@@ -102,62 +102,62 @@ This table is **not a source of truth** — it is a denormalized index derived f
 ```sql
 ALTER TABLE domain_events ENABLE ROW LEVEL SECURITY;
 
--- Users can read events for Events they have a role in
+-- Users can read events for Rallies they have a role in
 CREATE POLICY "Read own events"
   ON domain_events FOR SELECT
   USING (
-    event_id IN (SELECT event_id FROM event_roles WHERE user_id = auth.uid())
+    rally_id IN (SELECT rally_id FROM rally_roles WHERE user_id = auth.uid())
   );
 
--- Users can append events for Events they have a role in
+-- Users can append events for Rallies they have a role in
 CREATE POLICY "Append own events"
   ON domain_events FOR INSERT
   WITH CHECK (
-    -- EventCreated is special: no role exists yet, allow any authenticated user
-    (event_type = 'EventCreated' AND auth.uid() IS NOT NULL)
+    -- RallyCreated is special: no role exists yet, allow any authenticated user
+    (event_type = 'RallyCreated' AND auth.uid() IS NOT NULL)
     OR
-    -- All other events: user must have a role for this event_id
-    (event_id IN (SELECT event_id FROM event_roles WHERE user_id = auth.uid()))
+    -- All other events: user must have a role for this rally_id
+    (rally_id IN (SELECT rally_id FROM rally_roles WHERE user_id = auth.uid()))
   );
 ```
 
-### 3.2 Event Roles
+### 3.2 Rally Roles
 
 ```sql
-ALTER TABLE event_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rally_roles ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own roles (needed for the domain_events policy)
 CREATE POLICY "Read own roles"
-  ON event_roles FOR SELECT
+  ON rally_roles FOR SELECT
   USING (user_id = auth.uid());
 ```
 
-The `event_roles` table is only written to by database triggers (SECURITY DEFINER), never directly by clients.
+The `rally_roles` table is only written to by database triggers (SECURITY DEFINER), never directly by clients.
 
 ---
 
 ## 4. Database Triggers
 
-### 4.1 Grant Organizer Role on EventCreated
+### 4.1 Grant Organizer Role on RallyCreated
 
 ```sql
-CREATE OR REPLACE FUNCTION on_event_created()
+CREATE OR REPLACE FUNCTION on_rally_created()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.event_type = 'EventCreated' THEN
-    INSERT INTO event_roles (event_id, user_id, role)
-    VALUES (NEW.event_id, NEW.created_by, 'organizer')
+  IF NEW.event_type = 'RallyCreated' THEN
+    INSERT INTO rally_roles (rally_id, user_id, role)
+    VALUES (NEW.rally_id, NEW.created_by, 'organizer')
     ON CONFLICT DO NOTHING;
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE TRIGGER trg_event_created
+CREATE TRIGGER trg_rally_created
   AFTER INSERT ON domain_events
   FOR EACH ROW
-  WHEN (NEW.event_type = 'EventCreated')
-  EXECUTE FUNCTION on_event_created();
+  WHEN (NEW.event_type = 'RallyCreated')
+  EXECUTE FUNCTION on_rally_created();
 ```
 
 ### 4.2 Grant Registrar Role on RegistrarInvited
@@ -177,8 +177,8 @@ BEGIN
     WHERE email = NEW.payload->>'registrar_email';
 
     IF registrar_user_id IS NOT NULL THEN
-      INSERT INTO event_roles (event_id, user_id, role, section_id)
-      VALUES (NEW.event_id, registrar_user_id, 'registrar', NEW.section_id)
+      INSERT INTO rally_roles (rally_id, user_id, role, section_id)
+      VALUES (NEW.rally_id, registrar_user_id, 'registrar', NEW.section_id)
       ON CONFLICT DO NOTHING;
     END IF;
   END IF;
@@ -207,8 +207,8 @@ BEGIN
     WHERE email = NEW.payload->>'operator_email';
 
     IF operator_user_id IS NOT NULL THEN
-      INSERT INTO event_roles (event_id, user_id, role)
-      VALUES (NEW.event_id, operator_user_id, 'operator')
+      INSERT INTO rally_roles (rally_id, user_id, role)
+      VALUES (NEW.rally_id, operator_user_id, 'operator')
       ON CONFLICT DO NOTHING;
     END IF;
   END IF;
@@ -232,9 +232,9 @@ CREATE OR REPLACE FUNCTION on_auth_user_created()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Find any RegistrarInvited events matching this email
-  INSERT INTO event_roles (event_id, user_id, role, section_id)
+  INSERT INTO rally_roles (rally_id, user_id, role, section_id)
   SELECT
-    de.event_id,
+    de.rally_id,
     NEW.id,
     'registrar',
     de.section_id
@@ -244,9 +244,9 @@ BEGIN
   ON CONFLICT DO NOTHING;
 
   -- Find any OperatorInvited events matching this email
-  INSERT INTO event_roles (event_id, user_id, role)
+  INSERT INTO rally_roles (rally_id, user_id, role)
   SELECT
-    de.event_id,
+    de.rally_id,
     NEW.id,
     'operator'
   FROM domain_events de
@@ -275,7 +275,7 @@ BEGIN
   IF NEW.event_type IN ('RosterUpdated', 'ParticipantAdded', 'ParticipantRemoved') THEN
     IF EXISTS (
       SELECT 1 FROM domain_events
-      WHERE event_id = NEW.event_id
+      WHERE rally_id = NEW.rally_id
         AND section_id = NEW.section_id
         AND event_type = 'SectionLocked'
     ) THEN
@@ -305,7 +305,7 @@ async function appendEvent(supabase, event) {
   const { data, error } = await supabase
     .from('domain_events')
     .insert({
-      event_id: event.event_id,
+      rally_id: event.rally_id,
       section_id: event.section_id || null,
       event_type: event.type,
       payload: event,
@@ -322,11 +322,11 @@ async function appendEvent(supabase, event) {
 ### 5.2 Replay Events to Derive State
 
 ```javascript
-async function loadEventState(supabase, eventId) {
+async function loadRallyState(supabase, rallyId) {
   const { data: events } = await supabase
     .from('domain_events')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('rally_id', rallyId)
     .order('id');
 
   // Same reducer used on race day — shared state-manager.js module
@@ -336,14 +336,14 @@ async function loadEventState(supabase, eventId) {
 
 The pre-race UI and the race day UI share the same `state-manager.js` reducer. The only difference is where events come from (Supabase query vs IndexedDB).
 
-### 5.3 Organizer: Create Event
+### 5.3 Organizer: Create Rally
 
 ```javascript
 await appendEvent(supabase, {
-  type: 'EventCreated',
-  event_id: crypto.randomUUID(),
-  event_name: 'Kub Kars Rally 2026',
-  event_date: '2026-03-15',
+  type: 'RallyCreated',
+  rally_id: crypto.randomUUID(),
+  rally_name: 'Kub Kars Rally 2026',
+  rally_date: '2026-03-15',
   created_by: user.email,
   timestamp: Date.now()
 });
@@ -354,7 +354,7 @@ await appendEvent(supabase, {
 ```javascript
 await appendEvent(supabase, {
   type: 'SectionCreated',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: crypto.randomUUID(),
   section_name: 'Cubs',
   created_by: user.email,
@@ -368,7 +368,7 @@ await appendEvent(supabase, {
 // 1. Append the domain event
 await appendEvent(supabase, {
   type: 'RegistrarInvited',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   registrar_email: 'cubmaster@example.com',
   invited_by: user.email,
@@ -389,7 +389,7 @@ The database trigger (Section 4.2/4.3) handles granting the Registrar access.
 // 1. Append the domain event
 await appendEvent(supabase, {
   type: 'OperatorInvited',
-  event_id: eventId,
+  rally_id: rallyId,
   operator_email: 'backup-operator@example.com',
   invited_by: user.email,
   timestamp: Date.now()
@@ -410,7 +410,7 @@ The database trigger (Section 4.3/4.4) handles granting the Operator access.
 ```javascript
 await appendEvent(supabase, {
   type: 'RosterUpdated',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   participants: [
     { participant_id: crypto.randomUUID(), name: 'Billy Thompson' },
@@ -429,7 +429,7 @@ Car numbers are derived by the state manager when replaying events (sequential a
 // Add
 await appendEvent(supabase, {
   type: 'ParticipantAdded',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   participant: { participant_id: crypto.randomUUID(), name: 'Tommy Rodriguez' },
   car_number: nextAvailableCarNumber,  // computed from current derived state
@@ -440,7 +440,7 @@ await appendEvent(supabase, {
 // Remove
 await appendEvent(supabase, {
   type: 'ParticipantRemoved',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   participant_id: participantId,
   car_number: carNumber,
@@ -454,7 +454,7 @@ await appendEvent(supabase, {
 ```javascript
 await appendEvent(supabase, {
   type: 'SectionLocked',
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   locked_by: user.email,
   timestamp: Date.now()
@@ -474,9 +474,9 @@ On race day, the Operator needs the locked roster. Two options:
 Replay events to derive the roster, then create `RosterLoaded` events in IndexedDB:
 
 ```javascript
-async function importRoster(supabase, store, eventId) {
+async function importRoster(supabase, store, rallyId) {
   // Replay pre-race events to derive current state
-  const state = await loadEventState(supabase, eventId);
+  const state = await loadRallyState(supabase, rallyId);
 
   // For each locked section, emit a RosterLoaded event into IndexedDB
   for (const section of Object.values(state.sections)) {
@@ -484,7 +484,7 @@ async function importRoster(supabase, store, eventId) {
 
     await store.appendEvent({
       type: 'RosterLoaded',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: section.section_id,
       participants: section.participants,  // derived from events
       timestamp: Date.now()
@@ -500,9 +500,9 @@ The Organizer can export the derived roster as a JSON file before race day:
 ```json
 {
   "version": 1,
-  "event_id": "uuid",
-  "event_name": "Kub Kars Rally 2026",
-  "event_date": "2026-03-15",
+  "rally_id": "uuid",
+  "rally_name": "Kub Kars Rally 2026",
+  "rally_date": "2026-03-15",
   "exported_at": 1708012345678,
   "sections": [
     {
@@ -529,7 +529,7 @@ Race day events sync from IndexedDB to the same `domain_events` table. See `02-a
 
 ```javascript
 const rows = events.map(e => ({
-  event_id: eventId,
+  rally_id: rallyId,
   section_id: sectionId,
   event_type: e.type,
   payload: e.payload,
@@ -539,7 +539,7 @@ const rows = events.map(e => ({
 
 const { error } = await supabase
   .from('domain_events')
-  .upsert(rows, { onConflict: 'event_id,section_id,client_event_id' });
+  .upsert(rows, { onConflict: 'rally_id,section_id,client_event_id' });
 ```
 
 **Restore** queries the same table, filtering for race day events (those with `client_event_id`):
@@ -548,7 +548,7 @@ const { error } = await supabase
 const { data } = await supabase
   .from('domain_events')
   .select('*')
-  .eq('event_id', eventId)
+  .eq('rally_id', rallyId)
   .eq('section_id', sectionId)
   .not('client_event_id', 'is', null)
   .order('client_event_id');
@@ -560,8 +560,8 @@ const { data } = await supabase
 
 | Resource | Free Tier Limit | RallyLab Usage |
 |----------|----------------|----------------|
-| Database | 500 MB | <1 MB per Event (trivial) |
-| Auth users | Unlimited | ~10-20 per Event |
+| Database | 500 MB | <1 MB per Rally (trivial) |
+| Auth users | Unlimited | ~10-20 per Rally |
 | API requests | Unlimited | ~100/day pre-race, ~100/race day |
 | Storage | 1 GB | Not used |
 | Bandwidth | 5 GB | Negligible |

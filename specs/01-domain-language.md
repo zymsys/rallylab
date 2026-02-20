@@ -35,7 +35,7 @@ The browser-based application that manages race day operations.
 
 Responsibilities:
 - Stores race results (IndexedDB)
-- Manages competition structure (Heats, Participants, Event)
+- Manages competition structure (Heats, Participants, Rally)
 - Hosts Operator Display and Audience Display (separate browser tabs)
 - Communicates with Track Controller via Web Serial API
 - Syncs events to Supabase when online
@@ -48,10 +48,10 @@ See `02-architecture.md` for full architecture specification.
 
 ### 2.1 Organizer
 
-The person who creates and configures the Event before race day.
+The person who creates and configures the Rally before race day.
 
 Responsibilities:
-- Creates the Event
+- Creates the Rally
 - Creates Sections
 - Invites Registrars
 - Invites Operators (for race day redundancy)
@@ -75,10 +75,10 @@ Each Registrar manages exactly one Section. In Scouting terminology, this is typ
 
 ### 2.3 Operator
 
-The person operating the Race Controller software on race day. The Organizer is always an Operator. Additional Operators can be invited by the Organizer for redundancy (e.g., in case the primary Operator is unavailable). All Operators have equivalent access to the Event.
+The person operating the Race Controller software on race day. The Organizer is always an Operator. Additional Operators can be invited by the Organizer for redundancy (e.g., in case the primary Operator is unavailable). All Operators have equivalent access to the Rally.
 
 Responsibilities:
-- Loads the Event and starts Sections
+- Loads the Rally and starts Sections
 - Oversees race progression (from the software perspective)
 - Declares re-runs when necessary
 - Enters manual results when hardware fails
@@ -104,9 +104,19 @@ The Track Operator does NOT use the Race Controller software during normal opera
 
 Spectators watching the race. Includes youth, parents, friends, and Scouters.
 
-### 2.6 Multiple Roles
+### 2.6 Check-in Volunteer
 
-A person can hold multiple roles for the same Event. For example, a Section Scouter might be both a Registrar (managing their Section's roster) and an Operator (running the race day software). The UI adapts based on the union of the user's roles.
+A person invited per-Section who can check in cars on race day. Their access is limited to marking `CarArrived` for participants in their assigned Section.
+
+Responsibilities:
+- Verifies car is present and meets inspection criteria
+- Marks car as arrived (`CarArrived`) in the Race Controller
+
+Check-in Volunteers cannot start Sections, manage heats, enter results, or perform any Operator actions. They are scoped to exactly one Section (like Registrars).
+
+### 2.7 Multiple Roles
+
+A person can hold multiple roles for the same Rally. For example, a Section Scouter might be both a Registrar (managing their Section's roster) and an Operator (running the race day software). The UI adapts based on the union of the user's roles.
 
 ---
 
@@ -196,20 +206,20 @@ Operator action that:
 
 ## 5. Competition Structure
 
-### 5.1 Event
+### 5.1 Rally
 
-The full competition event (e.g., "Kub Kars Rally 2026").
+The full competition rally (e.g., "Kub Kars Rally 2026").
 
 Contains:
 - One or more Sections
 - All Participants (organized by Section)
 - All Heats and Results
 
-"Event" is the standard term. Avoid "Meet" or "Rally" except when referring to a specific event's proper name.
+"Rally" is the standard term. Avoid "Meet" or "Event" (which refers to domain events in the event-sourcing sense).
 
 ### 5.2 Section
 
-A group of Participants who race independently within an Event. Each Section has its own roster, heat schedule, and leaderboard.
+A group of Participants who race independently within a Rally. Each Section has its own roster, heat schedule, and leaderboard.
 
 Examples:
 - Beaver Buggies (Beavers)
@@ -234,7 +244,7 @@ Properties:
 
 ### 5.4 Participant
 
-A person competing in the Event.
+A person competing in the Rally.
 
 Properties:
 - Name
@@ -283,14 +293,14 @@ Characteristics:
 - Participants may not be assigned
 - Used for validation, setup, or demonstrations
 
-### 6.2 Event Mode
+### 6.2 Rally Mode
 
 Competitive operational mode.
 
 Characteristics:
 - Heats and Races are recorded as official results
 - Results are persisted
-- Standings contribute to the Event
+- Standings contribute to the Rally
 
 ---
 
@@ -300,7 +310,7 @@ The Track Controller knows nothing about Participants.
 The Race Controller knows nothing about physical switch wiring.
 
 Responsibility Boundary:
-- The Race Controller governs competition structure (Event, Heat, Race) and software state.
+- The Race Controller governs competition structure (Rally, Heat, Race) and software state.
 - The Track hardware and Track Operator govern physical staging and gate release.
 
 The Track Controller bridges physical events into the software domain but does not interpret competition rules.

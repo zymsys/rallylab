@@ -78,8 +78,8 @@ async function injectAndNavigate(page, raceContext, cfg) {
 
     const sectionId = crypto.randomUUID();
     await app.appendAndRebuild({
-      type: 'EventCreated', event_id: crypto.randomUUID(),
-      event_name: 'Test Rally 2026', event_date: '2026-03-15',
+      type: 'RallyCreated', rally_id: crypto.randomUUID(),
+      rally_name: 'Test Rally 2026', rally_date: '2026-03-15',
       created_by: 'operator', timestamp: Date.now(),
     });
     await app.appendAndRebuild({
@@ -120,7 +120,7 @@ async function injectAndNavigate(page, raceContext, cfg) {
     await page.getByRole('button', { name: /^Run Heat/ }).waitFor({ timeout: 10000 });
   } else {
     await page.evaluate(() => {
-      import('/js/operator/app.js').then(a => a.navigate('event-home', {}));
+      import('/js/operator/app.js').then(a => a.navigate('rally-home', {}));
     });
     await page.waitForSelector('.screen-title', { timeout: 10000 });
   }
@@ -215,7 +215,7 @@ async function changeLanes(page, lanes) {
 
 /**
  * Inject two sections into IndexedDB, check in section A cars,
- * and navigate to event-home.
+ * and navigate to rally-home.
  */
 async function injectTwoSections(page, raceContext, cfgA, cfgB) {
   await page.goto('/operator.html');
@@ -229,8 +229,8 @@ async function injectTwoSections(page, raceContext, cfgA, cfgB) {
     const sectionIdB = crypto.randomUUID();
 
     await app.appendAndRebuild({
-      type: 'EventCreated', event_id: crypto.randomUUID(),
-      event_name: 'Test Rally 2026', event_date: '2026-03-15',
+      type: 'RallyCreated', rally_id: crypto.randomUUID(),
+      rally_name: 'Test Rally 2026', rally_date: '2026-03-15',
       created_by: 'operator', timestamp: Date.now(),
     });
 
@@ -279,7 +279,7 @@ async function injectTwoSections(page, raceContext, cfgA, cfgB) {
   raceContext.completedHeatsB = 0;
 
   await page.evaluate(() => {
-    import('/js/operator/app.js').then(a => a.navigate('event-home', {}));
+    import('/js/operator/app.js').then(a => a.navigate('rally-home', {}));
   });
   await page.waitForSelector('.screen-title', { timeout: 10000 });
 }
@@ -297,7 +297,7 @@ Given('a race is in progress with a started section', async ({ page, raceContext
   });
 });
 
-Given('an event with a Scout Trucks section', async ({ page, raceContext }) => {
+Given('a rally with a Scout Trucks section', async ({ page, raceContext }) => {
   await injectAndNavigate(page, raceContext, {
     sectionName: 'Scout Trucks',
     participants: SCOUT_TRUCKS_ROSTER,
@@ -427,7 +427,7 @@ Given('{int} participants are checked in for Scout Trucks', async ({ page, raceC
       });
     }
     // Re-render current screen to reflect new state
-    app.navigate('event-home', {});
+    app.navigate('rally-home', {});
   }, { sid, count });
   await page.waitForSelector('.screen-title', { timeout: 10000 });
   raceContext.checkedIn = Array.from({ length: count }, (_, i) => i + 1);
@@ -516,7 +516,7 @@ Given('a small race is in progress with a started section', async ({ page, raceC
 
 // ── Check-in setup ──────────────────────────────────────────────
 
-Given('an event with an unstarted section and no cars checked in', async ({ page, raceContext }) => {
+Given('a rally with an unstarted section and no cars checked in', async ({ page, raceContext }) => {
   await injectAndNavigate(page, raceContext, {
     sectionName: 'Kub Kars',
     participants: SMALL_ROSTER,
@@ -533,7 +533,7 @@ Given('I navigate to the check-in screen', async ({ page }) => {
 
 // ── Multi-section setup ─────────────────────────────────────────
 
-Given('an event with two sections', async ({ page, raceContext }) => {
+Given('a rally with two sections', async ({ page, raceContext }) => {
   await injectTwoSections(page, raceContext, {
     sectionName: 'Kub Kars',
     participants: SMALL_ROSTER,
@@ -731,7 +731,7 @@ When('I check in car #{int}', async ({ page }, carNum) => {
 
 // ── Multi-section When steps ────────────────────────────────────
 
-When('I start section B from event home', async ({ page, raceContext }) => {
+When('I start section B from rally home', async ({ page, raceContext }) => {
   const sidB = raceContext.sectionIdB;
 
   // Inject CarArrived events for all section B participants
@@ -743,7 +743,7 @@ When('I start section B from event home', async ({ page, raceContext }) => {
         car_number: p.car_number, timestamp: Date.now(),
       });
     }
-    app.navigate('event-home', {});
+    app.navigate('rally-home', {});
   }, { sidB, participants: raceContext.participantsB });
 
   await page.waitForSelector('.screen-title', { timeout: 10000 });

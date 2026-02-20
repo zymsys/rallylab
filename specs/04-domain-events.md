@@ -35,16 +35,16 @@ Both contexts share the same event-sourcing model: append-only, immutable, state
 
 These events occur during registration and setup before race day. They are written directly to the `domain_events` table in Supabase via `supabase-js`. State is derived client-side by replaying events.
 
-### 2.1 EventCreated
+### 2.1 RallyCreated
 
-The Organizer creates a new Event.
+The Organizer creates a new Rally.
 
 ```json
 {
-  "type": "EventCreated",
-  "event_id": "uuid",
-  "event_name": "Kub Kars Rally 2026",
-  "event_date": "2026-03-15",
+  "type": "RallyCreated",
+  "rally_id": "uuid",
+  "rally_name": "Kub Kars Rally 2026",
+  "rally_date": "2026-03-15",
   "created_by": "organizer@example.com",
   "timestamp": 1708012345678
 }
@@ -52,10 +52,10 @@ The Organizer creates a new Event.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | yes | `"EventCreated"` |
-| `event_id` | UUID | yes | Unique identifier for the Event |
-| `event_name` | string | yes | Display name |
-| `event_date` | ISO 8601 date | yes | Scheduled date |
+| `type` | string | yes | `"RallyCreated"` |
+| `rally_id` | UUID | yes | Unique identifier for the Rally |
+| `rally_name` | string | yes | Display name |
+| `rally_date` | ISO 8601 date | yes | Scheduled date |
 | `created_by` | string | yes | Organizer email |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
@@ -63,12 +63,12 @@ The Organizer creates a new Event.
 
 ### 2.2 SectionCreated
 
-The Organizer creates a Section within an Event.
+The Organizer creates a Section within a Rally.
 
 ```json
 {
   "type": "SectionCreated",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "section_name": "Cubs",
   "created_by": "organizer@example.com",
@@ -79,7 +79,7 @@ The Organizer creates a Section within an Event.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"SectionCreated"` |
-| `event_id` | UUID | yes | Parent Event |
+| `rally_id` | UUID | yes | Parent Rally |
 | `section_id` | UUID | yes | Unique identifier for the Section |
 | `section_name` | string | yes | Display name (e.g., "Cubs", "Scouts") |
 | `created_by` | string | yes | Organizer email |
@@ -94,7 +94,7 @@ The Organizer invites a Registrar (Section Contact) to manage a Section's roster
 ```json
 {
   "type": "RegistrarInvited",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "registrar_email": "cubmaster@example.com",
   "invited_by": "organizer@example.com",
@@ -105,7 +105,7 @@ The Organizer invites a Registrar (Section Contact) to manage a Section's roster
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"RegistrarInvited"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `registrar_email` | string | yes | Email of the Registrar |
 | `invited_by` | string | yes | Organizer email |
@@ -117,12 +117,12 @@ Multiple `RegistrarInvited` events for the same Section replace previous invitat
 
 ### 2.4 OperatorInvited
 
-The Organizer invites an additional Operator to help run the Event on race day.
+The Organizer invites an additional Operator to help run the Rally on race day.
 
 ```json
 {
   "type": "OperatorInvited",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "operator_email": "backup-operator@example.com",
   "invited_by": "organizer@example.com",
   "timestamp": 1708012347890
@@ -132,12 +132,12 @@ The Organizer invites an additional Operator to help run the Event on race day.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"OperatorInvited"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `operator_email` | string | yes | Email of the invited Operator |
 | `invited_by` | string | yes | Organizer email |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
-Operators have access to the entire Event (all Sections). No `section_id` — unlike Registrars who are scoped to a single Section.
+Operators have access to the entire Rally (all Sections). No `section_id` — unlike Registrars who are scoped to a single Section.
 
 Multiple Operators can be invited. The Organizer is implicitly an Operator and does not need an explicit invitation.
 
@@ -150,7 +150,7 @@ A Registrar uploads a participant list via spreadsheet import.
 ```json
 {
   "type": "RosterUpdated",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "participants": [
     { "participant_id": "uuid", "name": "Billy Thompson" },
@@ -164,7 +164,7 @@ A Registrar uploads a participant list via spreadsheet import.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"RosterUpdated"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `participants` | array | yes | List of `{ participant_id, name }` |
 | `submitted_by` | string | yes | Registrar email |
@@ -186,7 +186,7 @@ A Registrar adds a single participant without renumbering existing cars.
 ```json
 {
   "type": "ParticipantAdded",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "participant": { "participant_id": "uuid", "name": "Tommy Rodriguez" },
   "car_number": 15,
@@ -198,7 +198,7 @@ A Registrar adds a single participant without renumbering existing cars.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"ParticipantAdded"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `participant` | object | yes | `{ participant_id, name }` |
 | `car_number` | integer | yes | Next available car number (server-assigned) |
@@ -214,7 +214,7 @@ A Registrar removes a single participant.
 ```json
 {
   "type": "ParticipantRemoved",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "participant_id": "uuid",
   "car_number": 7,
@@ -234,7 +234,7 @@ The Organizer locks a Section's roster, preventing further changes.
 ```json
 {
   "type": "SectionLocked",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "locked_by": "organizer@example.com",
   "timestamp": 1708012351234
@@ -256,7 +256,7 @@ The Operator imports a locked roster into the Race Controller.
 ```json
 {
   "type": "RosterLoaded",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "participants": [
     { "participant_id": "uuid", "name": "Billy Thompson", "car_number": 1 },
@@ -277,7 +277,7 @@ A participant checks in on race day, confirming their car is present.
 ```json
 {
   "type": "CarArrived",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "car_number": 7,
   "timestamp": 1708098766543
@@ -287,7 +287,7 @@ A participant checks in on race day, confirming their car is present.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"CarArrived"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `car_number` | integer | yes | Car being checked in |
 | `timestamp` | integer | yes | Unix ms (UTC) |
@@ -308,7 +308,7 @@ The Operator begins racing a Section.
 ```json
 {
   "type": "SectionStarted",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "available_lanes": [1, 2, 3, 4, 5, 6],
   "timestamp": 1708098767654
@@ -318,7 +318,7 @@ The Operator begins racing a Section.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"SectionStarted"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `available_lanes` | array of int | no | Lanes to use for this Section. Defaults to all lanes reported by Track Controller `info`. Example: `[1, 3, 5]` for Scout Trucks (alternate lanes due to car width). |
 | `timestamp` | integer | yes | Unix ms (UTC) |
@@ -338,7 +338,7 @@ The Race Controller stages the next heat, assigning participants to lanes.
 ```json
 {
   "type": "HeatStaged",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "heat": 1,
   "lanes": [
@@ -356,7 +356,7 @@ The Race Controller stages the next heat, assigning participants to lanes.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"HeatStaged"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `heat` | integer | yes | Heat number |
 | `lanes` | array | yes | Lane assignments: `{ lane, car_number, name }` |
@@ -376,7 +376,7 @@ The Track Controller reports that a race has finished.
 ```json
 {
   "type": "RaceCompleted",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "heat": 16,
   "race_id": "uuid",
@@ -395,7 +395,7 @@ The Track Controller reports that a race has finished.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"RaceCompleted"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `heat` | integer | yes | Heat number |
 | `race_id` | UUID | yes | Unique ID from Track Controller |
@@ -417,7 +417,7 @@ The Operator declares that the current heat must be re-run.
 ```json
 {
   "type": "RerunDeclared",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "heat": 16,
   "reason": "car fell off track",
@@ -428,7 +428,7 @@ The Operator declares that the current heat must be re-run.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"RerunDeclared"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `heat` | integer | yes | Heat number to re-run |
 | `reason` | string | optional | Human-readable reason |
@@ -448,7 +448,7 @@ The Operator manually ranked a heat without times (fallback when track hardware 
 ```json
 {
   "type": "ResultManuallyEntered",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "heat": 16,
   "rankings": [
@@ -466,7 +466,7 @@ The Operator manually ranked a heat without times (fallback when track hardware 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"ResultManuallyEntered"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `heat` | integer | yes | |
 | `rankings` | array | yes | Ordered finish: `{ place, lane, car_number }` |
@@ -483,12 +483,12 @@ The Operator manually ranked a heat without times (fallback when track hardware 
 
 ### 3.8 CarRemoved
 
-A car is removed from the Event mid-race (destroyed or disqualified).
+A car is removed from the Rally mid-race (destroyed or disqualified).
 
 ```json
 {
   "type": "CarRemoved",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "car_number": 7,
   "heat": 12,
@@ -500,7 +500,7 @@ A car is removed from the Event mid-race (destroyed or disqualified).
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"CarRemoved"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `car_number` | integer | yes | |
 | `heat` | integer | yes | Heat number when removed |
@@ -523,7 +523,7 @@ The Operator corrects the lane-to-car mapping for a completed heat. Times are ph
 ```json
 {
   "type": "ResultCorrected",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "heat_number": 5,
   "corrected_lanes": [
@@ -538,7 +538,7 @@ The Operator corrects the lane-to-car mapping for a completed heat. Times are ph
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"ResultCorrected"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `heat_number` | integer | yes | Heat whose lane assignments are corrected |
 | `corrected_lanes` | array | yes | Updated lane assignments: `{ lane, car_number, name }` |
@@ -560,7 +560,7 @@ The Operator changes which lanes are available mid-section (e.g., a lane sensor 
 ```json
 {
   "type": "LanesChanged",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "available_lanes": [1, 3, 4, 5, 6],
   "reason": "Lane 2 sensor failure",
@@ -571,7 +571,7 @@ The Operator changes which lanes are available mid-section (e.g., a lane sensor 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"LanesChanged"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `available_lanes` | array of int | yes | New set of available lanes (replaces previous set) |
 | `reason` | string | optional | Human-readable reason |
@@ -595,7 +595,7 @@ All heats for a Section have been run.
 ```json
 {
   "type": "SectionCompleted",
-  "event_id": "uuid",
+  "rally_id": "uuid",
   "section_id": "uuid",
   "total_heats": 24,
   "timestamp": 1708098780000
@@ -605,14 +605,14 @@ All heats for a Section have been run.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | yes | `"SectionCompleted"` |
-| `event_id` | UUID | yes | |
+| `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `total_heats` | integer | yes | Total heats run |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
 **Behavior:**
 - Audience Display shows final leaderboard / section complete screen
-- Operator can start next Section or end Event
+- Operator can start next Section or end Rally
 - See `06-race-day-state-machine.md` for state transition
 
 ---
@@ -624,9 +624,9 @@ All heats for a Section have been run.
 Certain events can only occur after others:
 
 **Pre-race:**
-- `SectionCreated` requires `EventCreated`
+- `SectionCreated` requires `RallyCreated`
 - `RegistrarInvited` requires `SectionCreated`
-- `OperatorInvited` requires `EventCreated`
+- `OperatorInvited` requires `RallyCreated`
 - `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` require `RegistrarInvited`
 - `SectionLocked` requires at least one roster event
 - `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` are rejected after `SectionLocked`
@@ -643,14 +643,14 @@ Certain events can only occur after others:
 
 - All timestamps are Unix milliseconds (UTC)
 - Timestamps reflect when the event was recorded, not when it occurred physically
-- Events are ordered by timestamp within their scope (event_id, section_id)
+- Events are ordered by timestamp within their scope (rally_id, section_id)
 
 ### 4.3 Idempotency
 
 Events with the same payload written multiple times should be deduplicated:
 
-- Pre-race: Use `(event_id, section_id, event_type, timestamp)` as deduplication key
-- Race day: Use `(event_id, section_id, client_event_id)` as deduplication key
+- Pre-race: Use `(rally_id, section_id, event_type, timestamp)` as deduplication key
+- Race day: Use `(rally_id, section_id, client_event_id)` as deduplication key
 
 ---
 
@@ -700,8 +700,8 @@ All events — pre-race and race day — live in a single table:
 ```sql
 CREATE TABLE domain_events (
   id BIGSERIAL PRIMARY KEY,
-  event_id UUID NOT NULL,
-  section_id UUID,                -- null for EventCreated
+  rally_id UUID NOT NULL,
+  section_id UUID,                -- null for RallyCreated
   event_type TEXT NOT NULL,
   payload JSONB NOT NULL,
   created_by UUID REFERENCES auth.users(id),
@@ -711,11 +711,11 @@ CREATE TABLE domain_events (
 
 -- Dedup index for race day sync (client_event_id is null for pre-race)
 CREATE UNIQUE INDEX idx_race_day_dedup
-  ON domain_events(event_id, section_id, client_event_id)
+  ON domain_events(rally_id, section_id, client_event_id)
   WHERE client_event_id IS NOT NULL;
 
 CREATE INDEX idx_domain_events_lookup
-  ON domain_events(event_id, section_id);
+  ON domain_events(rally_id, section_id);
 ```
 
 See `05-pre-race-data.md` for RLS policies and access control.
@@ -738,7 +738,7 @@ See `05-pre-race-data.md` for RLS policies and access control.
 
 | Event Type | Scope | Trigger |
 |------------|-------|---------|
-| `EventCreated` | Pre-race | Organizer creates Event |
+| `RallyCreated` | Pre-race | Organizer creates Rally |
 | `SectionCreated` | Pre-race | Organizer creates Section |
 | `RegistrarInvited` | Pre-race | Organizer invites Registrar |
 | `OperatorInvited` | Pre-race | Organizer invites Operator |

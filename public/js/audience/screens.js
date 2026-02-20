@@ -16,10 +16,10 @@ function formatTime(ms) {
 
 // ─── Welcome ─────────────────────────────────────────────────────
 
-export function renderWelcome(container, eventName) {
+export function renderWelcome(container, rallyName) {
   container.innerHTML = `
     <div class="audience-welcome">
-      <div class="audience-logo">${esc(eventName)}</div>
+      <div class="audience-logo">${esc(rallyName)}</div>
       <p class="audience-subtitle">Get ready to race!</p>
     </div>
   `;

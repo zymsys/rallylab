@@ -15,14 +15,14 @@ Feature: Section completion
     When all remaining heats are completed
     Then the leaderboard should have columns "Rank, Car #, Name, Avg Time, Best Time, Heats"
 
-  Scenario: Return to event home shows Complete status
+  Scenario: Return to rally home shows Complete status
     When all remaining heats are completed
-    And I click "Return to Event Home"
+    And I click "Return to Rally Home"
     Then I should see "Complete"
     And I should see "Results"
 
   Scenario: Results button reopens final results
     When all remaining heats are completed
-    And I click "Return to Event Home"
+    And I click "Return to Rally Home"
     And I click "Results"
     Then I should see the heading "Kub Kars — Final Results"

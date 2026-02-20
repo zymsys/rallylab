@@ -1,12 +1,12 @@
 /**
  * screens.js — Screen render functions for pre-race registration.
- * 4 screens: Login, Event List, Event Home, Section Detail.
+ * 4 screens: Login, Rally List, Rally Home, Section Detail.
  */
 
-import { signIn, getUser, getAccessibleEventIds, isOrganizer } from '../supabase.js';
-import { loadEventState, appendEvent, exportRosterPackage } from './commands.js';
+import { signIn, getUser, getAccessibleRallyIds, isOrganizer } from '../supabase.js';
+import { loadRallyState, appendEvent, exportRosterPackage } from './commands.js';
 import {
-  showCreateEventDialog,
+  showCreateRallyDialog,
   showCreateSectionDialog,
   showCreateGroupDialog,
   showInviteRegistrarDialog,
@@ -56,20 +56,20 @@ export function renderLogin(container) {
   };
 }
 
-// ─── Screen 2: Event List ──────────────────────────────────────────
-export async function renderEventList(container) {
+// ─── Screen 2: Rally List ──────────────────────────────────────────
+export async function renderRallyList(container) {
   const user = getUser();
-  container.innerHTML = '<p class="info-line">Loading events...</p>';
+  container.innerHTML = '<p class="info-line">Loading rallies...</p>';
 
-  const eventIds = getAccessibleEventIds();
-  const events = [];
+  const rallyIds = getAccessibleRallyIds();
+  const rallies = [];
 
-  for (const id of eventIds) {
+  for (const id of rallyIds) {
     try {
-      const state = await loadEventState(id);
+      const state = await loadRallyState(id);
       const sectionCount = Object.keys(state.sections).length;
-      events.push({ event_id: id, event_name: state.event_name, event_date: state.event_date, sectionCount });
-    } catch { /* skip broken events */ }
+      rallies.push({ rally_id: id, rally_name: state.rally_name, rally_date: state.rally_date, sectionCount });
+    } catch { /* skip broken rallies */ }
   }
 
   container.innerHTML = '';
@@ -77,25 +77,25 @@ export async function renderEventList(container) {
   const toolbar = document.createElement('div');
   toolbar.className = 'toolbar';
   toolbar.innerHTML = `
-    <h2 class="screen-title">Your Events</h2>
-    <div class="toolbar-actions" id="event-list-actions"></div>
+    <h2 class="screen-title">Your Rallies</h2>
+    <div class="toolbar-actions" id="rally-list-actions"></div>
   `;
   container.appendChild(toolbar);
 
   if (isOrganizer()) {
     const createBtn = document.createElement('button');
     createBtn.className = 'btn btn-primary';
-    createBtn.textContent = '+ Create Event';
-    createBtn.onclick = () => showCreateEventDialog((newId) => navigate('event-home', { eventId: newId }));
-    toolbar.querySelector('#event-list-actions').appendChild(createBtn);
+    createBtn.textContent = '+ Create Rally';
+    createBtn.onclick = () => showCreateRallyDialog((newId) => navigate('rally-home', { rallyId: newId }));
+    toolbar.querySelector('#rally-list-actions').appendChild(createBtn);
   }
 
-  if (events.length === 0) {
+  if (rallies.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.innerHTML = isOrganizer()
-      ? '<p>No events yet. Create your first event to get started.</p>'
-      : '<p>No events found. Ask your organizer to invite you.</p>';
+      ? '<p>No rallies yet. Create your first rally to get started.</p>'
+      : '<p>No rallies found. Ask your organizer to invite you.</p>';
     container.appendChild(empty);
     return;
   }
@@ -104,37 +104,37 @@ export async function renderEventList(container) {
   wrap.className = 'table-wrap';
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Event Name</th><th>Date</th><th>Sections</th><th></th></tr></thead>
-      <tbody id="event-list-body"></tbody>
+      <thead><tr><th>Rally Name</th><th>Date</th><th>Sections</th><th></th></tr></thead>
+      <tbody id="rally-list-body"></tbody>
     </table>
   `;
   container.appendChild(wrap);
 
-  const tbody = wrap.querySelector('#event-list-body');
-  for (const evt of events) {
+  const tbody = wrap.querySelector('#rally-list-body');
+  for (const evt of rallies) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${esc(evt.event_name)}</strong></td>
-      <td>${evt.event_date}</td>
+      <td><strong>${esc(evt.rally_name)}</strong></td>
+      <td>${evt.rally_date}</td>
       <td>${evt.sectionCount}</td>
       <td class="table-actions"></td>
     `;
     const manageBtn = document.createElement('button');
     manageBtn.className = 'btn btn-sm btn-secondary';
     manageBtn.textContent = 'Manage';
-    manageBtn.onclick = () => navigate('event-home', { eventId: evt.event_id });
+    manageBtn.onclick = () => navigate('rally-home', { rallyId: evt.rally_id });
     tr.querySelector('.table-actions').appendChild(manageBtn);
     tbody.appendChild(tr);
   }
 }
 
-// ─── Screen 3: Event Home ──────────────────────────────────────────
-export async function renderEventHome(container, params) {
-  const { eventId } = params;
+// ─── Screen 3: Rally Home ──────────────────────────────────────────
+export async function renderRallyHome(container, params) {
+  const { rallyId } = params;
   const user = getUser();
-  container.innerHTML = '<p class="info-line">Loading event...</p>';
+  container.innerHTML = '<p class="info-line">Loading rally...</p>';
 
-  const state = await loadEventState(eventId);
+  const state = await loadRallyState(rallyId);
   const _isOrganizer = isOrganizer();
   const sections = Object.values(state.sections);
   const groups = Object.values(state.groups);
@@ -148,14 +148,14 @@ export async function renderEventHome(container, params) {
   header.className = 'toolbar';
   header.innerHTML = `
     <div>
-      <h2 class="screen-title">${esc(state.event_name)}</h2>
-      <p class="screen-subtitle">${state.event_date}</p>
+      <h2 class="screen-title">${esc(state.rally_name)}</h2>
+      <p class="screen-subtitle">${state.rally_date}</p>
     </div>
-    <div class="toolbar-actions" id="event-home-actions"></div>
+    <div class="toolbar-actions" id="rally-home-actions"></div>
   `;
   container.appendChild(header);
 
-  const actions = header.querySelector('#event-home-actions');
+  const actions = header.querySelector('#rally-home-actions');
 
   if (hasParticipants) {
     const exportBtn = document.createElement('button');
@@ -187,15 +187,15 @@ export async function renderEventHome(container, params) {
   }
 
   if (_isOrganizer) {
-    renderOrganizerEventHome(container, params, state, sections, groups, registrars);
+    renderOrganizerRallyHome(container, params, state, sections, groups, registrars);
   } else {
-    renderRegistrarEventHome(container, params, state, sections, groups);
+    renderRegistrarRallyHome(container, params, state, sections, groups);
   }
 }
 
-function renderOrganizerEventHome(container, params, state, sections, groups, registrars) {
-  const { eventId } = params;
-  const refresh = () => renderEventHome(container, params);
+function renderOrganizerRallyHome(container, params, state, sections, groups, registrars) {
+  const { rallyId } = params;
+  const refresh = () => renderRallyHome(container, params);
 
   // ── Area 1: Sections ──
   const sectionsHeading = document.createElement('div');
@@ -211,7 +211,7 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
   addSectionBtn.textContent = '+ Add Section';
   addSectionBtn.onclick = () => {
     const existingNames = sections.map(s => s.section_name.toLowerCase());
-    showCreateSectionDialog(eventId, existingNames, refresh);
+    showCreateSectionDialog(rallyId, existingNames, refresh);
   };
   sectionsHeading.querySelector('#section-actions').appendChild(addSectionBtn);
 
@@ -245,7 +245,7 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
       const viewBtn = document.createElement('button');
       viewBtn.className = 'btn btn-sm btn-secondary';
       viewBtn.textContent = 'Roster';
-      viewBtn.onclick = () => navigate('section-detail', { eventId, sectionId: section.section_id });
+      viewBtn.onclick = () => navigate('section-detail', { rallyId, sectionId: section.section_id });
       actionsCell.appendChild(viewBtn);
 
       tbody.appendChild(tr);
@@ -267,7 +267,7 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
   addGroupBtn.textContent = '+ Add Group';
   addGroupBtn.onclick = () => {
     const existingNames = groups.map(g => g.group_name.toLowerCase());
-    showCreateGroupDialog(eventId, existingNames, refresh);
+    showCreateGroupDialog(rallyId, existingNames, refresh);
   };
   groupsHeading.querySelector('#group-actions').appendChild(addGroupBtn);
 
@@ -309,7 +309,7 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
     const inviteBtn = document.createElement('button');
     inviteBtn.className = 'btn btn-sm btn-primary';
     inviteBtn.textContent = '+ Invite Registrar';
-    inviteBtn.onclick = () => showInviteRegistrarDialog(eventId, state, null, refresh);
+    inviteBtn.onclick = () => showInviteRegistrarDialog(rallyId, state, null, refresh);
     regHeading.querySelector('#registrar-actions').appendChild(inviteBtn);
   }
 
@@ -355,13 +355,13 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
       const editBtn = document.createElement('button');
       editBtn.className = 'btn btn-sm btn-secondary';
       editBtn.textContent = 'Edit';
-      editBtn.onclick = () => showInviteRegistrarDialog(eventId, state, reg.email, refresh);
+      editBtn.onclick = () => showInviteRegistrarDialog(rallyId, state, reg.email, refresh);
       actionsCell.appendChild(editBtn);
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'btn btn-sm btn-danger';
       removeBtn.textContent = 'Remove';
-      removeBtn.onclick = () => confirmRemoveRegistrar(eventId, reg.email, container, params);
+      removeBtn.onclick = () => confirmRemoveRegistrar(rallyId, reg.email, container, params);
       actionsCell.appendChild(removeBtn);
 
       tbody.appendChild(tr);
@@ -369,15 +369,15 @@ function renderOrganizerEventHome(container, params, state, sections, groups, re
   }
 }
 
-function renderRegistrarEventHome(container, params, state, sections, groups) {
-  const { eventId } = params;
+function renderRegistrarRallyHome(container, params, state, sections, groups) {
+  const { rallyId } = params;
   const user = getUser();
   const reg = state.registrars[user.email];
 
   if (!reg) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = 'You are not registered for this event. Contact your organizer.';
+    empty.textContent = 'You are not registered for this rally. Contact your organizer.';
     container.appendChild(empty);
     return;
   }
@@ -420,7 +420,7 @@ function renderRegistrarEventHome(container, params, state, sections, groups) {
         manageBtn.className = 'btn btn-sm btn-secondary';
         manageBtn.textContent = 'Manage';
         manageBtn.onclick = () => navigate('section-detail', {
-          eventId,
+          rallyId,
           sectionId: combo.sectionId,
           groupId: combo.groupId
         });
@@ -438,20 +438,20 @@ function renderRegistrarEventHome(container, params, state, sections, groups) {
   }
 }
 
-async function confirmRemoveRegistrar(eventId, email, container, params) {
+async function confirmRemoveRegistrar(rallyId, email, container, params) {
   if (!confirm(`Remove registrar ${email}? Their uploaded data will be kept.`)) return;
 
   try {
     const user = getUser();
     await appendEvent({
       type: 'RegistrarRemoved',
-      event_id: eventId,
+      rally_id: rallyId,
       registrar_email: email,
       removed_by: user.email,
       timestamp: Date.now()
     });
     showToast(`Removed ${email}`, 'success');
-    renderEventHome(container, params);
+    renderRallyHome(container, params);
   } catch (e) {
     showToast(e.message, 'error');
   }
@@ -459,11 +459,11 @@ async function confirmRemoveRegistrar(eventId, email, container, params) {
 
 // ─── Screen 4: Section Detail ──────────────────────────────────────
 export async function renderSectionDetail(container, params) {
-  const { eventId, sectionId, groupId } = params;
+  const { rallyId, sectionId, groupId } = params;
   const user = getUser();
   container.innerHTML = '<p class="info-line">Loading section...</p>';
 
-  const state = await loadEventState(eventId);
+  const state = await loadRallyState(rallyId);
   const section = state.sections[sectionId];
   if (!section) {
     container.innerHTML = '<p class="info-line">Section not found.</p>';
@@ -492,7 +492,7 @@ export async function renderSectionDetail(container, params) {
     <button class="back-btn" aria-label="Back">&larr;</button>
     <h2 class="screen-title">${esc(section.section_name)}</h2>
   `;
-  header.querySelector('.back-btn').onclick = () => navigate('event-home', { eventId });
+  header.querySelector('.back-btn').onclick = () => navigate('rally-home', { rallyId });
   container.appendChild(header);
 
   // Show group context if filtering by group
@@ -513,7 +513,7 @@ export async function renderSectionDetail(container, params) {
 }
 
 function renderFilteredRoster(container, params, state, section, groupId, canEdit) {
-  const { eventId, sectionId } = params;
+  const { rallyId, sectionId } = params;
   const participants = section.participants.filter(p => p.group_id === groupId);
 
   // Actions toolbar
@@ -528,14 +528,14 @@ function renderFilteredRoster(container, params, state, section, groupId, canEdi
     const uploadBtn = document.createElement('button');
     uploadBtn.className = 'btn btn-secondary';
     uploadBtn.textContent = 'Upload Roster';
-    uploadBtn.onclick = () => showUploadRosterDialog(eventId, sectionId, groupId, section, () => renderSectionDetail(container, params));
+    uploadBtn.onclick = () => showUploadRosterDialog(rallyId, sectionId, groupId, section, () => renderSectionDetail(container, params));
     actions.appendChild(uploadBtn);
 
     const addBtn = document.createElement('button');
     addBtn.className = 'btn btn-primary';
     addBtn.textContent = '+ Add Participant';
     addBtn.onclick = () => showAddParticipantDialog(
-      eventId, sectionId, groupId, section,
+      rallyId, sectionId, groupId, section,
       () => renderSectionDetail(container, params)
     );
     actions.appendChild(addBtn);
@@ -560,7 +560,7 @@ function renderFilteredRoster(container, params, state, section, groupId, canEdi
 }
 
 function renderGroupedRoster(container, params, state, section, canEdit) {
-  const { eventId, sectionId } = params;
+  const { rallyId, sectionId } = params;
   const isOrganizer = canEdit; // only organizers see grouped view
 
   if (section.participants.length === 0) {
@@ -604,7 +604,7 @@ function renderGroupedRoster(container, params, state, section, canEdit) {
       const editLink = document.createElement('button');
       editLink.className = 'btn btn-sm btn-ghost';
       editLink.textContent = 'Edit';
-      editLink.onclick = () => navigate('section-detail', { eventId, sectionId, groupId: gid });
+      editLink.onclick = () => navigate('section-detail', { rallyId, sectionId, groupId: gid });
       headerTr.querySelector('.table-actions').appendChild(editLink);
     }
 
@@ -629,7 +629,7 @@ function renderGroupedRoster(container, params, state, section, canEdit) {
 }
 
 function renderRosterTable(container, sorted, canEdit, params, section) {
-  const { eventId, sectionId } = params;
+  const { rallyId, sectionId } = params;
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
   wrap.innerHTML = `
@@ -655,7 +655,7 @@ function renderRosterTable(container, sorted, canEdit, params, section) {
       removeBtn.className = 'btn btn-sm btn-ghost';
       removeBtn.textContent = 'Remove';
       removeBtn.onclick = () => confirmRemoveParticipant(
-        eventId, sectionId, p, container, params
+        rallyId, sectionId, p, container, params
       );
       td.appendChild(removeBtn);
       tr.appendChild(td);
@@ -665,14 +665,14 @@ function renderRosterTable(container, sorted, canEdit, params, section) {
   }
 }
 
-async function confirmRemoveParticipant(eventId, sectionId, participant, container, params) {
+async function confirmRemoveParticipant(rallyId, sectionId, participant, container, params) {
   if (!confirm(`Remove ${participant.name} (car #${participant.car_number})?`)) return;
 
   try {
     const user = getUser();
     await appendEvent({
       type: 'ParticipantRemoved',
-      event_id: eventId,
+      rally_id: rallyId,
       section_id: sectionId,
       participant_id: participant.participant_id,
       group_id: participant.group_id || null,

@@ -161,7 +161,7 @@ function rankParticipants(scores) {
 
 ### 4.3 Incomplete Participants (Removed Cars)
 
-Participants removed mid-event (`CarRemoved`):
+Participants removed mid-rally (`CarRemoved`):
 - Their completed heats are scored normally
 - They are ranked **below** all participants who completed the full schedule
 - Marked with `incomplete: true` in the leaderboard

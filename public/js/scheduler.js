@@ -53,7 +53,7 @@ export function generateSchedule({ participants, available_lanes, results = [], 
 }
 
 /**
- * Regenerate schedule after a car is removed mid-event.
+ * Regenerate schedule after a car is removed mid-rally.
  * Preserves completed heats, regenerates remaining.
  * @param {Object} schedule - Current schedule
  * @param {Array} remainingParticipants - Participants still racing

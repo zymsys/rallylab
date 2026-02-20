@@ -41,7 +41,7 @@ function _notifyAuth(event, session) {
 /**
  * Mock sign-in: provide email.
  * In real mode this would send a magic link via Supabase Auth.
- * Roles are derived per-event from the event stream, not stored on the session.
+ * Roles are derived per-rally from the event stream, not stored on the session.
  */
 export function signIn(email) {
   _session = {
@@ -236,7 +236,7 @@ export function getClient() {
 
 /**
  * Check if the current user is an organizer.
- * Organizer is a global role: true if user has created any event.
+ * Organizer is a global role: true if user has created any rally.
  * Also true for new users who haven't been invited as registrars (so they can bootstrap).
  */
 export function isOrganizer() {
@@ -248,7 +248,7 @@ export function isOrganizer() {
 
   for (const e of _events) {
     const p = e.payload || {};
-    if (e.event_type === 'EventCreated' && p.created_by === user.email) {
+    if (e.event_type === 'RallyCreated' && p.created_by === user.email) {
       createdAny = true;
     }
     if (e.event_type === 'RegistrarInvited' && p.registrar_email === user.email) {
@@ -256,41 +256,41 @@ export function isOrganizer() {
     }
   }
 
-  // Registrar-only users cannot create/manage events.
-  // New users (neither organizer nor registrar) can create their first event.
+  // Registrar-only users cannot create/manage rallies.
+  // New users (neither organizer nor registrar) can create their first rally.
   return createdAny || !invitedAsRegistrar;
 }
 
 /**
- * Get event IDs accessible to the current user.
- * Organizer: events they created. Registrar: events they're invited to
+ * Get rally IDs accessible to the current user.
+ * Organizer: rallies they created. Registrar: rallies they're invited to
  * (unless subsequently removed without re-invite).
  */
-export function getAccessibleEventIds() {
+export function getAccessibleRallyIds() {
   const user = getUser();
   if (!user) return [];
 
   const organizerIds = new Set();
-  // Track registrar access per event: process events in order
-  const registrarAccess = new Map(); // event_id -> boolean
+  // Track registrar access per rally: process events in order
+  const registrarAccess = new Map(); // rally_id -> boolean
 
   for (const e of _events) {
     const p = e.payload || {};
-    if (e.event_type === 'EventCreated' && p.created_by === user.email) {
-      organizerIds.add(e.event_id);
+    if (e.event_type === 'RallyCreated' && p.created_by === user.email) {
+      organizerIds.add(e.rally_id);
     }
     if (e.event_type === 'RegistrarInvited' && p.registrar_email === user.email) {
-      registrarAccess.set(e.event_id, true);
+      registrarAccess.set(e.rally_id, true);
     }
     if (e.event_type === 'RegistrarRemoved' && p.registrar_email === user.email) {
-      registrarAccess.set(e.event_id, false);
+      registrarAccess.set(e.rally_id, false);
     }
   }
 
   const ids = new Set(organizerIds);
-  for (const [eventId, hasAccess] of registrarAccess) {
-    if (hasAccess) ids.add(eventId);
-    else ids.delete(eventId);
+  for (const [rallyId, hasAccess] of registrarAccess) {
+    if (hasAccess) ids.add(rallyId);
+    else ids.delete(rallyId);
   }
 
   return [...ids];

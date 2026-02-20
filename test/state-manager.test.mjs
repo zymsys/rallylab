@@ -318,7 +318,7 @@ describe('nextAvailableCarNumber', () => {
 describe('rebuildState', () => {
   it('replays full event stream', () => {
     const events = [
-      { payload: { type: 'EventCreated', event_id: 'e1', event_name: 'Rally', event_date: '2026-03-15', created_by: 'org@x.com' } },
+      { payload: { type: 'RallyCreated', rally_id: 'e1', rally_name: 'Rally', rally_date: '2026-03-15', created_by: 'org@x.com' } },
       { payload: { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' } },
       { payload: { type: 'GroupCreated', group_id: 'g1', group_name: '1st Newmarket' } },
       { payload: { type: 'RegistrarInvited', registrar_email: 'r@x.com', group_ids: ['g1'], section_ids: ['s1'] } },
@@ -326,7 +326,7 @@ describe('rebuildState', () => {
     ];
 
     const s = rebuildState(events);
-    assert.strictEqual(s.event_name, 'Rally');
+    assert.strictEqual(s.rally_name, 'Rally');
     assert.strictEqual(Object.keys(s.groups).length, 1);
     assert.strictEqual(Object.keys(s.registrars).length, 1);
     assert.strictEqual(s.sections.s1.participants.length, 1);

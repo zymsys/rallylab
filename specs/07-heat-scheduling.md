@@ -326,7 +326,7 @@ When a heat has only a `ResultManuallyEntered` (rank, no times), speed matching 
 
 ---
 
-## 8. Schedule Modifications Mid-Event
+## 8. Schedule Modifications Mid-Rally
 
 ### 8.1 Car Removal
 
