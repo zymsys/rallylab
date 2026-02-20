@@ -7,7 +7,7 @@
 import { openStore, appendEvent as storeAppend, getAllEvents } from '../event-store.js';
 import { rebuildState } from '../state-manager.js';
 import { notifyEventsChanged, onSyncMessage } from '../broadcast.js';
-import { getUser, signOut } from '../supabase.js';
+import { getUser, signOut, initAuth } from '../supabase.js';
 import { renderSectionList, renderSectionCheckIn } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -165,8 +165,8 @@ function updateUserInfo() {
   btn.className = 'btn btn-sm btn-ghost';
   btn.style.color = 'rgba(255,255,255,0.7)';
   btn.textContent = 'Sign Out';
-  btn.onclick = () => {
-    signOut();
+  btn.onclick = async () => {
+    await signOut();
     window.location.href = 'index.html';
   };
   el.appendChild(btn);
@@ -175,6 +175,7 @@ function updateUserInfo() {
 // ─── Init ────────────────────────────────────────────────────────
 
 async function init() {
+  await initAuth();
   updateUserInfo();
   await openStore();
   await rebuildFromStore();

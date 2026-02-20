@@ -25,9 +25,6 @@ Appends RallyCreated, SectionCreated events → domain_events table
          ├──► Invites Operator(s) → OperatorInvited event + magic link email
          │
          ▼
-Organizer appends SectionLocked event
-         │
-         ▼
 Race day: replay events to derive roster (or import from JSON file)
 ```
 
@@ -87,7 +84,7 @@ CREATE TABLE rally_roles (
   user_id UUID NOT NULL REFERENCES auth.users(id),
   role TEXT NOT NULL CHECK (role IN ('organizer', 'operator', 'registrar', 'checkin_volunteer')),
   section_id UUID,                -- null for organizer/operator, set for registrar/checkin_volunteer
-  PRIMARY KEY (rally_id, user_id)
+  PRIMARY KEY (rally_id, user_id, role)
 );
 ```
 
@@ -264,34 +261,6 @@ CREATE TRIGGER trg_auth_user_created
   EXECUTE FUNCTION on_auth_user_created();
 ```
 
-### 4.5 Enforce Section Lock
-
-Prevent roster events after a `SectionLocked` event. A database function checks the event log:
-
-```sql
-CREATE OR REPLACE FUNCTION check_section_not_locked()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.event_type IN ('RosterUpdated', 'ParticipantAdded', 'ParticipantRemoved') THEN
-    IF EXISTS (
-      SELECT 1 FROM domain_events
-      WHERE rally_id = NEW.rally_id
-        AND section_id = NEW.section_id
-        AND event_type = 'SectionLocked'
-    ) THEN
-      RAISE EXCEPTION 'Section roster is locked';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_check_section_lock
-  BEFORE INSERT ON domain_events
-  FOR EACH ROW
-  EXECUTE FUNCTION check_section_not_locked();
-```
-
 ---
 
 ## 5. Pre-Race Workflows (Client Code)
@@ -449,25 +418,11 @@ await appendEvent(supabase, {
 });
 ```
 
-### 5.9 Organizer: Lock Section
-
-```javascript
-await appendEvent(supabase, {
-  type: 'SectionLocked',
-  rally_id: rallyId,
-  section_id: sectionId,
-  locked_by: user.email,
-  timestamp: Date.now()
-});
-```
-
-After this, the database trigger (Section 4.4) prevents further roster events.
-
 ---
 
 ## 6. Roster Package (Race Day Import)
 
-On race day, the Operator needs the locked roster. Two options:
+On race day, the Operator needs the roster. Two options:
 
 ### 6.1 Fetch from Supabase (Online)
 
@@ -478,9 +433,9 @@ async function importRoster(supabase, store, rallyId) {
   // Replay pre-race events to derive current state
   const state = await loadRallyState(supabase, rallyId);
 
-  // For each locked section, emit a RosterLoaded event into IndexedDB
+  // For each section with participants, emit a RosterLoaded event into IndexedDB
   for (const section of Object.values(state.sections)) {
-    if (!section.locked) continue;
+    if (section.participants.length === 0) continue;
 
     await store.appendEvent({
       type: 'RosterLoaded',

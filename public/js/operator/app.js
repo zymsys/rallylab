@@ -14,7 +14,7 @@ import {
   triggerManualRace, triggerManualGate
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
-import { getUser, getClient, signOut } from '../supabase.js';
+import { getUser, getClient, signOut, initAuth } from '../supabase.js';
 import { startSync, stopSync, onSyncStatus } from '../sync-worker.js';
 import {
   renderRallyList, renderRallyHome, renderCheckIn,
@@ -811,9 +811,9 @@ function updateUserInfo() {
   signOutBtn.className = 'btn btn-sm btn-ghost';
   signOutBtn.style.color = 'rgba(255,255,255,0.7)';
   signOutBtn.textContent = 'Sign Out';
-  signOutBtn.onclick = () => {
+  signOutBtn.onclick = async () => {
     stopSync();
-    signOut();
+    await signOut();
     window.location.href = 'index.html';
   };
   el.appendChild(signOutBtn);
@@ -822,6 +822,7 @@ function updateUserInfo() {
 // ─── Init ────────────────────────────────────────────────────────
 
 async function init() {
+  await initAuth();
   updateUserInfo();
   initSyncIndicator();
   await openStore();

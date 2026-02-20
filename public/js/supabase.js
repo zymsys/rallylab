@@ -107,15 +107,26 @@ export function onAuthChange(callback) {
     };
   }
 
-  // Real mode: delegate to supabase-js onAuthStateChange
+  // Real mode: fire initial state immediately (like demo mode),
+  // then subscribe for future changes via supabase-js.
+  callback('INITIAL_SESSION', _session);
+
   let unsubFn = null;
-  getRealClient().then(client => {
+  const subscribe = (client) => {
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return; // already fired above
       _session = session ? { user: session.user } : null;
       callback(event, _session);
     });
     unsubFn = () => subscription.unsubscribe();
-  });
+  };
+
+  // Use cached client synchronously if available (initAuth pre-warms it)
+  if (_realClient) {
+    subscribe(_realClient);
+  } else {
+    getRealClient().then(subscribe);
+  }
 
   return () => { if (unsubFn) unsubFn(); };
 }

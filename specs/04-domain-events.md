@@ -227,31 +227,13 @@ Car number is retired (not immediately reused). `ParticipantAdded` fills gaps bu
 
 ---
 
-### 2.8 SectionLocked
-
-The Organizer locks a Section's roster, preventing further changes.
-
-```json
-{
-  "type": "SectionLocked",
-  "rally_id": "uuid",
-  "section_id": "uuid",
-  "locked_by": "organizer@example.com",
-  "timestamp": 1708012351234
-}
-```
-
-After this event, no `RosterUpdated`, `ParticipantAdded`, or `ParticipantRemoved` events are accepted for this Section. The roster becomes read-only and ready for race day export.
-
----
-
 ## 3. Race Day Events (Race Controller)
 
 These events occur during race day and are stored in IndexedDB, with background sync to Supabase's `domain_events` table.
 
 ### 3.1 RosterLoaded
 
-The Operator imports a locked roster into the Race Controller.
+The Operator imports a roster into the Race Controller.
 
 ```json
 {
@@ -266,7 +248,7 @@ The Operator imports a locked roster into the Race Controller.
 }
 ```
 
-This is a snapshot of the locked roster. Only loaded rosters can be raced.
+This is a snapshot of the roster. Only loaded rosters can be raced.
 
 ---
 
@@ -297,7 +279,7 @@ A participant checks in on race day, confirming their car is present.
 - No-shows are automatically excluded
 - Late arrivals can check in; schedule regenerates for remaining heats
 
-**Clarification:** This operates on the locked roster. It does not add new participants or edit names/car numbers. The pre-race roster is immutable on race day; `CarArrived` and `CarRemoved` only affect which cars from the roster participate in racing.
+**Clarification:** This operates on the loaded roster. It does not add new participants or edit names/car numbers. `CarArrived` and `CarRemoved` only affect which cars from the roster participate in racing.
 
 ---
 
@@ -628,8 +610,6 @@ Certain events can only occur after others:
 - `RegistrarInvited` requires `SectionCreated`
 - `OperatorInvited` requires `RallyCreated`
 - `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` require `RegistrarInvited`
-- `SectionLocked` requires at least one roster event
-- `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` are rejected after `SectionLocked`
 
 **Race day:**
 - `SectionStarted` requires `RosterLoaded`
@@ -745,7 +725,6 @@ See `05-pre-race-data.md` for RLS policies and access control.
 | `RosterUpdated` | Pre-race | Registrar uploads spreadsheet |
 | `ParticipantAdded` | Pre-race | Registrar adds one participant |
 | `ParticipantRemoved` | Pre-race | Registrar removes one participant |
-| `SectionLocked` | Pre-race | Organizer locks roster |
 | `RosterLoaded` | Race day | Operator imports roster |
 | `CarArrived` | Race day | Operator checks in car |
 | `SectionStarted` | Race day | Operator starts racing |
@@ -758,7 +737,7 @@ See `05-pre-race-data.md` for RLS policies and access control.
 | `LanesChanged` | Race day | Operator changes available lanes mid-section |
 | `SectionCompleted` | Race day | All heats completed |
 
-**Total: 19 domain events** (8 pre-race, 11 race day)
+**Total: 18 domain events** (7 pre-race, 11 race day)
 
 ---
 

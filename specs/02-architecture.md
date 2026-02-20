@@ -138,7 +138,7 @@ USB serial (v1). WiFi HTTP is a future option (see Phase 4).
 - **Access:** `supabase-js` client with RLS policies
 - **Model:** Event-sourced — same `domain_events` table as race day
 - Pre-race events (`RallyCreated`, `SectionCreated`, `RosterUpdated`, etc.) are appended directly to Supabase
-- State (rosters, car numbers, lock status) is derived client-side by replaying events
+- State (rosters, car numbers) is derived client-side by replaying events
 
 See `05-pre-race-data.md` for schema, RLS policies, and client usage.
 
@@ -322,12 +322,12 @@ async function importRoster(supabase, store, rallyId) {
     .eq('rally_id', rallyId)
     .order('id');
 
-  // Replay events to derive locked rosters
+  // Replay events to derive rosters
   const state = events.reduce(applyEvent, initialState);
 
   // Write RosterLoaded events into IndexedDB
   for (const section of Object.values(state.sections)) {
-    if (!section.locked) continue;
+    if (section.participants.length === 0) continue;
     await store.appendEvent({
       type: 'RosterLoaded',
       rally_id: rallyId,

@@ -51,7 +51,7 @@ The `specs/` folder is the **authoritative** source of truth (not `docs/`, which
 | `01-domain-language.md` | Terminology, roles, race lifecycle |
 | `02-architecture.md` | System architecture, Supabase, persistence, sync |
 | `03-track-controller-protocol.md` | Serial/HTTP protocol for Pico track controller |
-| `04-domain-events.md` | All 17 event types with schemas |
+| `04-domain-events.md` | All 18 event types with schemas |
 | `05-pre-race-data.md` | Supabase tables, RLS policies, client usage |
 | `06-race-day-state-machine.md` | Formal state machine for race day |
 | `07-heat-scheduling.md` | Circle method + greedy scheduling algorithm |

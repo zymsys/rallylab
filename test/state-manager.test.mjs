@@ -124,7 +124,6 @@ describe('SectionCreated', () => {
       section_name: 'Kub Kars'
     }));
     assert.strictEqual(s.sections.s1.registrar_email, undefined);
-    assert.strictEqual(s.sections.s1.locked, undefined);
     assert.deepStrictEqual(s.sections.s1.participants, []);
   });
 

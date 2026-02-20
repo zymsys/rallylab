@@ -56,7 +56,6 @@ Responsibilities:
 - Invites Registrars
 - Invites Operators (for race day redundancy)
 - Reviews submitted rosters
-- Locks rosters
 - Exports roster package for race day
 
 The Organizer is implicitly an Operator on race day. They may invite additional Operators as backup (see 2.3).

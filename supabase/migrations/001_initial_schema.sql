@@ -30,7 +30,7 @@ CREATE TABLE rally_roles (
   user_id UUID NOT NULL REFERENCES auth.users(id),
   role TEXT NOT NULL CHECK (role IN ('organizer', 'operator', 'registrar', 'checkin_volunteer')),
   section_id UUID,
-  PRIMARY KEY (rally_id, user_id)
+  PRIMARY KEY (rally_id, user_id, role)
 );
 
 -- ─── Row-Level Security ───────────────────────────────────────────
@@ -167,27 +167,3 @@ CREATE TRIGGER trg_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION on_auth_user_created();
-
--- ─── Trigger 5: Enforce section lock ──────────────────────────────
-
-CREATE OR REPLACE FUNCTION check_section_not_locked()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.event_type IN ('RosterUpdated', 'ParticipantAdded', 'ParticipantRemoved') THEN
-    IF EXISTS (
-      SELECT 1 FROM domain_events
-      WHERE rally_id = NEW.rally_id
-        AND section_id = NEW.section_id
-        AND event_type = 'SectionLocked'
-    ) THEN
-      RAISE EXCEPTION 'Section roster is locked';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_check_section_lock
-  BEFORE INSERT ON domain_events
-  FOR EACH ROW
-  EXECUTE FUNCTION check_section_not_locked();
