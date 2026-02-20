@@ -1,16 +1,21 @@
 /**
  * supabase.js — Auth + Supabase client for RallyLab.
  *
- * When USE_MOCK is true (default): mock auth with sessionStorage, no server.
- * When USE_MOCK is false: real Supabase client with magic link auth.
+ * Mode is chosen at runtime (localStorage):
+ *   demo  → mock auth with sessionStorage, no server
+ *   real  → real Supabase client with magic link auth
+ *   null  → no mode chosen yet, treated as signed-out (shows login screen)
  */
 
-import { USE_MOCK, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { isDemoMode, getMode, clearMode, SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 // ─── Real Supabase client (lazy-initialized) ─────────────────────
 let _realClient = null;
 
 async function getRealClient() {
+  if (!SUPABASE_CONFIGURED) {
+    throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in config.js');
+  }
   if (_realClient) return _realClient;
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
   _realClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -35,12 +40,12 @@ function _notifyAuth(event, session) {
 // ─── Auth API ─────────────────────────────────────────────────────
 
 /**
- * Sign in. Mock mode: instant sign-in. Real mode: sends magic link.
+ * Sign in. Demo mode: instant sign-in. Real mode: sends magic link.
  * @param {string} email
  * @returns {Promise<{data, error}>}
  */
 export async function signIn(email) {
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     _session = {
       user: { id: _deterministicId(email), email }
     };
@@ -58,22 +63,25 @@ export async function signIn(email) {
  * Sign out.
  */
 export async function signOut() {
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     _session = null;
     sessionStorage.removeItem(SESSION_KEY);
+    clearMode();
     _notifyAuth('SIGNED_OUT', null);
     return { error: null };
   }
 
   const client = await getRealClient();
-  return client.auth.signOut();
+  const result = await client.auth.signOut();
+  clearMode();
+  return result;
 }
 
 /**
  * Get current user (synchronous for mock, async-safe for real).
  */
 export function getUser() {
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     return _session ? _session.user : null;
   }
 
@@ -88,7 +96,9 @@ export function getUser() {
  * Returns an unsubscribe function.
  */
 export function onAuthChange(callback) {
-  if (USE_MOCK) {
+  if (getMode() !== 'real') {
+    // No mode chosen yet or demo mode — use mock auth.
+    // Register callback so it fires when signIn/signOut are called later.
     _authCallbacks.push(callback);
     if (_session) callback('INITIAL_SESSION', _session);
     else callback('INITIAL_SESSION', null);
@@ -114,7 +124,9 @@ export function onAuthChange(callback) {
  * Initialize auth — restores existing session.
  */
 export async function initAuth() {
-  if (USE_MOCK) return _session;
+  if (getMode() === null) return null;
+
+  if (isDemoMode()) return _session;
 
   const client = await getRealClient();
   const { data: { session } } = await client.auth.getSession();
@@ -126,10 +138,10 @@ export async function initAuth() {
 
 /**
  * Get the Supabase client for direct table operations.
- * In mock mode, returns a stub that throws on table access.
+ * In demo mode, returns a stub that throws on table access.
  */
 export async function getClient() {
-  if (USE_MOCK) return _mockClient;
+  if (isDemoMode()) return _mockClient;
   return getRealClient();
 }
 
@@ -147,7 +159,7 @@ const _mockClient = {
     }
   },
   from() {
-    throw new Error('Supabase table access is not available in mock mode. Set USE_MOCK = false in config.js');
+    throw new Error('Supabase table access is not available in demo mode');
   }
 };
 
@@ -169,4 +181,5 @@ export async function clearAllData() {
   await clear();
   _session = null;
   sessionStorage.removeItem(SESSION_KEY);
+  clearMode();
 }

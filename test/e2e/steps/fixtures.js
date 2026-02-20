@@ -8,6 +8,7 @@ export const test = base.extend({
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
+      localStorage.setItem('rallylab_mode', 'demo');
     });
     // Clear IndexedDB (both old and new DB names)
     await page.evaluate(() =>

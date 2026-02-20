@@ -9,7 +9,7 @@
  * regardless of where the events are stored.
  */
 
-import { USE_MOCK } from '../config.js';
+import { isDemoMode } from '../config.js';
 import { getUser, getClient } from '../supabase.js';
 import { appendEvent as storeAppend, getEventsByRally, getAllEvents } from '../event-store.js';
 import { rebuildState } from '../state-manager.js';
@@ -22,7 +22,7 @@ import { rebuildState } from '../state-manager.js';
 export async function appendEvent(payload) {
   const user = getUser();
 
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     return storeAppend({
       ...payload,
       created_by: user?.email || null
@@ -53,7 +53,7 @@ export async function appendEvent(payload) {
  * Fetch all events for a rally and replay through the reducer.
  */
 export async function loadRallyState(rallyId) {
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     const events = await getEventsByRally(rallyId);
     return rebuildState(events);
   }
@@ -88,7 +88,7 @@ export async function isOrganizer() {
   const user = getUser();
   if (!user) return false;
 
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     const events = await getAllEvents();
     let createdAny = false;
     let invitedAsRegistrar = false;
@@ -135,7 +135,7 @@ export async function getAccessibleRallyIds() {
   const user = getUser();
   if (!user) return [];
 
-  if (USE_MOCK) {
+  if (isDemoMode()) {
     const events = await getAllEvents();
     const organizerIds = new Set();
     const registrarAccess = new Map();

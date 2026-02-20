@@ -3,7 +3,7 @@
  * 4 screens: Login, Rally List, Rally Home, Section Detail.
  */
 
-import { USE_MOCK } from '../config.js';
+import { isDemoMode, setMode, SUPABASE_CONFIGURED } from '../config.js';
 import { signIn, getUser } from '../supabase.js';
 import { loadRallyState, appendEvent, exportRosterPackage, isOrganizer, getAccessibleRallyIds } from './commands.js';
 import {
@@ -19,63 +19,78 @@ import { loadDemoData } from './demo-data.js';
 
 // ─── Screen 1: Login ──────────────────────────────────────────────
 export function renderLogin(container) {
-  container.innerHTML = `
+  let html = `
     <div class="login-container">
       <div class="logo-large">RallyLab</div>
       <p class="tagline">Pinewood Derby Race Management</p>
+      <button class="btn btn-primary" id="demo-btn" style="width:100%;justify-content:center">Try Demo</button>`;
+
+  if (SUPABASE_CONFIGURED) {
+    html += `
+      <div class="login-divider">or</div>
       <form class="login-form" id="login-form">
         <div class="form-group">
           <label for="login-email">Email</label>
           <input id="login-email" class="form-input" type="email" placeholder="you@example.com" required>
         </div>
-        <button type="submit" class="btn btn-primary">Sign In</button>
-      </form>
-      <div class="login-divider">or</div>
-      <button class="btn btn-secondary" id="demo-btn" style="width:100%;justify-content:center">Load Demo Data &amp; Sign In</button>
-    </div>
-  `;
+        <button type="submit" class="btn btn-secondary">Sign In with Email</button>
+      </form>`;
+  } else {
+    html += `
+      <p class="info-line" style="margin-top:1rem;text-align:center;color:var(--color-text-secondary)">Configure Supabase to enable multi-user sign in</p>`;
+  }
 
-  document.getElementById('login-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value.trim().toLowerCase();
-    if (!email) return;
+  html += `</div>`;
+  container.innerHTML = html;
 
-    const btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.textContent = 'Signing in...';
-
-    try {
-      const { error } = await signIn(email);
-      if (error) {
-        showToast(error.message, 'error');
-        btn.disabled = false;
-        btn.textContent = 'Sign In';
-        return;
-      }
-      if (!USE_MOCK) {
-        showToast('Check your email for a sign-in link', 'success');
-        btn.textContent = 'Check your email';
-      }
-    } catch (err) {
-      showToast(err.message, 'error');
-      btn.disabled = false;
-      btn.textContent = 'Sign In';
-    }
-  };
-
+  // ── Demo button (always present) ──
   document.getElementById('demo-btn').onclick = async () => {
     const btn = document.getElementById('demo-btn');
     btn.disabled = true;
     btn.textContent = 'Loading...';
     try {
+      setMode('demo');
+      const { openStore } = await import('../event-store.js');
+      await openStore();
       await loadDemoData();
-      signIn('organizer@example.com');
+      await signIn('organizer@example.com');
     } catch (e) {
       showToast(e.message, 'error');
       btn.disabled = false;
-      btn.textContent = 'Load Demo Data & Sign In';
+      btn.textContent = 'Try Demo';
     }
   };
+
+  // ── Email form (only when Supabase configured) ──
+  const form = document.getElementById('login-form');
+  if (form) {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
+      if (!email) return;
+
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+
+      try {
+        setMode('real');
+        const { error } = await signIn(email);
+        if (error) {
+          showToast(error.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Sign In with Email';
+          return;
+        }
+        showToast('Check your email for a sign-in link', 'success');
+        btn.textContent = 'Check your email';
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign In with Email';
+      }
+    };
+  }
 }
 
 // ─── Screen 2: Rally List ──────────────────────────────────────────

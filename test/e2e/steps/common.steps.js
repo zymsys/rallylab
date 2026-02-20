@@ -15,8 +15,15 @@ Given('I am on the operator page', async ({ page }) => {
 // ─── Auth ────────────────────────────────────────────────────────
 
 When('I sign in with email {string}', async ({ page }, email) => {
-  await page.locator('#login-email').fill(email);
-  await page.locator('#login-form button[type="submit"]').click();
+  // No email form in demo mode (SUPABASE_CONFIGURED is false), sign in programmatically
+  await page.evaluate(async (email) => {
+    localStorage.setItem('rallylab_mode', 'demo');
+    const { openStore } = await import('/js/event-store.js');
+    await openStore();
+    const { signIn } = await import('/js/supabase.js');
+    await signIn(email);
+  }, email);
+  await expect(page.locator('.screen-title')).toBeVisible({ timeout: 10000 });
 });
 
 When('I load demo data and sign in', async ({ page }) => {
@@ -99,6 +106,8 @@ Given('demo data has been loaded', async ({ page }) => {
   await expect(page.locator('.screen-title')).toBeVisible({ timeout: 10000 });
   await page.getByRole('button', { name: 'Sign Out' }).click();
   await expect(page.locator('.login-container')).toBeVisible({ timeout: 10000 });
+  // Re-set demo mode after sign-out clears it
+  await page.evaluate(() => localStorage.setItem('rallylab_mode', 'demo'));
 });
 
 When('I sign out', async ({ page }) => {

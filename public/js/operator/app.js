@@ -4,7 +4,7 @@
  * Offline-first: no auth required, uses IndexedDB for event storage.
  */
 
-import { USE_MOCK } from '../config.js';
+import { isDemoMode } from '../config.js';
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
 import { rebuildState, deriveRaceDayPhase, getCurrentHeat } from '../state-manager.js';
 import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, generateCatchUpHeats } from '../scheduler.js';
@@ -747,7 +747,7 @@ function renderCurrentScreen() {
 // ─── Sync Status Indicator ────────────────────────────────────────
 
 function initSyncIndicator() {
-  if (USE_MOCK) return;
+  if (isDemoMode()) return;
 
   const el = document.getElementById('user-info');
   const indicator = document.createElement('span');
@@ -773,7 +773,7 @@ function initSyncIndicator() {
  * Start Supabase sync for the current rally/section.
  */
 async function beginSync(rallyId, sectionId) {
-  if (USE_MOCK) return;
+  if (isDemoMode()) return;
   const user = getUser();
   if (!user) return;
   const client = await getClient();

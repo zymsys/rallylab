@@ -3,7 +3,7 @@
  * Uses hash-based routing (#screen/param=value) for back/forward and reload.
  */
 
-import { USE_MOCK } from '../config.js';
+import { isDemoMode } from '../config.js';
 import { initAuth, onAuthChange, getUser, signOut } from '../supabase.js';
 import { openStore } from '../event-store.js';
 import { isOrganizer, getAccessibleRallyIds } from './commands.js';
@@ -189,7 +189,7 @@ export function showToast(message, type = 'info') {
 // ─── Auth Flow ─────────────────────────────────────────────────────
 
 async function boot() {
-  if (USE_MOCK) await openStore();
+  if (isDemoMode()) await openStore();
   await initAuth();
 
   onAuthChange(async (event, session) => {
