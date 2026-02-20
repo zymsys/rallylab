@@ -1,95 +1,182 @@
 /**
  * commands.js — Event append, state loading, role derivation, and roster export.
+ *
+ * Persistence strategy:
+ *   - Mock mode: IndexedDB (local-only, no server)
+ *   - Real mode: Supabase (shared, RLS-controlled)
+ *
+ * State is always derived by replaying events through state-manager.js,
+ * regardless of where the events are stored.
  */
 
-import { getUser } from '../supabase.js';
+import { USE_MOCK } from '../config.js';
+import { getUser, getClient } from '../supabase.js';
 import { appendEvent as storeAppend, getEventsByRally, getAllEvents } from '../event-store.js';
 import { rebuildState } from '../state-manager.js';
 
+// ─── Event Append ─────────────────────────────────────────────────
+
 /**
- * Append a domain event to IndexedDB.
+ * Append a domain event. Routes to Supabase (real) or IndexedDB (mock).
  */
 export async function appendEvent(payload) {
   const user = getUser();
-  const record = await storeAppend({
-    ...payload,
-    created_by: user?.id || null
-  });
-  return record;
+
+  if (USE_MOCK) {
+    return storeAppend({
+      ...payload,
+      created_by: user?.email || null
+    });
+  }
+
+  // Real mode: insert into Supabase domain_events
+  const client = await getClient();
+  const { data, error } = await client
+    .from('domain_events')
+    .insert({
+      rally_id: payload.rally_id,
+      section_id: payload.section_id || null,
+      event_type: payload.type,
+      payload,
+      created_by: user?.id || null
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
 }
 
+// ─── State Loading ────────────────────────────────────────────────
+
 /**
- * Fetch all events for a rally_id and replay through the reducer.
+ * Fetch all events for a rally and replay through the reducer.
  */
 export async function loadRallyState(rallyId) {
-  const events = await getEventsByRally(rallyId);
+  if (USE_MOCK) {
+    const events = await getEventsByRally(rallyId);
+    return rebuildState(events);
+  }
+
+  // Real mode: query Supabase
+  const client = await getClient();
+  const { data: rows, error } = await client
+    .from('domain_events')
+    .select('*')
+    .eq('rally_id', rallyId)
+    .order('id');
+
+  if (error) throw new Error(error.message);
+
+  // Map Supabase rows to domain events for the reducer
+  const events = (rows || []).map(row => ({
+    ...row.payload,
+    type: row.event_type,
+    rally_id: row.rally_id,
+    section_id: row.section_id
+  }));
+
   return rebuildState(events);
 }
 
+// ─── Role Derivation ──────────────────────────────────────────────
+
 /**
  * Check if the current user is an organizer.
- * Organizer is a global role: true if user has created any rally.
- * Also true for new users who haven't been invited as registrars (so they can bootstrap).
  */
 export async function isOrganizer() {
   const user = getUser();
   if (!user) return false;
 
-  const events = await getAllEvents();
+  if (USE_MOCK) {
+    const events = await getAllEvents();
+    let createdAny = false;
+    let invitedAsRegistrar = false;
 
-  let createdAny = false;
-  let invitedAsRegistrar = false;
+    for (const e of events) {
+      if (e.type === 'RallyCreated' && e.created_by === user.email) {
+        createdAny = true;
+      }
+      if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
+        invitedAsRegistrar = true;
+      }
+    }
 
-  for (const e of events) {
-    if (e.type === 'RallyCreated' && e.created_by === user.email) {
-      createdAny = true;
-    }
-    if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
-      invitedAsRegistrar = true;
-    }
+    return createdAny || !invitedAsRegistrar;
   }
 
-  return createdAny || !invitedAsRegistrar;
+  // Real mode: check rally_roles via RLS
+  const client = await getClient();
+  const { data: roles, error } = await client
+    .from('rally_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('role', 'organizer')
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+
+  // If user has an organizer role, they're an organizer.
+  // If they have no roles at all, they're a new user who can create rallies.
+  if (roles && roles.length > 0) return true;
+
+  const { count } = await client
+    .from('rally_roles')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
+  return count === 0; // New user with no roles can bootstrap
 }
 
 /**
  * Get rally IDs accessible to the current user.
- * Organizer: rallies they created. Registrar: rallies they're invited to
- * (unless subsequently removed without re-invite).
  */
 export async function getAccessibleRallyIds() {
   const user = getUser();
   if (!user) return [];
 
-  const events = await getAllEvents();
+  if (USE_MOCK) {
+    const events = await getAllEvents();
+    const organizerIds = new Set();
+    const registrarAccess = new Map();
 
-  const organizerIds = new Set();
-  const registrarAccess = new Map();
+    for (const e of events) {
+      if (e.type === 'RallyCreated' && e.created_by === user.email) {
+        organizerIds.add(e.rally_id);
+      }
+      if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
+        registrarAccess.set(e.rally_id, true);
+      }
+      if (e.type === 'RegistrarRemoved' && e.registrar_email === user.email) {
+        registrarAccess.set(e.rally_id, false);
+      }
+    }
 
-  for (const e of events) {
-    if (e.type === 'RallyCreated' && e.created_by === user.email) {
-      organizerIds.add(e.rally_id);
+    const ids = new Set(organizerIds);
+    for (const [rallyId, hasAccess] of registrarAccess) {
+      if (hasAccess) ids.add(rallyId);
+      else ids.delete(rallyId);
     }
-    if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
-      registrarAccess.set(e.rally_id, true);
-    }
-    if (e.type === 'RegistrarRemoved' && e.registrar_email === user.email) {
-      registrarAccess.set(e.rally_id, false);
-    }
+
+    return [...ids];
   }
 
-  const ids = new Set(organizerIds);
-  for (const [rallyId, hasAccess] of registrarAccess) {
-    if (hasAccess) ids.add(rallyId);
-    else ids.delete(rallyId);
-  }
+  // Real mode: distinct rally_ids from rally_roles (RLS scoped to user)
+  const client = await getClient();
+  const { data: roles, error } = await client
+    .from('rally_roles')
+    .select('rally_id');
 
+  if (error) throw new Error(error.message);
+
+  const ids = new Set((roles || []).map(r => r.rally_id));
   return [...ids];
 }
 
+// ─── Roster Export ────────────────────────────────────────────────
+
 /**
  * Export a roster package JSON for race day import.
- * Includes all sections that have at least one participant.
  */
 export function exportRosterPackage(state) {
   const sections = Object.values(state.sections)

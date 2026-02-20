@@ -1,17 +1,24 @@
 /**
- * supabase.js — Auth layer for RallyLab.
+ * supabase.js — Auth + Supabase client for RallyLab.
  *
- * Currently uses mock auth with sessionStorage.
- * Set USE_MOCK = false and provide real Supabase credentials to switch
- * to the real backend.
+ * When USE_MOCK is true (default): mock auth with sessionStorage, no server.
+ * When USE_MOCK is false: real Supabase client with magic link auth.
  */
 
-const USE_MOCK = true;
+import { USE_MOCK, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-// ─── Storage helpers ───────────────────────────────────────────────
+// ─── Real Supabase client (lazy-initialized) ─────────────────────
+let _realClient = null;
+
+async function getRealClient() {
+  if (_realClient) return _realClient;
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  _realClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return _realClient;
+}
+
+// ─── Mock auth state ──────────────────────────────────────────────
 const SESSION_KEY = 'rallylab_session';
-
-// ─── Module-level state ────────────────────────────────────────────
 let _session = null;
 let _authCallbacks = [];
 
@@ -19,70 +26,112 @@ try {
   _session = JSON.parse(sessionStorage.getItem(SESSION_KEY));
 } catch { /* ignore */ }
 
-// ─── Auth ──────────────────────────────────────────────────────────
-
 function _notifyAuth(event, session) {
   for (const cb of _authCallbacks) {
     try { cb(event, session); } catch (e) { console.error('Auth callback error', e); }
   }
 }
 
+// ─── Auth API ─────────────────────────────────────────────────────
+
 /**
- * Mock sign-in: provide email.
- * In real mode this would send a magic link via Supabase Auth.
- * Roles are derived per-rally from the event stream, not stored on the session.
+ * Sign in. Mock mode: instant sign-in. Real mode: sends magic link.
+ * @param {string} email
+ * @returns {Promise<{data, error}>}
  */
-export function signIn(email) {
-  _session = {
-    user: {
-      id: _deterministicId(email),
-      email
-    }
-  };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(_session));
-  _notifyAuth('SIGNED_IN', _session);
-  return { data: _session, error: null };
+export async function signIn(email) {
+  if (USE_MOCK) {
+    _session = {
+      user: { id: _deterministicId(email), email }
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(_session));
+    _notifyAuth('SIGNED_IN', _session);
+    return { data: _session, error: null };
+  }
+
+  const client = await getRealClient();
+  const { data, error } = await client.auth.signInWithOtp({ email });
+  return { data, error };
 }
 
-export function signOut() {
-  _session = null;
-  sessionStorage.removeItem(SESSION_KEY);
-  _notifyAuth('SIGNED_OUT', null);
-  return { error: null };
+/**
+ * Sign out.
+ */
+export async function signOut() {
+  if (USE_MOCK) {
+    _session = null;
+    sessionStorage.removeItem(SESSION_KEY);
+    _notifyAuth('SIGNED_OUT', null);
+    return { error: null };
+  }
+
+  const client = await getRealClient();
+  return client.auth.signOut();
 }
 
+/**
+ * Get current user (synchronous for mock, async-safe for real).
+ */
 export function getUser() {
+  if (USE_MOCK) {
+    return _session ? _session.user : null;
+  }
+
+  // In real mode, session is managed by supabase-js internally.
+  // Callers should prefer onAuthChange for reactivity.
   return _session ? _session.user : null;
 }
 
+/**
+ * Subscribe to auth state changes.
+ * Callback receives (event, session).
+ * Returns an unsubscribe function.
+ */
 export function onAuthChange(callback) {
-  _authCallbacks.push(callback);
-  // Fire immediately with current state
-  if (_session) callback('INITIAL_SESSION', _session);
-  else callback('INITIAL_SESSION', null);
-  return () => {
-    _authCallbacks = _authCallbacks.filter(cb => cb !== callback);
-  };
+  if (USE_MOCK) {
+    _authCallbacks.push(callback);
+    if (_session) callback('INITIAL_SESSION', _session);
+    else callback('INITIAL_SESSION', null);
+    return () => {
+      _authCallbacks = _authCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  // Real mode: delegate to supabase-js onAuthStateChange
+  let unsubFn = null;
+  getRealClient().then(client => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      _session = session ? { user: session.user } : null;
+      callback(event, _session);
+    });
+    unsubFn = () => subscription.unsubscribe();
+  });
+
+  return () => { if (unsubFn) unsubFn(); };
 }
 
 /**
- * Initialize auth — restores existing session if any.
- * Returns the current session or null.
+ * Initialize auth — restores existing session.
  */
-export function initAuth() {
+export async function initAuth() {
+  if (USE_MOCK) return _session;
+
+  const client = await getRealClient();
+  const { data: { session } } = await client.auth.getSession();
+  _session = session ? { user: session.user } : null;
   return _session;
 }
 
-// ─── Deterministic ID from email (stable mock user IDs) ───────────
-function _deterministicId(email) {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = ((hash << 5) - hash + email.charCodeAt(i)) | 0;
-  }
-  return '00000000-mock-user-' + Math.abs(hash).toString(16).padStart(12, '0');
-}
+// ─── Supabase Client Access ───────────────────────────────────────
 
-// ─── Client ────────────────────────────────────────────────────────
+/**
+ * Get the Supabase client for direct table operations.
+ * In mock mode, returns a stub that throws on table access.
+ */
+export async function getClient() {
+  if (USE_MOCK) return _mockClient;
+  return getRealClient();
+}
 
 const _mockClient = {
   auth: {
@@ -96,12 +145,20 @@ const _mockClient = {
       console.log(`[Mock] Magic link would be sent to: ${email}`);
       return Promise.resolve({ data: {}, error: null });
     }
+  },
+  from() {
+    throw new Error('Supabase table access is not available in mock mode. Set USE_MOCK = false in config.js');
   }
 };
 
-export function getClient() {
-  if (USE_MOCK) return _mockClient;
-  throw new Error('Set SUPABASE_URL and SUPABASE_ANON_KEY for real mode');
+// ─── Helpers ──────────────────────────────────────────────────────
+
+function _deterministicId(email) {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = ((hash << 5) - hash + email.charCodeAt(i)) | 0;
+  }
+  return '00000000-mock-user-' + Math.abs(hash).toString(16).padStart(12, '0');
 }
 
 /**

@@ -4,6 +4,7 @@
  * Offline-first: no auth required, uses IndexedDB for event storage.
  */
 
+import { USE_MOCK } from '../config.js';
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
 import { rebuildState, deriveRaceDayPhase, getCurrentHeat } from '../state-manager.js';
 import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, generateCatchUpHeats } from '../scheduler.js';
@@ -13,7 +14,8 @@ import {
   triggerManualRace, triggerManualGate
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
-import { getUser, signOut } from '../supabase.js';
+import { getUser, getClient, signOut } from '../supabase.js';
+import { startSync, stopSync, onSyncStatus } from '../sync-worker.js';
 import {
   renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -406,6 +408,10 @@ async function startSection(sectionId, availableLanes) {
 
   _liveSection = { sectionId, schedule };
 
+  // Start background sync to Supabase
+  const rallyId = _state?.rally_id || sec.rally_id;
+  if (rallyId) beginSync(rallyId, sectionId);
+
   // Navigate to live console
   navigate('live-console', { sectionId });
 
@@ -738,6 +744,42 @@ function renderCurrentScreen() {
   }
 }
 
+// ─── Sync Status Indicator ────────────────────────────────────────
+
+function initSyncIndicator() {
+  if (USE_MOCK) return;
+
+  const el = document.getElementById('user-info');
+  const indicator = document.createElement('span');
+  indicator.id = 'sync-indicator';
+  indicator.className = 'sync-indicator';
+  indicator.title = 'Sync status';
+  el.prepend(indicator);
+
+  onSyncStatus(({ status, pendingCount }) => {
+    indicator.className = `sync-indicator sync-${status}`;
+    const labels = {
+      synced: 'Synced',
+      pending: `${pendingCount} pending`,
+      offline: 'Offline',
+      error: 'Sync error'
+    };
+    indicator.textContent = labels[status] || status;
+    indicator.title = labels[status] || status;
+  });
+}
+
+/**
+ * Start Supabase sync for the current rally/section.
+ */
+async function beginSync(rallyId, sectionId) {
+  if (USE_MOCK) return;
+  const user = getUser();
+  if (!user) return;
+  const client = await getClient();
+  startSync(client, rallyId, sectionId, user.id);
+}
+
 // ─── User Info ──────────────────────────────────────────────
 
 function updateUserInfo() {
@@ -770,6 +812,7 @@ function updateUserInfo() {
   signOutBtn.style.color = 'rgba(255,255,255,0.7)';
   signOutBtn.textContent = 'Sign Out';
   signOutBtn.onclick = () => {
+    stopSync();
     signOut();
     window.location.href = 'index.html';
   };
@@ -780,6 +823,7 @@ function updateUserInfo() {
 
 async function init() {
   updateUserInfo();
+  initSyncIndicator();
   await openStore();
   await rebuildFromStore();
 

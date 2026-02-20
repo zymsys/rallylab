@@ -88,6 +88,18 @@ body {
   opacity: 0.8;
 }
 
+/* ===== Sync Indicator ===== */
+.sync-indicator {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.sync-synced { color: #4ade80; }
+.sync-pending { color: #facc15; }
+.sync-offline { color: #94a3b8; }
+.sync-error { color: #f87171; }
+
 
 /* ===== Main Content ===== */
 #app {

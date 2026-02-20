@@ -3,6 +3,7 @@
  * 4 screens: Login, Rally List, Rally Home, Section Detail.
  */
 
+import { USE_MOCK } from '../config.js';
 import { signIn, getUser } from '../supabase.js';
 import { loadRallyState, appendEvent, exportRosterPackage, isOrganizer, getAccessibleRallyIds } from './commands.js';
 import {
@@ -34,11 +35,32 @@ export function renderLogin(container) {
     </div>
   `;
 
-  document.getElementById('login-form').onsubmit = (e) => {
+  document.getElementById('login-form').onsubmit = async (e) => {
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim().toLowerCase();
     if (!email) return;
-    signIn(email);
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+
+    try {
+      const { error } = await signIn(email);
+      if (error) {
+        showToast(error.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+        return;
+      }
+      if (!USE_MOCK) {
+        showToast('Check your email for a sign-in link', 'success');
+        btn.textContent = 'Check your email';
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
   };
 
   document.getElementById('demo-btn').onclick = async () => {

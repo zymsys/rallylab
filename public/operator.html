@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RallyLab — Operator</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a1a2e">
 </head>
 <body>
   <header id="site-header">
@@ -26,5 +28,6 @@
   </div>
   <div id="toast-container" aria-live="polite"></div>
   <script type="module" src="js/operator/app.js"></script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 </body>
 </html>
