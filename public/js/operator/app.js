@@ -249,7 +249,7 @@ export async function appendAndRebuild(payload) {
 
 export async function rebuildFromStore() {
   const events = await getAllEvents();
-  _state = rebuildState(events.map(e => ({ payload: e })));
+  _state = rebuildState(events);
 }
 
 export async function clearAndRebuild() {
@@ -279,7 +279,7 @@ async function reconstructSchedule(sectionId) {
   const completedCarNumbers = new Set();
   let completedResultCount = 0;
 
-  // We also need participant data — pull from state (loaded from RosterLoaded)
+  // We also need participant data — pull from state
   const sec = _state.race_day.sections[sectionId];
   if (!sec) throw new Error('Section not found');
 

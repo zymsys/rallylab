@@ -1,47 +1,90 @@
 /**
- * commands.js — Event append, state loading, and roster export.
+ * commands.js — Event append, state loading, role derivation, and roster export.
  */
 
-import { getClient, getUser } from '../supabase.js';
+import { getUser } from '../supabase.js';
+import { appendEvent as storeAppend, getEventsByRally, getAllEvents } from '../event-store.js';
 import { rebuildState } from '../state-manager.js';
 
 /**
- * Append a domain event. Wraps the insert pattern from spec 05 §5.1.
+ * Append a domain event to IndexedDB.
  */
 export async function appendEvent(payload) {
-  const client = getClient();
   const user = getUser();
-
-  const { data, error } = await client
-    .from('domain_events')
-    .insert({
-      rally_id: payload.rally_id,
-      section_id: payload.section_id || null,
-      event_type: payload.type,
-      payload,
-      created_by: user.id
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data;
+  const record = await storeAppend({
+    ...payload,
+    created_by: user?.id || null
+  });
+  return record;
 }
 
 /**
  * Fetch all events for a rally_id and replay through the reducer.
  */
 export async function loadRallyState(rallyId) {
-  const client = getClient();
-
-  const { data: events, error } = await client
-    .from('domain_events')
-    .select('*')
-    .eq('rally_id', rallyId)
-    .order('id');
-
-  if (error) throw new Error(error.message);
+  const events = await getEventsByRally(rallyId);
   return rebuildState(events);
+}
+
+/**
+ * Check if the current user is an organizer.
+ * Organizer is a global role: true if user has created any rally.
+ * Also true for new users who haven't been invited as registrars (so they can bootstrap).
+ */
+export async function isOrganizer() {
+  const user = getUser();
+  if (!user) return false;
+
+  const events = await getAllEvents();
+
+  let createdAny = false;
+  let invitedAsRegistrar = false;
+
+  for (const e of events) {
+    if (e.type === 'RallyCreated' && e.created_by === user.email) {
+      createdAny = true;
+    }
+    if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
+      invitedAsRegistrar = true;
+    }
+  }
+
+  return createdAny || !invitedAsRegistrar;
+}
+
+/**
+ * Get rally IDs accessible to the current user.
+ * Organizer: rallies they created. Registrar: rallies they're invited to
+ * (unless subsequently removed without re-invite).
+ */
+export async function getAccessibleRallyIds() {
+  const user = getUser();
+  if (!user) return [];
+
+  const events = await getAllEvents();
+
+  const organizerIds = new Set();
+  const registrarAccess = new Map();
+
+  for (const e of events) {
+    if (e.type === 'RallyCreated' && e.created_by === user.email) {
+      organizerIds.add(e.rally_id);
+    }
+    if (e.type === 'RegistrarInvited' && e.registrar_email === user.email) {
+      registrarAccess.set(e.rally_id, true);
+    }
+    if (e.type === 'RegistrarRemoved' && e.registrar_email === user.email) {
+      registrarAccess.set(e.rally_id, false);
+    }
+  }
+
+  const ids = new Set(organizerIds);
+  for (const [rallyId, hasAccess] of registrarAccess) {
+    if (hasAccess) ids.add(rallyId);
+    else ids.delete(rallyId);
+  }
+
+  return [...ids];
 }
 
 /**

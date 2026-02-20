@@ -2,12 +2,13 @@
  * demo-data.js — Seed data for demonstrating the pre-race registration flow.
  */
 
-import { clearAllData, getClient } from '../supabase.js';
+import { appendEvent as storeAppend, clear as clearStore, openStore } from '../event-store.js';
 
 export async function loadDemoData() {
-  clearAllData();
+  await openStore();
+  await clearStore();
+  sessionStorage.removeItem('rallylab_session');
 
-  const client = getClient();
   const rallyId = crypto.randomUUID();
 
   // Sections (age categories)
@@ -162,14 +163,6 @@ export async function loadDemoData() {
   ];
 
   for (const evt of events) {
-    await client
-      .from('domain_events')
-      .insert({
-        rally_id: evt.rally_id,
-        section_id: evt.section_id || null,
-        event_type: evt.type,
-        payload: evt,
-        created_by: '00000000-mock-user-demo'
-      });
+    await storeAppend({ ...evt });
   }
 }

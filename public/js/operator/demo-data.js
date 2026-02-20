@@ -135,10 +135,11 @@ async function generateDemoData(ctx, sectionConfigs) {
   await clearAndRebuild();
 
   const now = Date.now();
+  const rallyId = crypto.randomUUID();
 
   await appendAndRebuild({
     type: 'RallyCreated',
-    rally_id: crypto.randomUUID(),
+    rally_id: rallyId,
     rally_name: 'Kub Kars Rally 2026',
     rally_date: '2026-03-15',
     created_by: 'operator',
@@ -152,43 +153,57 @@ async function generateDemoData(ctx, sectionConfigs) {
 
   for (const sec of sectionConfigs) {
     const sectionId = crypto.randomUUID();
+
+    await appendAndRebuild({
+      type: 'SectionCreated',
+      rally_id: rallyId,
+      section_id: sectionId,
+      section_name: sec.name,
+      timestamp: now + 1
+    });
+
     const participants = [];
     for (let i = 0; i < sec.count; i++) {
       participants.push({
         participant_id: crypto.randomUUID(),
-        name: allNames[nameIdx++],
-        car_number: i + 1
+        name: allNames[nameIdx++]
       });
     }
 
     await appendAndRebuild({
-      type: 'RosterLoaded',
+      type: 'RosterUpdated',
+      rally_id: rallyId,
       section_id: sectionId,
-      section_name: sec.name,
       participants,
-      timestamp: now + 1
+      timestamp: now + 2
     });
+
+    // Rebuild state to get assigned car numbers for check-in
+    const { rebuildFromStore } = await import('./app.js');
+    await rebuildFromStore();
+    const state = window.__rallylab?.state;
+    const rdSec = state?.race_day.sections[sectionId];
+    const assignedParticipants = rdSec ? rdSec.participants : participants.map((p, i) => ({ ...p, car_number: i + 1 }));
 
     // Check-in
     if (sec.checkin === 'all') {
-      for (const p of participants) {
+      for (const p of assignedParticipants) {
         await appendAndRebuild({
           type: 'CarArrived',
           section_id: sectionId,
           car_number: p.car_number,
-          timestamp: now + 2
+          timestamp: now + 3
         });
       }
     } else if (sec.checkin === 'random') {
-      const shuffled = [...participants].sort(() => Math.random() - 0.5);
-      // Check in roughly 60-80% randomly
-      const checkInCount = Math.max(2, Math.floor(participants.length * (0.6 + Math.random() * 0.2)));
+      const shuffled = [...assignedParticipants].sort(() => Math.random() - 0.5);
+      const checkInCount = Math.max(2, Math.floor(assignedParticipants.length * (0.6 + Math.random() * 0.2)));
       for (let i = 0; i < checkInCount; i++) {
         await appendAndRebuild({
           type: 'CarArrived',
           section_id: sectionId,
           car_number: shuffled[i].car_number,
-          timestamp: now + 2
+          timestamp: now + 3
         });
       }
     }

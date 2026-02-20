@@ -127,6 +127,79 @@ describe('SectionCreated', () => {
     assert.strictEqual(s.sections.s1.locked, undefined);
     assert.deepStrictEqual(s.sections.s1.participants, []);
   });
+
+  it('populates race_day.sections with full structure', () => {
+    const s = applyEvent(initialState(), makeEvent({
+      type: 'SectionCreated',
+      section_id: 's1',
+      section_name: 'Kub Kars'
+    }));
+    assert.strictEqual(s.race_day.loaded, true);
+    const rd = s.race_day.sections.s1;
+    assert.ok(rd);
+    assert.strictEqual(rd.section_id, 's1');
+    assert.strictEqual(rd.section_name, 'Kub Kars');
+    assert.deepStrictEqual(rd.participants, []);
+    assert.deepStrictEqual(rd.arrived, []);
+    assert.deepStrictEqual(rd.removed, []);
+    assert.strictEqual(rd.available_lanes, null);
+    assert.strictEqual(rd.started, false);
+    assert.strictEqual(rd.completed, false);
+    assert.deepStrictEqual(rd.heats, []);
+    assert.deepStrictEqual(rd.results, {});
+    assert.deepStrictEqual(rd.reruns, {});
+  });
+});
+
+describe('RosterUpdated updates race_day.sections', () => {
+  it('updates race_day.sections participants when section exists', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [
+          { participant_id: 'p1', name: 'Alice' },
+          { participant_id: 'p2', name: 'Bob' }
+        ]
+      }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.participants.length, 2);
+    const alice = s.race_day.sections.s1.participants.find(p => p.name === 'Alice');
+    assert.ok(alice);
+    assert.strictEqual(alice.car_number, 1);
+  });
+});
+
+describe('CheckInRoleGranted', () => {
+  it('adds volunteer to checkin_volunteers', () => {
+    const s = applyEvent(initialState(), makeEvent({
+      type: 'CheckInRoleGranted',
+      email: 'vol@example.com',
+      section_ids: ['s1', 's2']
+    }));
+    assert.deepStrictEqual(s.checkin_volunteers['vol@example.com'], {
+      email: 'vol@example.com',
+      section_ids: ['s1', 's2']
+    });
+  });
+});
+
+describe('CheckInRoleRevoked', () => {
+  it('removes volunteer from checkin_volunteers', () => {
+    let s = applyEvent(initialState(), makeEvent({
+      type: 'CheckInRoleGranted',
+      email: 'vol@example.com',
+      section_ids: ['s1']
+    }));
+    assert.ok(s.checkin_volunteers['vol@example.com']);
+    s = applyEvent(s, makeEvent({
+      type: 'CheckInRoleRevoked',
+      email: 'vol@example.com'
+    }));
+    assert.strictEqual(s.checkin_volunteers['vol@example.com'], undefined);
+  });
 });
 
 describe('RosterUpdated with group_id', () => {

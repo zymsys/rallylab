@@ -3,8 +3,8 @@
  * 4 screens: Login, Rally List, Rally Home, Section Detail.
  */
 
-import { signIn, getUser, getAccessibleRallyIds, isOrganizer } from '../supabase.js';
-import { loadRallyState, appendEvent, exportRosterPackage } from './commands.js';
+import { signIn, getUser } from '../supabase.js';
+import { loadRallyState, appendEvent, exportRosterPackage, isOrganizer, getAccessibleRallyIds } from './commands.js';
 import {
   showCreateRallyDialog,
   showCreateSectionDialog,
@@ -61,7 +61,7 @@ export async function renderRallyList(container) {
   const user = getUser();
   container.innerHTML = '<p class="info-line">Loading rallies...</p>';
 
-  const rallyIds = getAccessibleRallyIds();
+  const rallyIds = await getAccessibleRallyIds();
   const rallies = [];
 
   for (const id of rallyIds) {
@@ -82,7 +82,8 @@ export async function renderRallyList(container) {
   `;
   container.appendChild(toolbar);
 
-  if (isOrganizer()) {
+  const _isOrganizerList = await isOrganizer();
+  if (_isOrganizerList) {
     const createBtn = document.createElement('button');
     createBtn.className = 'btn btn-primary';
     createBtn.textContent = '+ Create Rally';
@@ -93,7 +94,7 @@ export async function renderRallyList(container) {
   if (rallies.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.innerHTML = isOrganizer()
+    empty.innerHTML = _isOrganizerList
       ? '<p>No rallies yet. Create your first rally to get started.</p>'
       : '<p>No rallies found. Ask your organizer to invite you.</p>';
     container.appendChild(empty);
@@ -135,7 +136,7 @@ export async function renderRallyHome(container, params) {
   container.innerHTML = '<p class="info-line">Loading rally...</p>';
 
   const state = await loadRallyState(rallyId);
-  const _isOrganizer = isOrganizer();
+  const _isOrganizer = await isOrganizer();
   const sections = Object.values(state.sections);
   const groups = Object.values(state.groups);
   const registrars = Object.values(state.registrars);
@@ -470,7 +471,7 @@ export async function renderSectionDetail(container, params) {
     return;
   }
 
-  const _isOrganizer = isOrganizer();
+  const _isOrganizer = await isOrganizer();
 
   // canEdit: organizer can always edit. Registrar must have group+section access.
   let canEdit = false;

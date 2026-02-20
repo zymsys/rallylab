@@ -3,7 +3,9 @@
  * Uses hash-based routing (#screen/param=value) for back/forward and reload.
  */
 
-import { initAuth, onAuthChange, getUser, signOut, isOrganizer, getAccessibleRallyIds } from '../supabase.js';
+import { initAuth, onAuthChange, getUser, signOut } from '../supabase.js';
+import { openStore } from '../event-store.js';
+import { isOrganizer, getAccessibleRallyIds } from './commands.js';
 import { renderLogin, renderRallyList, renderRallyHome, renderSectionDetail } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -185,25 +187,33 @@ export function showToast(message, type = 'info') {
 
 // ─── Auth Flow ─────────────────────────────────────────────────────
 
-initAuth();
+async function boot() {
+  await openStore();
+  initAuth();
 
-onAuthChange((event, session) => {
-  updateUserInfo();
-  if (session && session.user) {
-    // Try to restore route from hash, otherwise go to rally list
-    const route = decodeHash(location.hash);
-    if (route && route.screenName !== 'login' && screens[route.screenName]) {
-      navigate(route.screenName, route.params, { replace: true });
-    } else {
-      // Registrar with exactly one rally: skip the list, go straight to it
-      const rallyIds = getAccessibleRallyIds();
-      if (!isOrganizer() && rallyIds.length === 1) {
-        navigate('rally-home', { rallyId: rallyIds[0] }, { replace: true });
+  onAuthChange(async (event, session) => {
+    updateUserInfo();
+    if (session && session.user) {
+      // Try to restore route from hash, otherwise go to rally list
+      const route = decodeHash(location.hash);
+      if (route && route.screenName !== 'login' && screens[route.screenName]) {
+        navigate(route.screenName, route.params, { replace: true });
       } else {
-        navigate('rally-list', {}, { replace: true });
+        // Registrar with exactly one rally: skip the list, go straight to it
+        const rallyIds = await getAccessibleRallyIds();
+        if (!(await isOrganizer()) && rallyIds.length === 1) {
+          navigate('rally-home', { rallyId: rallyIds[0] }, { replace: true });
+        } else {
+          navigate('rally-list', {}, { replace: true });
+        }
       }
+    } else {
+      navigate('login', {}, { replace: true });
     }
-  } else {
-    navigate('login', {}, { replace: true });
-  }
+  });
+}
+
+boot().catch(e => {
+  console.error('Boot error:', e);
+  app().innerHTML = `<p class="form-error">Failed to initialize: ${e.message}</p>`;
 });

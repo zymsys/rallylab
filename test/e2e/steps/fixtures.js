@@ -9,14 +9,22 @@ export const test = base.extend({
       localStorage.clear();
       sessionStorage.clear();
     });
-    // Clear IndexedDB (operator page uses it for event storage)
+    // Clear IndexedDB (both old and new DB names)
     await page.evaluate(() =>
-      new Promise(resolve => {
-        const req = indexedDB.deleteDatabase('rallylab-races');
-        req.onsuccess = resolve;
-        req.onerror = resolve;
-        req.onblocked = resolve;
-      })
+      Promise.all([
+        new Promise(resolve => {
+          const req = indexedDB.deleteDatabase('rallylab');
+          req.onsuccess = resolve;
+          req.onerror = resolve;
+          req.onblocked = resolve;
+        }),
+        new Promise(resolve => {
+          const req = indexedDB.deleteDatabase('rallylab-races');
+          req.onsuccess = resolve;
+          req.onerror = resolve;
+          req.onblocked = resolve;
+        })
+      ])
     );
     await use(page);
   },

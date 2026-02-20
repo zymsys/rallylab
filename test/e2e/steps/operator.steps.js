@@ -77,16 +77,20 @@ async function injectAndNavigate(page, raceContext, cfg) {
     await app.clearAndRebuild();
 
     const sectionId = crypto.randomUUID();
+    const rallyId = crypto.randomUUID();
     await app.appendAndRebuild({
-      type: 'RallyCreated', rally_id: crypto.randomUUID(),
+      type: 'RallyCreated', rally_id: rallyId,
       rally_name: 'Test Rally 2026', rally_date: '2026-03-15',
       created_by: 'operator', timestamp: Date.now(),
     });
     await app.appendAndRebuild({
-      type: 'RosterLoaded', section_id: sectionId,
-      section_name: c.sectionName,
+      type: 'SectionCreated', rally_id: rallyId, section_id: sectionId,
+      section_name: c.sectionName, timestamp: Date.now(),
+    });
+    await app.appendAndRebuild({
+      type: 'RosterUpdated', rally_id: rallyId, section_id: sectionId,
       participants: c.participants.map(p => ({
-        participant_id: crypto.randomUUID(), name: p.name, car_number: p.car_number,
+        participant_id: crypto.randomUUID(), name: p.name,
       })),
       timestamp: Date.now(),
     });
@@ -227,29 +231,36 @@ async function injectTwoSections(page, raceContext, cfgA, cfgB) {
 
     const sectionIdA = crypto.randomUUID();
     const sectionIdB = crypto.randomUUID();
+    const rallyId = crypto.randomUUID();
 
     await app.appendAndRebuild({
-      type: 'RallyCreated', rally_id: crypto.randomUUID(),
+      type: 'RallyCreated', rally_id: rallyId,
       rally_name: 'Test Rally 2026', rally_date: '2026-03-15',
       created_by: 'operator', timestamp: Date.now(),
     });
 
     // Section A
     await app.appendAndRebuild({
-      type: 'RosterLoaded', section_id: sectionIdA,
-      section_name: c.cfgA.sectionName,
+      type: 'SectionCreated', rally_id: rallyId, section_id: sectionIdA,
+      section_name: c.cfgA.sectionName, timestamp: Date.now(),
+    });
+    await app.appendAndRebuild({
+      type: 'RosterUpdated', rally_id: rallyId, section_id: sectionIdA,
       participants: c.cfgA.participants.map(p => ({
-        participant_id: crypto.randomUUID(), name: p.name, car_number: p.car_number,
+        participant_id: crypto.randomUUID(), name: p.name,
       })),
       timestamp: Date.now(),
     });
 
     // Section B
     await app.appendAndRebuild({
-      type: 'RosterLoaded', section_id: sectionIdB,
-      section_name: c.cfgB.sectionName,
+      type: 'SectionCreated', rally_id: rallyId, section_id: sectionIdB,
+      section_name: c.cfgB.sectionName, timestamp: Date.now(),
+    });
+    await app.appendAndRebuild({
+      type: 'RosterUpdated', rally_id: rallyId, section_id: sectionIdB,
       participants: c.cfgB.participants.map(p => ({
-        participant_id: crypto.randomUUID(), name: p.name, car_number: p.car_number,
+        participant_id: crypto.randomUUID(), name: p.name,
       })),
       timestamp: Date.now(),
     });

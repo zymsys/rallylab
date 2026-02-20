@@ -13,6 +13,7 @@ export function initialState() {
     sections: {},
     groups: {},
     registrars: {},
+    checkin_volunteers: {},
     race_day: {
       loaded: false,
       sections: {},
@@ -43,6 +44,26 @@ export function applyEvent(state, event) {
             section_id: payload.section_id,
             section_name: payload.section_name,
             participants: []
+          }
+        },
+        race_day: {
+          ...state.race_day,
+          loaded: true,
+          sections: {
+            ...state.race_day.sections,
+            [payload.section_id]: {
+              section_id: payload.section_id,
+              section_name: payload.section_name,
+              participants: [],
+              arrived: [],
+              removed: [],
+              available_lanes: null,
+              started: false,
+              completed: false,
+              heats: [],
+              results: {},
+              reruns: {}
+            }
           }
         }
       };
@@ -101,16 +122,38 @@ export function applyEvent(state, event) {
         };
       });
 
-      return {
+      const mergedParticipants = [...otherParticipants, ...newParticipants];
+
+      let newState = {
         ...state,
         sections: {
           ...state.sections,
           [payload.section_id]: {
             ...section,
-            participants: [...otherParticipants, ...newParticipants]
+            participants: mergedParticipants
           }
         }
       };
+
+      // Also update race_day.sections if it exists
+      const rdSec = state.race_day.sections[payload.section_id];
+      if (rdSec) {
+        newState = {
+          ...newState,
+          race_day: {
+            ...newState.race_day,
+            sections: {
+              ...newState.race_day.sections,
+              [payload.section_id]: {
+                ...rdSec,
+                participants: mergedParticipants
+              }
+            }
+          }
+        };
+      }
+
+      return newState;
     }
 
     case 'ParticipantAdded': {
@@ -188,36 +231,6 @@ export function applyEvent(state, event) {
     }
 
     // ─── Race Day Events ──────────────────────────────────────────
-
-    case 'RosterLoaded': {
-      const rd = state.race_day;
-      const sectionEntry = {
-        section_id: payload.section_id,
-        section_name: payload.section_name,
-        participants: (payload.participants || []).map(p => ({
-          participant_id: p.participant_id,
-          name: p.name,
-          car_number: p.car_number,
-          group_id: p.group_id || null
-        })),
-        arrived: [],
-        removed: [],
-        available_lanes: null,
-        started: false,
-        completed: false,
-        heats: [],
-        results: {},
-        reruns: {}
-      };
-      return {
-        ...state,
-        race_day: {
-          ...rd,
-          loaded: true,
-          sections: { ...rd.sections, [payload.section_id]: sectionEntry }
-        }
-      };
-    }
 
     case 'CarArrived': {
       const rd = state.race_day;
@@ -433,6 +446,23 @@ export function applyEvent(state, event) {
           }
         }
       };
+    }
+
+    case 'CheckInRoleGranted':
+      return {
+        ...state,
+        checkin_volunteers: {
+          ...state.checkin_volunteers,
+          [payload.email]: {
+            email: payload.email,
+            section_ids: payload.section_ids || []
+          }
+        }
+      };
+
+    case 'CheckInRoleRevoked': {
+      const { [payload.email]: _, ...remainingVolunteers } = state.checkin_volunteers;
+      return { ...state, checkin_volunteers: remainingVolunteers };
     }
 
     default:

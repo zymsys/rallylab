@@ -538,11 +538,13 @@ export function showLoadRosterDialog(ctx) {
       const { clearAndRebuild, appendAndRebuild } = await import('./app.js');
       await clearAndRebuild();
 
+      const rallyId = rosterData.rally_id || crypto.randomUUID();
+
       // Create RallyCreated if data includes rally info
       if (rosterData.rally_name) {
         await appendAndRebuild({
           type: 'RallyCreated',
-          rally_id: rosterData.rally_id || crypto.randomUUID(),
+          rally_id: rallyId,
           rally_name: rosterData.rally_name,
           rally_date: rosterData.rally_date || '',
           created_by: 'operator',
@@ -550,15 +552,38 @@ export function showLoadRosterDialog(ctx) {
         });
       }
 
-      // Create RosterLoaded for each section
+      // Create groups if present
+      if (rosterData.groups) {
+        for (const group of rosterData.groups) {
+          await appendAndRebuild({
+            type: 'GroupCreated',
+            rally_id: rallyId,
+            group_id: group.group_id,
+            group_name: group.group_name,
+            timestamp: Date.now()
+          });
+        }
+      }
+
+      // Create SectionCreated + RosterUpdated for each section
       for (const sec of rosterData.sections) {
+        const sectionId = sec.section_id || crypto.randomUUID();
         await appendAndRebuild({
-          type: 'RosterLoaded',
-          section_id: sec.section_id || crypto.randomUUID(),
+          type: 'SectionCreated',
+          rally_id: rallyId,
+          section_id: sectionId,
           section_name: sec.section_name,
-          participants: sec.participants,
           timestamp: Date.now()
         });
+        if (sec.participants && sec.participants.length > 0) {
+          await appendAndRebuild({
+            type: 'RosterUpdated',
+            rally_id: rallyId,
+            section_id: sectionId,
+            participants: sec.participants,
+            timestamp: Date.now()
+          });
+        }
       }
 
       closeDialog();
