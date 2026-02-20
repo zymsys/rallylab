@@ -10,13 +10,13 @@
 import { getUnsyncedEvents, markSynced, hasServerEvent, appendEvent as storeAppend } from './event-store.js';
 
 const SYNC_INTERVAL_MS = 5000;
+const MAX_BACKOFF_MS = 60000;
 
 let _client = null;
-let _rallyId = null;
-let _sectionId = null;
 let _userId = null;
 let _intervalId = null;
 let _listeners = [];
+let _consecutiveErrors = 0;
 
 // ─── Sync Status ──────────────────────────────────────────────────
 
@@ -59,20 +59,28 @@ export function getSyncStatus() {
 /**
  * Start the background sync loop.
  * @param {Object} supabaseClient - Initialized supabase-js client
- * @param {string} rallyId
- * @param {string} sectionId
  * @param {string} userId - Current user ID for created_by
  */
-export function startSync(supabaseClient, rallyId, sectionId, userId) {
+export function startSync(supabaseClient, userId) {
   stopSync();
   _client = supabaseClient;
-  _rallyId = rallyId;
-  _sectionId = sectionId;
   _userId = userId;
+  _consecutiveErrors = 0;
 
-  // Run immediately, then on interval
+  // Run immediately, then schedule next
   syncOnce();
-  _intervalId = setInterval(syncOnce, SYNC_INTERVAL_MS);
+  scheduleNext();
+}
+
+function scheduleNext() {
+  if (_intervalId) clearTimeout(_intervalId);
+  const delay = _consecutiveErrors === 0
+    ? SYNC_INTERVAL_MS
+    : Math.min(SYNC_INTERVAL_MS * 2 ** _consecutiveErrors, MAX_BACKOFF_MS);
+  _intervalId = setTimeout(async () => {
+    await syncOnce();
+    if (_client) scheduleNext();
+  }, delay);
 }
 
 /**
@@ -80,7 +88,7 @@ export function startSync(supabaseClient, rallyId, sectionId, userId) {
  */
 export function stopSync() {
   if (_intervalId) {
-    clearInterval(_intervalId);
+    clearTimeout(_intervalId);
     _intervalId = null;
   }
   _client = null;
@@ -90,7 +98,7 @@ export function stopSync() {
  * Run a single sync cycle. Safe to call manually.
  */
 export async function syncOnce() {
-  if (!_client || !_rallyId) return;
+  if (!_client) return;
 
   if (!navigator.onLine) {
     setStatus('offline');
@@ -108,8 +116,8 @@ export async function syncOnce() {
     setStatus('pending', events.length);
 
     const rows = events.map(e => ({
-      rally_id: e.rally_id || _rallyId,
-      section_id: e.section_id || _sectionId,
+      rally_id: e.rally_id,
+      section_id: e.section_id || null,
       client_event_id: e.id,
       event_type: e.type,
       payload: e,
@@ -123,6 +131,7 @@ export async function syncOnce() {
 
     if (error) {
       console.warn('Sync error:', error.message);
+      _consecutiveErrors++;
       setStatus('error', events.length);
       return;
     }
@@ -134,11 +143,14 @@ export async function syncOnce() {
       }
     }
 
+    _consecutiveErrors = 0;
+
     // Check if everything was synced
     const remaining = await getUnsyncedEvents();
     setStatus(remaining.length === 0 ? 'synced' : 'pending', remaining.length);
   } catch (err) {
     console.warn('Sync error:', err.message);
+    _consecutiveErrors++;
     setStatus('error');
   }
 }
@@ -147,22 +159,25 @@ export async function syncOnce() {
 
 /**
  * Pull existing race-day events from Supabase into IndexedDB.
- * Used when an operator selects a rally online and wants to restore
+ * Used when an operator loads a rally online and wants to restore
  * a previous session or sync from another device.
  *
  * @param {Object} supabaseClient
  * @param {string} rallyId
- * @param {string} sectionId
+ * @param {string} [sectionId] - Optional: restrict to one section
  * @returns {Promise<number>} Number of events imported
  */
 export async function restoreFromSupabase(supabaseClient, rallyId, sectionId) {
-  const { data: events, error } = await supabaseClient
+  let query = supabaseClient
     .from('domain_events')
     .select('*')
     .eq('rally_id', rallyId)
-    .eq('section_id', sectionId)
     .not('client_event_id', 'is', null)
     .order('client_event_id');
+
+  if (sectionId) query = query.eq('section_id', sectionId);
+
+  const { data: events, error } = await query;
 
   if (error) throw new Error('Restore failed: ' + error.message);
   if (!events || events.length === 0) return 0;

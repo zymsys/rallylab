@@ -61,8 +61,8 @@ export async function appendEvent(event) {
     ...event,
     rally_id: event.rally_id || crypto.randomUUID(),
     stored_at: Date.now(),
-    synced: false,
-    server_id: null
+    synced: event.synced ?? false,
+    server_id: event.server_id ?? null
   };
 
   return new Promise((resolve, reject) => {

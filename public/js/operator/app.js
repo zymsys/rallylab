@@ -15,7 +15,7 @@ import {
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
-import { startSync, stopSync, onSyncStatus } from '../sync-worker.js';
+import { startSync, stopSync, onSyncStatus, restoreFromSupabase } from '../sync-worker.js';
 import {
   renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -118,6 +118,8 @@ function renderScreen(screenName, params) {
   // Broadcast welcome to audience when rally data is available
   if (screenName === 'rally-home' && _state?.rally_name) {
     sendWelcome(_state.rally_name);
+    // Restore any race-day events from cloud (runs in background)
+    tryRestore(_state.rally_id);
   }
 
   const ctx = {
@@ -243,6 +245,10 @@ export function showToast(message, type = 'info') {
 // ─── Event Append + State Rebuild ────────────────────────────────
 
 export async function appendAndRebuild(payload) {
+  // Ensure rally_id is set from current state so sync-worker can upload correctly
+  if (!payload.rally_id && _state?.rally_id) {
+    payload = { ...payload, rally_id: _state.rally_id };
+  }
   await storeAppend(payload);
   await rebuildFromStore();
   notifyEventsChanged();
@@ -408,9 +414,8 @@ async function startSection(sectionId, availableLanes) {
 
   _liveSection = { sectionId, schedule };
 
-  // Start background sync to Supabase
-  const rallyId = _state?.rally_id || sec.rally_id;
-  if (rallyId) beginSync(rallyId, sectionId);
+  // Ensure background sync is running (may already be started at init)
+  beginSync();
 
   // Navigate to live console
   navigate('live-console', { sectionId });
@@ -770,14 +775,34 @@ function initSyncIndicator() {
 }
 
 /**
- * Start Supabase sync for the current rally/section.
+ * Attempt to restore race-day events from Supabase into IndexedDB.
+ * Runs silently; imports any server events not already present locally.
  */
-async function beginSync(rallyId, sectionId) {
+async function tryRestore(rallyId) {
+  if (isDemoMode() || !navigator.onLine || !rallyId) return;
+  try {
+    const client = await getClient();
+    const imported = await restoreFromSupabase(client, rallyId);
+    if (imported > 0) {
+      await rebuildFromStore();
+      showToast(`Restored ${imported} event${imported !== 1 ? 's' : ''} from cloud`, 'success');
+      renderCurrentScreen();
+    }
+  } catch (e) {
+    console.warn('Restore failed:', e.message);
+  }
+}
+
+/**
+ * Start Supabase background sync. Events carry their own rally_id/section_id,
+ * so we only need the client and user to begin uploading.
+ */
+async function beginSync() {
   if (isDemoMode()) return;
   const user = getUser();
   if (!user) return;
   const client = await getClient();
-  startSync(client, rallyId, sectionId, user.id);
+  startSync(client, user.id);
 }
 
 // ─── User Info ──────────────────────────────────────────────
@@ -827,6 +852,9 @@ async function init() {
   initSyncIndicator();
   await openStore();
   await rebuildFromStore();
+
+  // Start background sync early so check-in events are uploaded immediately
+  beginSync();
 
   // Connect track
   await trackConnect();
