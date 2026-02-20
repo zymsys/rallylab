@@ -5,8 +5,14 @@ old/
 # OS
 .DS_Store
 
+# IDE
+.idea/
+
 # Dependencies
 node_modules/
+
+# Scratch
+scratch/
 
 # Test reports
 test/reports/

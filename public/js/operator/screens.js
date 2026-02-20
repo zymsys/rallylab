@@ -259,6 +259,16 @@ export function renderCheckIn(container, params, ctx) {
     const tr = document.createElement('tr');
     if (isRemoved) tr.style.opacity = '0.5';
 
+    // Set static cells first via innerHTML, then prepend the checkbox td
+    // (innerHTML += would destroy programmatic event handlers)
+    tr.innerHTML = `
+      <td><strong>#${p.car_number}</strong></td>
+      <td>${esc(p.name)}</td>
+      <td>${isRemoved ? '<span class="status-badge status-removed">Removed</span>' :
+             isArrived ? '<span class="status-badge status-arrived">Arrived</span>' :
+             '<span class="status-badge status-idle">Waiting</span>'}</td>
+    `;
+
     const checkTd = document.createElement('td');
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -278,19 +288,12 @@ export function renderCheckIn(container, params, ctx) {
           const { handleLateArrival } = await import('./app.js');
           handleLateArrival(sectionId);
         }
-        renderCheckIn(container, params, ctx);
+        // Re-navigate to refresh ctx with updated state
+        navigate('check-in', params, { replace: true });
       }
     };
     checkTd.appendChild(checkbox);
-    tr.appendChild(checkTd);
-
-    tr.innerHTML += `
-      <td><strong>#${p.car_number}</strong></td>
-      <td>${esc(p.name)}</td>
-      <td>${isRemoved ? '<span class="status-badge status-removed">Removed</span>' :
-             isArrived ? '<span class="status-badge status-arrived">Arrived</span>' :
-             '<span class="status-badge status-idle">Waiting</span>'}</td>
-    `;
+    tr.prepend(checkTd);
 
     tbody.appendChild(tr);
   }

@@ -51,6 +51,13 @@ let _state = null;
 let _liveSection = null;  // { sectionId, schedule }
 let _raceAbort = null;     // AbortController for current race loop
 
+// Test bridge — exposes internal state for E2E assertions
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, '__rallylab', {
+    get: () => ({ state: _state, liveSection: _liveSection })
+  });
+}
+
 // ─── Hash Routing ────────────────────────────────────────────────
 
 function encodeHash(screenName, params) {

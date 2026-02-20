@@ -9,7 +9,35 @@ export const test = base.extend({
       localStorage.clear();
       sessionStorage.clear();
     });
+    // Clear IndexedDB (operator page uses it for event storage)
+    await page.evaluate(() =>
+      new Promise(resolve => {
+        const req = indexedDB.deleteDatabase('rallylab-races');
+        req.onsuccess = resolve;
+        req.onerror = resolve;
+        req.onblocked = resolve;
+      })
+    );
     await use(page);
+  },
+
+  /** Mutable context shared across steps within a single scenario. */
+  raceContext: async ({}, use) => {
+    await use({
+      sectionId: null,
+      sectionName: null,
+      participants: [],    // [{ car_number, name }]
+      checkedIn: [],       // car_number[]
+      availableLanes: [],
+      completedHeats: 0,
+      // Multi-section support (section B)
+      sectionIdB: null,
+      sectionNameB: null,
+      participantsB: [],
+      checkedInB: [],
+      availableLanesB: [],
+      completedHeatsB: 0,
+    });
   },
 });
 

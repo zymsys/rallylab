@@ -77,6 +77,38 @@ npx cucumber-js
 npm run test:all
 ```
 
+## Scheduling BDD Tests
+
+Cucumber feature specs for the heat scheduling algorithm. Run with `npx cucumber-js`.
+
+| Feature | Scenarios | Description |
+|---------|-----------|-------------|
+| [circle-method](test/features/circle-method.feature) | 6 | Perfect lane balance for solvable roster sizes; every car races each lane once |
+| [greedy-heuristic](test/features/greedy-heuristic.feature) | 6 | Fallback algorithm for non-solvable sizes; lane balance within 1 |
+| [algorithm-selection](test/features/algorithm-selection.feature) | 11 | Auto-selects circle method or greedy based on roster size and lane count |
+| [speed-matching](test/features/speed-matching.feature) | 5 | Groups participants by average time after initial heats |
+| [schedule-modifications](test/features/schedule-modifications.feature) | 8 | Car removal and late arrival trigger schedule regeneration mid-event |
+| [edge-cases](test/features/edge-cases.feature) | 5 | Boundary conditions: zero participants, single car, more lanes than cars |
+
+## E2E Test Suite
+
+Browser-based feature tests using Playwright + playwright-bdd. Run with `npx bddgen && npx playwright test`.
+
+| Feature | Scenarios | Description |
+|---------|-----------|-------------|
+| [smoke](test/e2e/features/smoke.feature) | 5 | App loads, auth flows, demo data bootstrap |
+| [pre-race](test/e2e/features/pre-race.feature) | 4 | Create events and sections, add participants, import demo roster |
+| [registrar](test/e2e/features/registrar.feature) | 6 | Registrar role: scoped access, combo table, filtered roster, add participant |
+| [check-in](test/e2e/features/check-in.feature) | 4 | Operator check-in screen: mark cars arrived, counter updates, start section |
+| [section-completion](test/e2e/features/section-completion.feature) | 4 | Final results screen, leaderboard columns, return to event home |
+| [multi-section](test/e2e/features/multi-section.feature) | 3 | Race multiple sections in sequence, view per-section results |
+| [late-checkin](test/e2e/features/late-checkin.feature) | 2 | Mid-race arrival generates catch-up heats for missed rounds |
+| [late-registration](test/e2e/features/late-registration.feature) | 2 | Participant added after racing begins receives catch-up heats |
+| [car-removal](test/e2e/features/car-removal.feature) | 2 | Remove broken car mid-race; results preserved, schedule regenerated |
+| [rerun](test/e2e/features/rerun.feature) | 2 | Re-run a disputed heat; new result supersedes previous |
+| [lane-correction](test/e2e/features/lane-correction.feature) | 2 | Correct lane misassignment retroactively after a heat completes |
+| [lane-configuration](test/e2e/features/lane-configuration.feature) | 3 | Non-adjacent lane sets, mid-race lane changes, restaging |
+
 ## Specifications
 
 The `specs/` folder is the authoritative source of truth for the system design:
