@@ -6,7 +6,7 @@
 
 import { computeLeaderboard } from '../scoring.js';
 import { deriveRaceDayPhase, getCurrentHeat, getAcceptedResult } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog } from './dialogs.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -39,6 +39,14 @@ export function renderRallyList(container, params, ctx) {
   demoBtn.textContent = 'Load Demo Data';
   demoBtn.onclick = () => showDemoDataDialog(ctx);
   actions.appendChild(demoBtn);
+
+  if (ctx.isUSBBackupSupported()) {
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'btn btn-secondary';
+    restoreBtn.textContent = 'Restore from USB';
+    restoreBtn.onclick = () => showRestoreFromUSBDialog(ctx);
+    actions.appendChild(restoreBtn);
+  }
 
   if (!rd.loaded || sections.length === 0) {
     const empty = document.createElement('div');
@@ -83,8 +91,46 @@ export function renderRallyHome(container, params, ctx) {
       <h2 class="screen-title">${esc(state.rally_name || 'Rally')}</h2>
       <p class="screen-subtitle">${state.rally_date || ''}</p>
     </div>
+    <div class="toolbar-actions" id="rally-home-actions"></div>
   `;
   container.appendChild(header);
+
+  // USB Backup controls (only shown when File System Access API is available)
+  if (ctx.isUSBBackupSupported()) {
+    const actionsDiv = header.querySelector('#rally-home-actions');
+    if (ctx.isUSBBackupConfigured()) {
+      const indicator = document.createElement('span');
+      indicator.className = 'status-badge status-active';
+      indicator.textContent = 'USB Backup Active';
+      actionsDiv.appendChild(indicator);
+
+      const disableLink = document.createElement('button');
+      disableLink.className = 'btn btn-sm btn-ghost';
+      disableLink.textContent = 'Disable';
+      disableLink.onclick = () => {
+        ctx.disableUSBBackup();
+        navigate('rally-home', {}, { replace: true });
+        showToast('USB backup disabled', 'info');
+      };
+      actionsDiv.appendChild(disableLink);
+    } else {
+      const enableBtn = document.createElement('button');
+      enableBtn.className = 'btn btn-secondary';
+      enableBtn.textContent = 'Enable USB Backup';
+      enableBtn.onclick = async () => {
+        try {
+          await ctx.configureUSBBackup();
+          navigate('rally-home', {}, { replace: true });
+          showToast('USB backup enabled — backup written', 'success');
+        } catch (e) {
+          if (e.name !== 'AbortError') {
+            showToast('USB backup failed: ' + e.message, 'error');
+          }
+        }
+      };
+      actionsDiv.appendChild(enableBtn);
+    }
+  }
 
   if (sections.length === 0) {
     const empty = document.createElement('div');

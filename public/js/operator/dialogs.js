@@ -441,6 +441,119 @@ export function showChangeLanesDialog(sectionId, section, ctx) {
   };
 }
 
+// ─── Restore from USB Dialog ─────────────────────────────────────
+
+export function showRestoreFromUSBDialog(ctx) {
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Restore from USB Backup</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <div class="upload-area" id="dlg-upload-area">
+        <input type="file" id="dlg-file-input" accept=".json">
+        <p>Drop a backup file here or <strong>click to browse</strong></p>
+        <p class="form-hint" style="margin-top:0.5rem">rallylab-backup.json from USB stick</p>
+      </div>
+      <div id="dlg-upload-error" class="form-error" style="margin-top:0.5rem"></div>
+      <div id="dlg-preview" style="display:none">
+        <p class="info-line" id="dlg-preview-text"></p>
+        <p class="form-hint" id="dlg-preview-detail"></p>
+        <p class="form-hint" style="color:var(--color-warning);margin-top:0.5rem">
+          This will replace all current race data.
+        </p>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="restore" disabled>Restore Backup</button>
+    </div>
+  `);
+
+  let backupData = null;
+
+  const d = dialogEl();
+  const area = d.querySelector('#dlg-upload-area');
+  const fileInput = d.querySelector('#dlg-file-input');
+  const errorEl = d.querySelector('#dlg-upload-error');
+  const previewEl = d.querySelector('#dlg-preview');
+  const previewText = d.querySelector('#dlg-preview-text');
+  const previewDetail = d.querySelector('#dlg-preview-detail');
+  const restoreBtn = d.querySelector('[data-action="restore"]');
+
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+
+  area.onclick = () => fileInput.click();
+
+  area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+  area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+  area.addEventListener('drop', (e) => {
+    e.preventDefault();
+    area.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  async function handleFile(file) {
+    errorEl.textContent = '';
+    previewEl.style.display = 'none';
+    restoreBtn.disabled = true;
+    backupData = null;
+
+    try {
+      const { readBackupFile } = await import('../usb-backup.js');
+      const data = await readBackupFile(file);
+      backupData = data;
+
+      // Extract rally name from first RallyCreated event
+      const rallyEvent = data.events.find(e => e.type === 'RallyCreated');
+      const rallyName = rallyEvent?.rally_name || 'Unknown Rally';
+      const backupTime = new Date(data.timestamp).toLocaleString();
+
+      previewText.textContent = `${rallyName} — ${data.events.length} events`;
+      previewDetail.textContent = `Backup taken: ${backupTime}`;
+      previewEl.style.display = 'block';
+      restoreBtn.disabled = false;
+    } catch (e) {
+      errorEl.textContent = e.message;
+    }
+  }
+
+  restoreBtn.onclick = async () => {
+    if (!backupData) return;
+    restoreBtn.disabled = true;
+    restoreBtn.textContent = 'Restoring...';
+
+    try {
+      const { clearAndRebuild, rebuildFromStore } = await import('./app.js');
+      const { appendEvent: storeAppend } = await import('../event-store.js');
+
+      await clearAndRebuild();
+
+      for (const evt of backupData.events) {
+        // Strip local auto-increment id so IndexedDB assigns new keys.
+        // Keep server_id and synced so sync-worker doesn't re-upload.
+        const { id, ...rest } = evt;
+        await storeAppend(rest);
+      }
+
+      await rebuildFromStore();
+
+      closeDialog();
+      ctx.showToast(`Restored ${backupData.events.length} events from backup`, 'success');
+      ctx.navigate('rally-home', {});
+    } catch (e) {
+      ctx.showToast('Restore failed: ' + e.message, 'error');
+      restoreBtn.disabled = false;
+      restoreBtn.textContent = 'Restore Backup';
+    }
+  };
+}
+
 // ─── Load Roster Dialog ──────────────────────────────────────────
 
 export function showLoadRosterDialog(ctx) {

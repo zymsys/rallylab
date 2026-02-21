@@ -20,6 +20,13 @@ import {
   renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
 } from './screens.js';
+import {
+  isSupported as isUSBBackupSupported,
+  configure as configureUSBBackupImpl,
+  isConfigured as isUSBBackupConfigured,
+  disable as disableUSBBackup,
+  onEventAppended as usbOnEventAppended
+} from '../usb-backup.js';
 
 const app = () => document.getElementById('app');
 const breadcrumbs = () => document.getElementById('breadcrumbs');
@@ -139,7 +146,11 @@ function renderScreen(screenName, params) {
     getTrackLaneCount,
     isUsingFakeTrack,
     triggerManualRace,
-    triggerManualGate
+    triggerManualGate,
+    configureUSBBackup,
+    disableUSBBackup,
+    isUSBBackupConfigured,
+    isUSBBackupSupported
   };
 
   const result = renderFn(container, params, ctx);
@@ -252,6 +263,7 @@ export async function appendAndRebuild(payload) {
   await storeAppend(payload);
   await rebuildFromStore();
   notifyEventsChanged();
+  usbOnEventAppended(getAllEvents, _state?.rally_id).catch(e => console.warn('USB backup write failed:', e));
   return _state;
 }
 
@@ -738,6 +750,12 @@ async function correctLanes(sectionId, heatNumber, correctedLanes, reason) {
   });
 
   renderCurrentScreen();
+}
+
+// ─── USB Backup ──────────────────────────────────────────────────
+
+async function configureUSBBackup() {
+  await configureUSBBackupImpl(getAllEvents, _state?.rally_id);
 }
 
 // ─── Render Helper ───────────────────────────────────────────────
