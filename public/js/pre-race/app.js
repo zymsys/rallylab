@@ -162,6 +162,16 @@ function updateUserInfo() {
     <span class="user-email">${user.email}</span>
   `;
 
+  if (isDemoMode()) {
+    const debugLink = document.createElement('a');
+    debugLink.href = 'debug.html';
+    debugLink.className = 'btn btn-sm btn-ghost';
+    debugLink.style.color = 'rgba(255,255,255,0.5)';
+    debugLink.style.fontSize = '0.75rem';
+    debugLink.textContent = 'Debug View';
+    el.appendChild(debugLink);
+  }
+
   const signOutBtn = document.createElement('button');
   signOutBtn.className = 'btn btn-sm btn-ghost';
   signOutBtn.style.color = 'rgba(255,255,255,0.7)';
