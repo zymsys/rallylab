@@ -117,11 +117,11 @@ export function computeLeaderboard(section) {
 
   // Rank participants
   const entries = Object.values(scores)
-    .filter(s => !s.removed || s.heats_run > 0);
+    .filter(s => !s.removed && s.heats_run > 0);
 
   // Separate complete and incomplete
-  const complete = entries.filter(s => !s.removed && s.heats_run >= expectedHeats);
-  const incomplete = entries.filter(s => s.removed || s.heats_run < expectedHeats);
+  const complete = entries.filter(s => s.heats_run >= expectedHeats);
+  const incomplete = entries.filter(s => s.heats_run < expectedHeats);
 
   // Sort each group by avg time, then best single heat
   const sortByTime = (a, b) => {

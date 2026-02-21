@@ -241,7 +241,7 @@ describe('computeLeaderboard — mixed timed and manual', () => {
 });
 
 describe('computeLeaderboard — removed cars', () => {
-  it('ranks removed participants below complete ones', () => {
+  it('excludes removed participants even if they ran heats', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
       heats: [
@@ -263,16 +263,11 @@ describe('computeLeaderboard — removed cars', () => {
     });
 
     const standings = computeLeaderboard(section);
-    // Alice: 2 heats (complete), Carol: 2 heats (complete), Bob: 1 heat (incomplete)
-    // Alice avg (2800+2700)/2 = 2750, Carol avg (2500+2600)/2 = 2550
+    // Bob excluded entirely despite having fastest time
+    assert.strictEqual(standings.length, 2);
     assert.strictEqual(standings[0].name, 'Carol');
-    assert.strictEqual(standings[0].incomplete, false);
     assert.strictEqual(standings[1].name, 'Alice');
-    assert.strictEqual(standings[1].incomplete, false);
-    // Bob ranked last despite having fastest time
-    assert.strictEqual(standings[2].name, 'Bob');
-    assert.strictEqual(standings[2].incomplete, true);
-    assert.strictEqual(standings[2].avg_time_ms, 2000);
+    assert.ok(standings.every(s => s.name !== 'Bob'));
   });
 
   it('excludes removed participants with zero heats', () => {
@@ -290,25 +285,63 @@ describe('computeLeaderboard — removed cars', () => {
     });
 
     const standings = computeLeaderboard(section);
-    // Bob has 0 heats and is removed — excluded
     assert.strictEqual(standings.length, 1);
     assert.strictEqual(standings[0].name, 'Alice');
   });
 });
 
-describe('computeLeaderboard — edge cases', () => {
-  it('handles empty results', () => {
+describe('computeLeaderboard — participants who never raced', () => {
+  it('excludes registered participants who never checked in', () => {
+    const section = makeSection({
+      participants: [alice, bob, carol],
+      heats: [
+        { heat_number: 1, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' }
+        ]}
+      ],
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2200, '2': 2400 }, timestamp: 100 }
+      }
+    });
+
+    const standings = computeLeaderboard(section);
+    // Carol registered but never scheduled/raced — excluded
+    assert.strictEqual(standings.length, 2);
+    assert.ok(standings.every(s => s.name !== 'Carol'));
+  });
+
+  it('excludes all participants when no heats have run', () => {
     const section = makeSection({
       participants: [alice, bob],
       heats: [],
       results: {}
     });
     const standings = computeLeaderboard(section);
-    // No results → all have 0 heats, no one is "incomplete" per algorithm
-    // All have Infinity avg, so order is stable
-    assert.strictEqual(standings.length, 2);
+    assert.strictEqual(standings.length, 0);
   });
 
+  it('only includes participants with results in a small section', () => {
+    const section = makeSection({
+      participants: [alice, bob, carol],
+      heats: [
+        { heat_number: 1, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' }
+        ]}
+      ],
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500 }, timestamp: 100 }
+      }
+    });
+
+    const standings = computeLeaderboard(section);
+    // Only Alice raced — Bob and Carol excluded even though section is small
+    assert.strictEqual(standings.length, 1);
+    assert.strictEqual(standings[0].name, 'Alice');
+  });
+});
+
+describe('computeLeaderboard — edge cases', () => {
   it('handles single heat', () => {
     const section = makeSection({
       participants: [alice, bob],
