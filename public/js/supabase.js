@@ -61,22 +61,26 @@ export async function signIn(email) {
 }
 
 /**
- * Sign out.
+ * Sign out. Always clears local state so the user can return to the
+ * login screen even when offline or switching between demo/real modes.
  */
 export async function signOut() {
-  if (isDemoMode()) {
-    _session = null;
-    sessionStorage.removeItem(SESSION_KEY);
-    clearMode();
-    _notifyAuth('SIGNED_OUT', null);
-    return { error: null };
-  }
+  const wasReal = getMode() === 'real';
 
-  const client = await getRealClient();
-  const result = await client.auth.signOut();
+  // Always clear local state first — this guarantees the UI transitions
+  // back to login even when the network is unavailable.
+  _session = null;
+  sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(REAL_SESSION_KEY);
   clearMode();
-  return result;
+  _notifyAuth('SIGNED_OUT', null);
+
+  // Best-effort remote sign-out for real mode (non-blocking).
+  if (wasReal && _realClient) {
+    try { await _realClient.auth.signOut(); } catch { /* offline is fine */ }
+  }
+
+  return { error: null };
 }
 
 /**
@@ -98,21 +102,21 @@ export function getUser() {
  * Returns an unsubscribe function.
  */
 export function onAuthChange(callback) {
+  // Always register in _authCallbacks so signOut() can notify via
+  // _notifyAuth regardless of current mode (handles offline sign-out
+  // and mode transitions).
+  _authCallbacks.push(callback);
+
+  if (_session) callback('INITIAL_SESSION', _session);
+  else callback('INITIAL_SESSION', null);
+
   if (getMode() !== 'real') {
-    // No mode chosen yet or demo mode — use mock auth.
-    // Register callback so it fires when signIn/signOut are called later.
-    _authCallbacks.push(callback);
-    if (_session) callback('INITIAL_SESSION', _session);
-    else callback('INITIAL_SESSION', null);
     return () => {
       _authCallbacks = _authCallbacks.filter(cb => cb !== callback);
     };
   }
 
-  // Real mode: fire initial state immediately (like demo mode),
-  // then subscribe for future changes via supabase-js.
-  callback('INITIAL_SESSION', _session);
-
+  // Real mode: also subscribe for server-driven auth changes via supabase-js.
   let unsubFn = null;
   const subscribe = (client) => {
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
@@ -132,7 +136,10 @@ export function onAuthChange(callback) {
     });
   }
 
-  return () => { if (unsubFn) unsubFn(); };
+  return () => {
+    _authCallbacks = _authCallbacks.filter(cb => cb !== callback);
+    if (unsubFn) unsubFn();
+  };
 }
 
 /**
