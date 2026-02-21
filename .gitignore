@@ -11,6 +11,9 @@ old/
 # Dependencies
 node_modules/
 
+# Runtime config (contains Supabase credentials)
+public/config.json
+
 # Scratch
 scratch/
 plans/

@@ -31,7 +31,7 @@ export async function appendEvent(payload) {
 
   // Real mode: insert into Supabase domain_events
   const client = await getClient();
-  const { data, error } = await client
+  const { error } = await client
     .from('domain_events')
     .insert({
       rally_id: payload.rally_id,
@@ -39,12 +39,10 @@ export async function appendEvent(payload) {
       event_type: payload.type,
       payload,
       created_by: user?.id || null
-    })
-    .select()
-    .single();
+    });
 
   if (error) throw new Error(error.message);
-  return data;
+  return payload;
 }
 
 // ─── State Loading ────────────────────────────────────────────────

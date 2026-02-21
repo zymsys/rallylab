@@ -57,9 +57,22 @@ Serve the `public/` directory with any static file server:
 cd public && python3 -m http.server 8080
 ```
 
-Then open http://localhost:8080. The app runs in mock mode by default — no Supabase project needed for development.
+Then open http://localhost:8080. Click "Try Demo" to explore without any setup.
 
-To load demo data, use the "Load Demo Data" option from the pre-race interface.
+### Supabase Setup (for real auth and persistence)
+
+1. Create a [Supabase](https://supabase.com) project
+2. In the Supabase SQL Editor, run the migration:
+   ```
+   supabase/migrations/001_initial_schema.sql
+   ```
+   This creates the `domain_events` and `rally_roles` tables, RLS policies, and triggers. All four triggers must exist **before** any user signs up — Trigger 4 fires on `auth.users` insert and will fail if the tables are missing.
+3. Copy the config file and fill in your project credentials:
+   ```bash
+   cp public/config.example.json public/config.json
+   ```
+   Edit `public/config.json` with your Supabase project URL and anon key (the JWT from Settings → API).
+4. Ensure **Email → Magic Link** is enabled under Authentication → Providers in the Supabase dashboard.
 
 ## Running Tests
 
@@ -129,7 +142,7 @@ The `specs/` folder is the authoritative source of truth for the system design:
 
 ## Status
 
-RallyLab is under active development. The pre-race workflow, race day operator, registrar check-in, audience display, and heat scheduling are functional in mock mode. Supabase integration (auth, persistence, sync) is not yet wired up.
+RallyLab is under active development. The pre-race workflow, race day operator, registrar check-in, audience display, and heat scheduling are functional. Demo mode works without any backend; real mode uses Supabase for auth and persistence.
 
 ## License
 

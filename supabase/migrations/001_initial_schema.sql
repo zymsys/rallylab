@@ -1,9 +1,9 @@
--- RallyLab initial schema
+-- RallyLab initial schema (idempotent — safe to re-run)
 -- See specs/05-pre-race-data.md for full documentation.
 
 -- ─── Domain Events ────────────────────────────────────────────────
 
-CREATE TABLE domain_events (
+CREATE TABLE IF NOT EXISTS domain_events (
   id BIGSERIAL PRIMARY KEY,
   rally_id UUID NOT NULL,
   section_id UUID,
@@ -15,17 +15,17 @@ CREATE TABLE domain_events (
 );
 
 -- Dedup index for race day sync
-CREATE UNIQUE INDEX idx_race_day_dedup
+CREATE UNIQUE INDEX IF NOT EXISTS idx_race_day_dedup
   ON domain_events(rally_id, section_id, client_event_id)
   WHERE client_event_id IS NOT NULL;
 
 -- Lookup index for replaying events
-CREATE INDEX idx_domain_events_lookup
+CREATE INDEX IF NOT EXISTS idx_domain_events_lookup
   ON domain_events(rally_id, section_id);
 
 -- ─── Rally Roles (RLS anchor, trigger-populated) ──────────────────
 
-CREATE TABLE rally_roles (
+CREATE TABLE IF NOT EXISTS rally_roles (
   rally_id UUID NOT NULL,
   user_id UUID NOT NULL REFERENCES auth.users(id),
   role TEXT NOT NULL CHECK (role IN ('organizer', 'operator', 'registrar', 'checkin_volunteer')),
@@ -36,6 +36,16 @@ CREATE TABLE rally_roles (
 -- ─── Row-Level Security ───────────────────────────────────────────
 
 ALTER TABLE domain_events ENABLE ROW LEVEL SECURITY;
+
+-- Drop all existing policies on both tables so we always converge to the correct set
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT policyname FROM pg_policies WHERE tablename = 'domain_events' LOOP
+    EXECUTE format('DROP POLICY %I ON domain_events', r.policyname);
+  END LOOP;
+  FOR r IN SELECT policyname FROM pg_policies WHERE tablename = 'rally_roles' LOOP
+    EXECUTE format('DROP POLICY %I ON rally_roles', r.policyname);
+  END LOOP;
+END $$;
 
 CREATE POLICY "Read own events"
   ON domain_events FOR SELECT
@@ -69,8 +79,9 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+DROP TRIGGER IF EXISTS trg_rally_created ON domain_events;
 CREATE TRIGGER trg_rally_created
   AFTER INSERT ON domain_events
   FOR EACH ROW
@@ -97,8 +108,9 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+DROP TRIGGER IF EXISTS trg_registrar_invited ON domain_events;
 CREATE TRIGGER trg_registrar_invited
   AFTER INSERT ON domain_events
   FOR EACH ROW
@@ -125,8 +137,9 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+DROP TRIGGER IF EXISTS trg_operator_invited ON domain_events;
 CREATE TRIGGER trg_operator_invited
   AFTER INSERT ON domain_events
   FOR EACH ROW
@@ -161,8 +174,9 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+DROP TRIGGER IF EXISTS trg_auth_user_created ON auth.users;
 CREATE TRIGGER trg_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
