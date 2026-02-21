@@ -316,11 +316,15 @@ function groupBySpeed(participants, results, availableLanes) {
 }
 ```
 
-### 7.4 Re-run Impact
+### 7.4 Scheduling Order: Slow-Before-Fast
+
+`groupBySpeed` returns groups sorted fastest-first (ascending average time). Before passing the groups to the greedy heuristic, `generateSchedule()` reverses them so the **slowest group races first** and the **fastest group races last**. This builds audience excitement as the event progresses toward the fastest cars.
+
+### 7.5 Re-run Impact
 
 Only the final accepted time for each heat is used for speed calculation. Superseded results are excluded. This is consistent with the scoring algorithm (see `08-scoring-and-leaderboard.md`).
 
-### 7.5 Manual Rank Results
+### 7.6 Manual Rank Results
 
 When a heat has only a `ResultManuallyEntered` (rank, no times), speed matching uses rank as a speed proxy: `place * 1000` milliseconds (1st = 1000, 2nd = 2000, etc.). This preserves relative ordering without requiring actual times.
 

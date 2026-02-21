@@ -33,7 +33,7 @@ function generateNames(count) {
       names.add(name);
     }
     fi++;
-    if (fi % firsts.length === 0) li++;
+    li++;
     // Safety: if we've exhausted all combos (shouldn't happen for reasonable counts)
     if (fi > firsts.length * lasts.length) break;
   }

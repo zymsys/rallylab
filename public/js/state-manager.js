@@ -13,6 +13,7 @@ export function initialState() {
     sections: {},
     groups: {},
     registrars: {},
+    operators: {},
     checkin_volunteers: {},
     race_day: {
       loaded: false,
@@ -97,6 +98,18 @@ export function applyEvent(state, event) {
       const { [payload.registrar_email]: _, ...remaining } = state.registrars;
       return { ...state, registrars: remaining };
     }
+
+    case 'OperatorInvited':
+      return {
+        ...state,
+        operators: {
+          ...state.operators,
+          [payload.operator_email]: {
+            email: payload.operator_email,
+            invited_by: payload.invited_by
+          }
+        }
+      };
 
     case 'RosterUpdated': {
       const section = state.sections[payload.section_id];

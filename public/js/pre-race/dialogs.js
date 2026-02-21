@@ -339,7 +339,70 @@ export function showInviteRegistrarDialog(rallyId, state, existingEmail, onDone)
   };
 }
 
-// ─── 5. Upload Roster ──────────────────────────────────────────────
+// ─── 5. Invite Operator ─────────────────────────────────────────────
+export function showInviteOperatorDialog(rallyId, existingEmails, onDone) {
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Invite Operator</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="dlg-operator-email">Email</label>
+        <input id="dlg-operator-email" class="form-input" type="email" placeholder="operator@example.com">
+        <div id="dlg-operator-email-error" class="form-error"></div>
+        <p class="form-hint">Operators have full access to all sections on race day. In demo mode, no email is actually sent.</p>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="invite">Send Invitation</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="invite"]').onclick = async () => {
+    const email = d.querySelector('#dlg-operator-email').value.trim().toLowerCase();
+    const emailErr = d.querySelector('#dlg-operator-email-error');
+    emailErr.textContent = '';
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailErr.textContent = 'Enter a valid email address';
+      return;
+    }
+
+    if (existingEmails.includes(email)) {
+      emailErr.textContent = 'This person is already an operator';
+      return;
+    }
+
+    const btn = d.querySelector('[data-action="invite"]');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+      const user = getUser();
+      await appendEvent({
+        type: 'OperatorInvited',
+        rally_id: rallyId,
+        operator_email: email,
+        invited_by: user.email,
+        timestamp: Date.now()
+      });
+      closeDialog();
+      showToast(`Invitation sent to ${email}`, 'success');
+      if (onDone) onDone();
+    } catch (e) {
+      showToast(e.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Send Invitation';
+    }
+  };
+}
+
+// ─── 6. Upload Roster ───────────────────────────────────────────────
 export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onUploaded) {
   const existingCount = groupId
     ? section.participants.filter(p => p.group_id === groupId).length
@@ -495,7 +558,7 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
   };
 }
 
-// ─── 6. Add Participant ────────────────────────────────────────────
+// ─── 7. Add Participant ────────────────────────────────────────────
 export function showAddParticipantDialog(rallyId, sectionId, groupId, section, onAdded) {
   openDialog(`
     <div class="dialog-header">

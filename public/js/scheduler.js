@@ -31,6 +31,7 @@ export function generateSchedule({ participants, available_lanes, results = [], 
     heats = circleMethod(participants, available_lanes);
   } else if (algorithm === 'speed_matched_greedy') {
     const groups = groupBySpeed(participants, results, laneCount);
+    groups.reverse(); // slowest first → builds excitement
     heats = greedyHeuristic(participants, available_lanes, groups);
     speedMatched = true;
   } else {

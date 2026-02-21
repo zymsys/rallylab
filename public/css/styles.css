@@ -746,6 +746,46 @@ tbody tr:hover {
   border-top: 1px solid var(--color-border);
 }
 
+/* ===== Heat History ===== */
+.heat-history {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.heat-history-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+}
+
+.heat-history-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  user-select: none;
+}
+
+.heat-history-summary::-webkit-details-marker {
+  margin-right: 0.25rem;
+}
+
+.heat-history-label {
+  font-weight: 600;
+}
+
+.heat-history-body {
+  padding: 0 0.75rem 0.75rem;
+}
+
+.heat-history-body .lane-number {
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
 /* ===== Lane Table ===== */
 .lane-table .lane-number {
   font-weight: 600;

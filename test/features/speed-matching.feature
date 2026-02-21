@@ -89,6 +89,31 @@ Feature: Speed Matching
     Then no error should be thrown
     And the schedule should be valid
 
+  Scenario: Slow-before-fast — slowest participants race in early heats
+    Given the following participants:
+      | car_number | name    |
+      | 1          | Fast1   |
+      | 2          | Fast2   |
+      | 3          | Fast3   |
+      | 4          | Fast4   |
+      | 5          | Fast5   |
+      | 6          | Fast6   |
+      | 7          | Slow1   |
+      | 8          | Slow2   |
+      | 9          | Slow3   |
+      | 10         | Slow4   |
+      | 11         | Slow5   |
+      | 12         | Slow6   |
+    And a 6-lane track
+    And the following race results:
+      | type          | heat | lane_1_ms | lane_2_ms | lane_3_ms | lane_4_ms | lane_5_ms | lane_6_ms | timestamp | lanes                                                                                                                                                                                |
+      | RaceCompleted | 1    | 2000      | 2100      | 2200      | 2300      | 2400      | 2500      | 1000      | [{"car_number":1},{"car_number":2},{"car_number":3},{"car_number":4},{"car_number":5},{"car_number":6}]       |
+      | RaceCompleted | 2    | 4000      | 4100      | 4200      | 4300      | 4400      | 4500      | 2000      | [{"car_number":7},{"car_number":8},{"car_number":9},{"car_number":10},{"car_number":11},{"car_number":12}]   |
+    When a schedule is generated
+    Then no error should be thrown
+    And the first heats should contain the slowest participants
+    And the last heats should contain the fastest participants
+
   Scenario: Speed matching disabled via option
     Given 10 participants
     And a 6-lane track

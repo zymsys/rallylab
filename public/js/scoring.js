@@ -77,6 +77,7 @@ export function computeLeaderboard(section) {
     scores[p.car_number] = {
       car_number: p.car_number,
       name: p.name,
+      group_id: p.group_id || null,
       times: [],
       heats_run: 0,
       removed: removedSet.has(p.car_number)
@@ -115,13 +116,13 @@ export function computeLeaderboard(section) {
       .map(s => s.heats_run)
   );
 
-  // Rank participants
+  // Rank participants (include removed cars — they keep their prior results, marked incomplete)
   const entries = Object.values(scores)
-    .filter(s => !s.removed && s.heats_run > 0);
+    .filter(s => s.heats_run > 0);
 
-  // Separate complete and incomplete
-  const complete = entries.filter(s => s.heats_run >= expectedHeats);
-  const incomplete = entries.filter(s => s.heats_run < expectedHeats);
+  // Separate complete and incomplete (removed cars are always incomplete)
+  const complete = entries.filter(s => s.heats_run >= expectedHeats && !s.removed);
+  const incomplete = entries.filter(s => s.heats_run < expectedHeats || s.removed);
 
   // Sort each group by avg time, then best single heat
   const sortByTime = (a, b) => {
@@ -146,6 +147,7 @@ export function computeLeaderboard(section) {
       rank: rank++,
       car_number: entry.car_number,
       name: entry.name,
+      group_id: entry.group_id,
       avg_time_ms: Math.round(averageTime(entry.times)),
       best_time_ms: entry.times.length > 0 ? Math.round(Math.min(...entry.times)) : null,
       heats_run: entry.heats_run,
@@ -158,6 +160,7 @@ export function computeLeaderboard(section) {
       rank: rank++,
       car_number: entry.car_number,
       name: entry.name,
+      group_id: entry.group_id,
       avg_time_ms: entry.times.length > 0 ? Math.round(averageTime(entry.times)) : null,
       best_time_ms: entry.times.length > 0 ? Math.round(Math.min(...entry.times)) : null,
       heats_run: entry.heats_run,

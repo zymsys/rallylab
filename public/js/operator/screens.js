@@ -244,9 +244,11 @@ export function renderCheckIn(container, params, ctx) {
 
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
+  const hasGroups = sorted.some(p => p.group_id);
+
   wrap.innerHTML = `
     <table>
-      <thead><tr><th style="width:3rem"></th><th>Car #</th><th>Name</th><th>Status</th></tr></thead>
+      <thead><tr><th style="width:3rem"></th><th>Car #</th><th>Name</th>${hasGroups ? '<th>Group</th>' : ''}<th>Status</th></tr></thead>
       <tbody id="checkin-body"></tbody>
     </table>
   `;
@@ -259,11 +261,14 @@ export function renderCheckIn(container, params, ctx) {
     const tr = document.createElement('tr');
     if (isRemoved) tr.style.opacity = '0.5';
 
+    const gName = groupName(state, p.group_id);
+
     // Set static cells first via innerHTML, then prepend the checkbox td
     // (innerHTML += would destroy programmatic event handlers)
     tr.innerHTML = `
       <td><strong>#${p.car_number}</strong></td>
       <td>${esc(p.name)}</td>
+      ${hasGroups ? `<td>${esc(gName)}</td>` : ''}
       <td>${isRemoved ? '<span class="status-badge status-removed">Removed</span>' :
              isArrived ? '<span class="status-badge status-arrived">Arrived</span>' :
              '<span class="status-badge status-idle">Waiting</span>'}</td>
@@ -399,11 +404,14 @@ export function renderLiveConsole(container, params, ctx) {
     leftPanel.innerHTML = `<h3 class="area-heading">Heat ${currentHeat}</h3>`;
 
     if (currentHeatData) {
+      const gMap = buildGroupMap(sec, state);
+      const heatHasGroups = currentHeatData.lanes.some(l => gMap[l.car_number]);
       const laneTable = document.createElement('div');
       laneTable.className = 'table-wrap';
       let tableHtml = `
         <table class="lane-table">
           <thead><tr><th>Lane</th><th>Car #</th><th>Name</th>`;
+      if (heatHasGroups) tableHtml += '<th>Group</th>';
       if (result && result.type === 'RaceCompleted') {
         tableHtml += '<th>Time</th>';
       }
@@ -422,6 +430,7 @@ export function renderLiveConsole(container, params, ctx) {
             <td class="lane-number">Lane ${lane.lane}</td>
             <td><strong>#${lane.car_number}</strong></td>
             <td>${esc(lane.name)}</td>
+            ${heatHasGroups ? `<td>${esc(gMap[lane.car_number] || '')}</td>` : ''}
             ${timeStr}
           </tr>`;
       }
@@ -451,12 +460,13 @@ export function renderLiveConsole(container, params, ctx) {
   rightPanel.innerHTML = '<h3 class="area-heading">Standings</h3>';
 
   const standings = computeLeaderboard(sec);
+  const standingsHaveGroups = standings.some(s => s.group_id);
   if (standings.length > 0) {
     const sTable = document.createElement('div');
     sTable.className = 'table-wrap';
     let html = `
       <table>
-        <thead><tr><th>#</th><th>Car</th><th>Name</th><th>Avg Time</th></tr></thead>
+        <thead><tr><th>#</th><th>Car</th><th>Name</th>${standingsHaveGroups ? '<th>Group</th>' : ''}<th>Avg Time</th></tr></thead>
         <tbody>`;
     for (const s of standings.slice(0, 10)) {
       html += `
@@ -464,6 +474,7 @@ export function renderLiveConsole(container, params, ctx) {
           <td>${s.rank}</td>
           <td><strong>#${s.car_number}</strong></td>
           <td>${esc(s.name)}</td>
+          ${standingsHaveGroups ? `<td>${esc(groupName(state, s.group_id))}</td>` : ''}
           <td>${s.avg_time_ms != null ? formatTime(s.avg_time_ms) : '—'}</td>
         </tr>`;
     }
@@ -476,6 +487,95 @@ export function renderLiveConsole(container, params, ctx) {
 
   panels.appendChild(rightPanel);
   container.appendChild(panels);
+
+  // ─── Heat History Log ───────────────────────────────────────
+  // Show all past heats (with results, excluding current heat) in reverse order
+  const pastHeats = sec.heats
+    .filter(h => h.heat_number !== currentHeat && sec.results[h.heat_number])
+    .reverse();
+
+  if (pastHeats.length > 0) {
+    const historySection = document.createElement('div');
+    historySection.className = 'heat-history';
+
+    const historyHeading = document.createElement('h3');
+    historyHeading.className = 'area-heading';
+    historyHeading.style.marginBottom = '0.75rem';
+    historyHeading.textContent = 'Heat History';
+    historySection.appendChild(historyHeading);
+
+    const gMap = buildGroupMap(sec, state);
+    const histHasGroups = sec.participants.some(p => p.group_id);
+
+    for (const heat of pastHeats) {
+      const result = sec.results[heat.heat_number];
+      const rerunCount = sec.reruns[heat.heat_number] || 0;
+      const sourceType = result.type === 'RaceCompleted' ? 'Timed' : 'Manual';
+
+      const details = document.createElement('details');
+      details.className = 'heat-history-item';
+
+      // Summary row
+      const summary = document.createElement('summary');
+      summary.className = 'heat-history-summary';
+      let badges = `<span class="source-badge source-${sourceType.toLowerCase()}">${sourceType}</span>`;
+      if (rerunCount > 0) {
+        badges += ` <span class="status-badge status-idle">Rerun x${rerunCount}</span>`;
+      }
+      if (heat.catch_up) {
+        badges += ' <span class="status-badge status-idle">Catch-up</span>';
+      }
+      summary.innerHTML = `
+        <span class="heat-history-label">Heat ${heat.heat_number}</span>
+        ${badges}
+      `;
+      details.appendChild(summary);
+
+      // Expanded content: lane table + correct button
+      const body = document.createElement('div');
+      body.className = 'heat-history-body';
+
+      const sortedLanes = [...heat.lanes].sort((a, b) => a.lane - b.lane);
+      let tHtml = '<div class="table-wrap"><table><thead><tr><th>Lane</th><th>Car #</th><th>Name</th>';
+      if (histHasGroups) tHtml += '<th>Group</th>';
+      if (result.type === 'RaceCompleted') tHtml += '<th>Time</th>';
+      if (result.type === 'ResultManuallyEntered') tHtml += '<th>Place</th>';
+      tHtml += '</tr></thead><tbody>';
+
+      for (const lane of sortedLanes) {
+        tHtml += `<tr>
+          <td class="lane-number">Lane ${lane.lane}</td>
+          <td><strong>#${lane.car_number}</strong></td>
+          <td>${esc(lane.name)}</td>`;
+        if (histHasGroups) {
+          tHtml += `<td>${esc(gMap[lane.car_number] || '')}</td>`;
+        }
+        if (result.type === 'RaceCompleted') {
+          const t = result.times_ms[String(lane.lane)];
+          tHtml += `<td>${t != null ? formatTime(t) : '—'}</td>`;
+        }
+        if (result.type === 'ResultManuallyEntered') {
+          const r = result.rankings.find(r => r.car_number === lane.car_number);
+          tHtml += `<td>${r ? r.place : '—'}</td>`;
+        }
+        tHtml += '</tr>';
+      }
+      tHtml += '</tbody></table></div>';
+      body.innerHTML = tHtml;
+
+      const correctBtn = document.createElement('button');
+      correctBtn.className = 'btn btn-sm btn-secondary';
+      correctBtn.style.marginTop = '0.5rem';
+      correctBtn.textContent = 'Correct Lanes';
+      correctBtn.onclick = () => showCorrectLanesDialog(sectionId, heat.heat_number, sec, ctx);
+      body.appendChild(correctBtn);
+
+      details.appendChild(body);
+      historySection.appendChild(details);
+    }
+
+    container.appendChild(historySection);
+  }
 
   // Controls row (skip when showing resume prompt)
   if (needsResume) return;
@@ -593,6 +693,7 @@ export function renderSectionComplete(container, params, ctx) {
   container.appendChild(header);
 
   const standings = computeLeaderboard(sec);
+  const resultsHaveGroups = standings.some(s => s.group_id);
 
   if (standings.length > 0) {
     const wrap = document.createElement('div');
@@ -600,7 +701,7 @@ export function renderSectionComplete(container, params, ctx) {
     let html = `
       <table>
         <thead><tr>
-          <th>Rank</th><th>Car #</th><th>Name</th><th>Avg Time</th><th>Best Time</th><th>Heats</th>
+          <th>Rank</th><th>Car #</th><th>Name</th>${resultsHaveGroups ? '<th>Group</th>' : ''}<th>Avg Time</th><th>Best Time</th><th>Heats</th>
         </tr></thead>
         <tbody>`;
     for (const s of standings) {
@@ -609,6 +710,7 @@ export function renderSectionComplete(container, params, ctx) {
           <td><strong>${s.rank}</strong></td>
           <td>#${s.car_number}</td>
           <td>${esc(s.name)}</td>
+          ${resultsHaveGroups ? `<td>${esc(groupName(state, s.group_id))}</td>` : ''}
           <td>${s.avg_time_ms != null ? formatTime(s.avg_time_ms) : '—'}</td>
           <td>${s.best_time_ms != null ? formatTime(s.best_time_ms) : '—'}</td>
           <td>${s.heats_run}${s.incomplete ? ' *' : ''}</td>
@@ -635,6 +737,14 @@ export function renderSectionComplete(container, params, ctx) {
 
   homeBtn.onclick = () => navigate('rally-home', {});
   actions.appendChild(homeBtn);
+
+  if (standings.length > 0) {
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn btn-secondary';
+    exportBtn.textContent = 'Export CSV';
+    exportBtn.onclick = () => exportResultsCSV(sec.section_name, standings, state.groups);
+    actions.appendChild(exportBtn);
+  }
 
   // Reveal flow state
   let revealRemaining = standings.length;
@@ -697,6 +807,22 @@ export function renderSectionComplete(container, params, ctx) {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+/** Look up group name for a participant's group_id. Returns '' if no group. */
+function groupName(state, groupId) {
+  if (!groupId) return '';
+  const g = state.groups[groupId];
+  return g ? g.group_name : '';
+}
+
+/** Build car_number → group_name map for a section's participants. */
+function buildGroupMap(sec, state) {
+  const map = {};
+  for (const p of sec.participants) {
+    map[p.car_number] = groupName(state, p.group_id);
+  }
+  return map;
+}
+
 function esc(str) {
   const d = document.createElement('div');
   d.textContent = str || '';
@@ -706,4 +832,40 @@ function esc(str) {
 function formatTime(ms) {
   if (ms == null || !isFinite(ms)) return '—';
   return (ms / 1000).toFixed(3) + 's';
+}
+
+/**
+ * Export section results as a CSV download.
+ * @param {string} sectionName
+ * @param {Array} standings - from computeLeaderboard()
+ */
+function exportResultsCSV(sectionName, standings, groups) {
+  const hasGroups = standings.some(s => s.group_id);
+  const header = hasGroups
+    ? 'Rank,Car #,Name,Group,Avg Time (s),Best Time (s),Heats Run,Complete'
+    : 'Rank,Car #,Name,Avg Time (s),Best Time (s),Heats Run,Complete';
+  const rows = standings.map(s => {
+    const avg = s.avg_time_ms != null ? (s.avg_time_ms / 1000).toFixed(3) : '';
+    const best = s.best_time_ms != null ? (s.best_time_ms / 1000).toFixed(3) : '';
+    const name = s.name.includes(',') ? `"${s.name}"` : s.name;
+    let gName = '';
+    if (hasGroups && s.group_id && groups[s.group_id]) {
+      gName = groups[s.group_id].group_name || '';
+      if (gName.includes(',')) gName = `"${gName}"`;
+    }
+    return hasGroups
+      ? `${s.rank},${s.car_number},${name},${gName},${avg},${best},${s.heats_run},${s.incomplete ? 'No' : 'Yes'}`
+      : `${s.rank},${s.car_number},${name},${avg},${best},${s.heats_run},${s.incomplete ? 'No' : 'Yes'}`;
+  });
+
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sectionName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-results.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

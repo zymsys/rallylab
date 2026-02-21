@@ -327,3 +327,47 @@ Then('participants with no results should be in the slowest group', function () 
   // should appear in later heats (grouped with slowest)
   assert.ok(this.schedule, 'No schedule generated');
 });
+
+Then('the first heats should contain the slowest participants', function () {
+  // Slow participants (cars 7-12) have avg times ~4000-4500ms
+  // With slow-before-fast, they should be in the first group of heats
+  const slowCars = new Set([7, 8, 9, 10, 11, 12]);
+  const laneCount = this.availableLanes.length;
+  // First group gets laneCount heats (6 heats for 6 participants)
+  const firstGroupHeats = this.schedule.heats.slice(0, laneCount);
+  const carsInFirstGroup = new Set();
+  for (const heat of firstGroupHeats) {
+    for (const { car_number } of heat.lanes) {
+      carsInFirstGroup.add(car_number);
+    }
+  }
+  // Every slow car should appear in the first group
+  for (const carNum of slowCars) {
+    assert.ok(
+      carsInFirstGroup.has(carNum),
+      `Slow car ${carNum} expected in first heats but not found`
+    );
+  }
+});
+
+Then('the last heats should contain the fastest participants', function () {
+  // Fast participants (cars 1-6) have avg times ~2000-2500ms
+  // With slow-before-fast, they should be in the last group of heats
+  const fastCars = new Set([1, 2, 3, 4, 5, 6]);
+  const laneCount = this.availableLanes.length;
+  // Last group gets laneCount heats
+  const lastGroupHeats = this.schedule.heats.slice(-laneCount);
+  const carsInLastGroup = new Set();
+  for (const heat of lastGroupHeats) {
+    for (const { car_number } of heat.lanes) {
+      carsInLastGroup.add(car_number);
+    }
+  }
+  // Every fast car should appear in the last group
+  for (const carNum of fastCars) {
+    assert.ok(
+      carsInLastGroup.has(carNum),
+      `Fast car ${carNum} expected in last heats but not found`
+    );
+  }
+});

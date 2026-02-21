@@ -27,6 +27,7 @@ describe('initialState', () => {
     const s = initialState();
     assert.deepStrictEqual(s.groups, {});
     assert.deepStrictEqual(s.registrars, {});
+    assert.deepStrictEqual(s.operators, {});
     assert.deepStrictEqual(s.sections, {});
   });
 });
@@ -113,6 +114,42 @@ describe('RegistrarRemoved', () => {
     }));
     assert.ok(s.registrars['c@d.com']);
     assert.strictEqual(s.registrars['a@b.com'], undefined);
+  });
+});
+
+describe('OperatorInvited', () => {
+  it('adds operator to state', () => {
+    const s = applyEvent(initialState(), makeEvent({
+      type: 'OperatorInvited',
+      rally_id: 'r1',
+      operator_email: 'op@example.com',
+      invited_by: 'org@example.com',
+      timestamp: 1000
+    }));
+    assert.ok(s.operators['op@example.com']);
+    assert.strictEqual(s.operators['op@example.com'].email, 'op@example.com');
+    assert.strictEqual(s.operators['op@example.com'].invited_by, 'org@example.com');
+  });
+
+  it('allows multiple operators', () => {
+    let s = initialState();
+    s = applyEvent(s, makeEvent({
+      type: 'OperatorInvited',
+      rally_id: 'r1',
+      operator_email: 'op1@example.com',
+      invited_by: 'org@example.com',
+      timestamp: 1000
+    }));
+    s = applyEvent(s, makeEvent({
+      type: 'OperatorInvited',
+      rally_id: 'r1',
+      operator_email: 'op2@example.com',
+      invited_by: 'org@example.com',
+      timestamp: 2000
+    }));
+    assert.strictEqual(Object.keys(s.operators).length, 2);
+    assert.ok(s.operators['op1@example.com']);
+    assert.ok(s.operators['op2@example.com']);
   });
 });
 

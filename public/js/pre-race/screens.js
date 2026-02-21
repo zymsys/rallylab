@@ -11,6 +11,7 @@ import {
   showCreateSectionDialog,
   showCreateGroupDialog,
   showInviteRegistrarDialog,
+  showInviteOperatorDialog,
   showUploadRosterDialog,
   showAddParticipantDialog
 } from './dialogs.js';
@@ -177,6 +178,7 @@ export async function renderRallyHome(container, params) {
   const sections = Object.values(state.sections);
   const groups = Object.values(state.groups);
   const registrars = Object.values(state.registrars);
+  const operators = Object.values(state.operators);
   const hasParticipants = sections.some(s => s.participants.length > 0);
 
   container.innerHTML = '';
@@ -225,13 +227,13 @@ export async function renderRallyHome(container, params) {
   }
 
   if (_isOrganizer) {
-    renderOrganizerRallyHome(container, params, state, sections, groups, registrars);
+    renderOrganizerRallyHome(container, params, state, sections, groups, registrars, operators);
   } else {
     renderRegistrarRallyHome(container, params, state, sections, groups);
   }
 }
 
-function renderOrganizerRallyHome(container, params, state, sections, groups, registrars) {
+function renderOrganizerRallyHome(container, params, state, sections, groups, registrars, operators) {
   const { rallyId } = params;
   const refresh = () => renderRallyHome(container, params);
 
@@ -402,6 +404,52 @@ function renderOrganizerRallyHome(container, params, state, sections, groups, re
       removeBtn.onclick = () => confirmRemoveRegistrar(rallyId, reg.email, container, params);
       actionsCell.appendChild(removeBtn);
 
+      tbody.appendChild(tr);
+    }
+  }
+
+  // ── Area 4: Operators ──
+  const opsHeading = document.createElement('div');
+  opsHeading.className = 'toolbar';
+  opsHeading.style.marginTop = '2rem';
+  opsHeading.innerHTML = `
+    <h3 class="area-heading">Operators</h3>
+    <div class="toolbar-actions" id="operator-actions"></div>
+  `;
+  container.appendChild(opsHeading);
+
+  const inviteOpBtn = document.createElement('button');
+  inviteOpBtn.className = 'btn btn-sm btn-primary';
+  inviteOpBtn.textContent = '+ Invite Operator';
+  inviteOpBtn.onclick = () => {
+    const existingEmails = operators.map(o => o.email);
+    showInviteOperatorDialog(rallyId, existingEmails, refresh);
+  };
+  opsHeading.querySelector('#operator-actions').appendChild(inviteOpBtn);
+
+  if (operators.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No additional operators. You are the default operator as the organizer.';
+    container.appendChild(empty);
+  } else {
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    wrap.innerHTML = `
+      <table>
+        <thead><tr><th>Email</th><th>Invited By</th></tr></thead>
+        <tbody id="operators-body"></tbody>
+      </table>
+    `;
+    container.appendChild(wrap);
+
+    const tbody = wrap.querySelector('#operators-body');
+    for (const op of operators) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${esc(op.email)}</td>
+        <td>${esc(op.invited_by || '')}</td>
+      `;
       tbody.appendChild(tr);
     }
   }

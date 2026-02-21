@@ -241,7 +241,7 @@ describe('computeLeaderboard — mixed timed and manual', () => {
 });
 
 describe('computeLeaderboard — removed cars', () => {
-  it('excludes removed participants even if they ran heats', () => {
+  it('includes removed participants as incomplete if they ran heats', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
       heats: [
@@ -263,11 +263,12 @@ describe('computeLeaderboard — removed cars', () => {
     });
 
     const standings = computeLeaderboard(section);
-    // Bob excluded entirely despite having fastest time
-    assert.strictEqual(standings.length, 2);
+    // Bob appears as incomplete, ranked after complete participants
+    assert.strictEqual(standings.length, 3);
     assert.strictEqual(standings[0].name, 'Carol');
     assert.strictEqual(standings[1].name, 'Alice');
-    assert.ok(standings.every(s => s.name !== 'Bob'));
+    assert.strictEqual(standings[2].name, 'Bob');
+    assert.strictEqual(standings[2].incomplete, true);
   });
 
   it('excludes removed participants with zero heats', () => {
