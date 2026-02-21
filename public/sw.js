@@ -75,8 +75,8 @@ self.addEventListener('fetch', event => {
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        // Cache successful responses for app shell and CDN deps
-        if (response.ok && (url.origin === self.location.origin || CDN_DEPS.some(dep => event.request.url.startsWith(dep)))) {
+        // Cache all successful GET responses (Supabase API excluded above)
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone));
         }

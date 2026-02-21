@@ -801,8 +801,12 @@ async function beginSync() {
   if (isDemoMode()) return;
   const user = getUser();
   if (!user) return;
-  const client = await getClient();
-  startSync(client, user.id);
+  try {
+    const client = await getClient();
+    startSync(client, user.id);
+  } catch (e) {
+    console.warn('Sync not available:', e.message);
+  }
 }
 
 // ─── User Info ──────────────────────────────────────────────

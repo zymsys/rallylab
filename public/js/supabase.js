@@ -24,6 +24,7 @@ async function getRealClient() {
 
 // ─── Mock auth state ──────────────────────────────────────────────
 const SESSION_KEY = 'rallylab_session';
+const REAL_SESSION_KEY = 'rallylab_real_session';
 let _session = null;
 let _authCallbacks = [];
 
@@ -73,6 +74,7 @@ export async function signOut() {
 
   const client = await getRealClient();
   const result = await client.auth.signOut();
+  localStorage.removeItem(REAL_SESSION_KEY);
   clearMode();
   return result;
 }
@@ -125,7 +127,9 @@ export function onAuthChange(callback) {
   if (_realClient) {
     subscribe(_realClient);
   } else {
-    getRealClient().then(subscribe);
+    getRealClient().then(subscribe).catch(e => {
+      console.warn('onAuthChange: could not subscribe to real-time auth:', e.message);
+    });
   }
 
   return () => { if (unsubFn) unsubFn(); };
@@ -139,9 +143,18 @@ export async function initAuth() {
 
   if (isDemoMode()) return _session;
 
-  const client = await getRealClient();
-  const { data: { session } } = await client.auth.getSession();
-  _session = session ? { user: session.user } : null;
+  try {
+    const client = await getRealClient();
+    const { data: { session } } = await client.auth.getSession();
+    _session = session ? { user: session.user } : null;
+    if (_session) localStorage.setItem(REAL_SESSION_KEY, JSON.stringify(_session));
+    else localStorage.removeItem(REAL_SESSION_KEY);
+  } catch (e) {
+    // Offline or supabase-js unavailable — use cached session
+    console.warn('initAuth: falling back to cached session:', e.message);
+    try { _session = JSON.parse(localStorage.getItem(REAL_SESSION_KEY)); } catch { /* ignore */ }
+    if (!_session) console.warn('initAuth: no cached session available');
+  }
   return _session;
 }
 
@@ -192,5 +205,6 @@ export async function clearAllData() {
   await clear();
   _session = null;
   sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(REAL_SESSION_KEY);
   clearMode();
 }
