@@ -12,12 +12,12 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-function makeSection({ participants, heats, results, removed = [] }) {
+function makeSection({ participants, results, removed = [], lane_corrections = {} }) {
   return {
     participants,
-    heats,
     results,
     removed,
+    lane_corrections,
     arrived: participants.map(p => p.car_number),
     started: true,
     completed: false,
@@ -35,10 +35,9 @@ describe('getAcceptedResults', () => {
   it('returns all results from section.results map', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [],
       results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500, '2': 2700 }, timestamp: 100 },
-        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2600, '2': 2800 }, timestamp: 200 }
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500, '2': 2700 }, lanes: [], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2600, '2': 2800 }, lanes: [], timestamp: 200 }
       }
     });
     const accepted = getAcceptedResults(section);
@@ -101,24 +100,19 @@ describe('computeLeaderboard — timed heats', () => {
   it('ranks by average time ascending', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
-      heats: [
-        { heat_number: 1, lanes: [
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2000, '2': 2500 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 2, name: 'Bob' }
-        ]},
-        { heat_number: 2, lanes: [
+        ], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2400, '2': 2200 }, lanes: [
           { lane: 1, car_number: 2, name: 'Bob' },
           { lane: 2, car_number: 3, name: 'Carol' }
-        ]},
-        { heat_number: 3, lanes: [
+        ], timestamp: 200 },
+        3: { type: 'RaceCompleted', heat_number: 3, times_ms: { '1': 2300, '2': 2100 }, lanes: [
           { lane: 1, car_number: 3, name: 'Carol' },
           { lane: 2, car_number: 1, name: 'Alice' }
-        ]}
-      ],
-      results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2000, '2': 2500 }, timestamp: 100 },
-        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2400, '2': 2200 }, timestamp: 200 },
-        3: { type: 'RaceCompleted', heat_number: 3, times_ms: { '1': 2300, '2': 2100 }, timestamp: 300 }
+        ], timestamp: 300 }
       }
     });
 
@@ -144,20 +138,16 @@ describe('computeLeaderboard — timed heats', () => {
   it('tie-breaks by best single heat time', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [
-        { heat_number: 1, lanes: [
-          { lane: 1, car_number: 1, name: 'Alice' },
-          { lane: 2, car_number: 2, name: 'Bob' }
-        ]},
-        { heat_number: 2, lanes: [
-          { lane: 1, car_number: 2, name: 'Bob' },
-          { lane: 2, car_number: 1, name: 'Alice' }
-        ]}
-      ],
       results: {
         // Both average to 2500, but Alice has a better best (2400 vs 2450)
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2400, '2': 2450 }, timestamp: 100 },
-        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2550, '2': 2600 }, timestamp: 200 }
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2400, '2': 2450 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' }
+        ], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2550, '2': 2600 }, lanes: [
+          { lane: 1, car_number: 2, name: 'Bob' },
+          { lane: 2, car_number: 1, name: 'Alice' }
+        ], timestamp: 200 }
       }
     });
 
@@ -173,17 +163,15 @@ describe('computeLeaderboard — manual heats', () => {
   it('uses synthetic times for manual rankings', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
-      heats: [
-        { heat_number: 1, lanes: [
-          { lane: 1, car_number: 1, name: 'Alice' },
-          { lane: 2, car_number: 2, name: 'Bob' },
-          { lane: 3, car_number: 3, name: 'Carol' }
-        ]}
-      ],
       results: {
         1: {
           type: 'ResultManuallyEntered',
           heat_number: 1,
+          lanes: [
+            { lane: 1, car_number: 1, name: 'Alice' },
+            { lane: 2, car_number: 2, name: 'Bob' },
+            { lane: 3, car_number: 3, name: 'Carol' }
+          ],
           rankings: [
             { car_number: 2, place: 1 },
             { car_number: 1, place: 2 },
@@ -207,21 +195,18 @@ describe('computeLeaderboard — mixed timed and manual', () => {
   it('blends real and synthetic times', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [
-        { heat_number: 1, lanes: [
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2400, '2': 2600 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 2, name: 'Bob' }
-        ]},
-        { heat_number: 2, lanes: [
-          { lane: 1, car_number: 2, name: 'Bob' },
-          { lane: 2, car_number: 1, name: 'Alice' }
-        ]}
-      ],
-      results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2400, '2': 2600 }, timestamp: 100 },
+        ], timestamp: 100 },
         2: {
           type: 'ResultManuallyEntered',
           heat_number: 2,
+          lanes: [
+            { lane: 1, car_number: 2, name: 'Bob' },
+            { lane: 2, car_number: 1, name: 'Alice' }
+          ],
           rankings: [
             { car_number: 1, place: 1 },
             { car_number: 2, place: 2 }
@@ -244,20 +229,16 @@ describe('computeLeaderboard — removed cars', () => {
   it('includes removed participants as incomplete if they ran heats', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
-      heats: [
-        { heat_number: 1, lanes: [
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2800, '2': 2000, '3': 2500 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 2, name: 'Bob' },
           { lane: 3, car_number: 3, name: 'Carol' }
-        ]},
-        { heat_number: 2, lanes: [
+        ], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2700, '2': 2600 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 3, name: 'Carol' }
-        ]}
-      ],
-      results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2800, '2': 2000, '3': 2500 }, timestamp: 100 },
-        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2700, '2': 2600 }, timestamp: 200 }
+        ], timestamp: 200 }
       },
       removed: [2] // Bob removed after heat 1
     });
@@ -274,13 +255,10 @@ describe('computeLeaderboard — removed cars', () => {
   it('excludes removed participants with zero heats', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [
-        { heat_number: 1, lanes: [
-          { lane: 1, car_number: 1, name: 'Alice' }
-        ]}
-      ],
       results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500 }, timestamp: 100 }
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' }
+        ], timestamp: 100 }
       },
       removed: [2] // Bob removed before any heats
     });
@@ -295,14 +273,11 @@ describe('computeLeaderboard — participants who never raced', () => {
   it('excludes registered participants who never checked in', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
-      heats: [
-        { heat_number: 1, lanes: [
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2200, '2': 2400 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 2, name: 'Bob' }
-        ]}
-      ],
-      results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2200, '2': 2400 }, timestamp: 100 }
+        ], timestamp: 100 }
       }
     });
 
@@ -315,7 +290,6 @@ describe('computeLeaderboard — participants who never raced', () => {
   it('excludes all participants when no heats have run', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [],
       results: {}
     });
     const standings = computeLeaderboard(section);
@@ -325,13 +299,10 @@ describe('computeLeaderboard — participants who never raced', () => {
   it('only includes participants with results in a small section', () => {
     const section = makeSection({
       participants: [alice, bob, carol],
-      heats: [
-        { heat_number: 1, lanes: [
-          { lane: 1, car_number: 1, name: 'Alice' }
-        ]}
-      ],
       results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500 }, timestamp: 100 }
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2500 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' }
+        ], timestamp: 100 }
       }
     });
 
@@ -346,14 +317,11 @@ describe('computeLeaderboard — edge cases', () => {
   it('handles single heat', () => {
     const section = makeSection({
       participants: [alice, bob],
-      heats: [
-        { heat_number: 1, lanes: [
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2200, '2': 2400 }, lanes: [
           { lane: 1, car_number: 1, name: 'Alice' },
           { lane: 2, car_number: 2, name: 'Bob' }
-        ]}
-      ],
-      results: {
-        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2200, '2': 2400 }, timestamp: 100 }
+        ], timestamp: 100 }
       }
     });
 

@@ -1,18 +1,20 @@
 # main.py — Entry point + main polling loop
 #
-# Wires together Engine, GpioManager, and SerialHandler,
-# then runs the main loop forever.
+# Wires together Engine, GpioManager, SerialHandler, and (optionally)
+# WiFiManager + HttpHandler, then runs the main loop forever.
 
 import time
 from engine import Engine
 from gpio_manager import GpioManager
 from serial_handler import SerialHandler
+from wifi_manager import WiFiManager
 
 
 def main():
     engine = Engine()
     gpio = GpioManager()
-    serial = SerialHandler(engine, gpio)
+    wifi = WiFiManager()
+    serial = SerialHandler(engine, gpio, wifi)
 
     # Wire GPIO callbacks -> engine methods
     gpio.on_gate_opened = engine.on_gate_opened
@@ -22,7 +24,14 @@ def main():
     # Sync initial gate state
     engine.set_gate_ready(gpio.is_gate_ready())
 
+    # Try to auto-connect from saved credentials
+    if wifi.auto_connect():
+        print("WiFi connected: %s" % wifi.ip_address)
+
     print("RallyLab Track Controller ready")
+
+    # HTTP server is started lazily once WiFi is connected
+    http = None
 
     while True:
         now = time.ticks_ms()
@@ -30,6 +39,17 @@ def main():
         serial.poll()
         engine.check_timeout(now)
         serial.check_gate_ready()
+
+        # Lazy HTTP server start
+        if http is None and wifi.is_connected():
+            from http_handler import HttpHandler
+            http = HttpHandler(engine, gpio, wifi)
+            http.start()
+            print("HTTP server on %s:%d" % (wifi.ip_address, 80))
+
+        if http:
+            http.poll()
+            http.check_gate_ready()
 
         # Also keep engine's gate_ready in sync with gpio
         engine.set_gate_ready(gpio.is_gate_ready())

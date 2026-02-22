@@ -120,7 +120,7 @@ async function injectAndNavigate(page, raceContext, cfg) {
       import('/js/operator/app.js').then(a => a.navigate('live-console', { sectionId: sid }));
     }, result);
     await page.waitForSelector('.console-header', { timeout: 10000 });
-    await page.getByRole('button', { name: 'Resume Racing' }).click();
+    await page.getByRole('button', { name: /Resume Racing|Resume in Manual Mode/ }).click();
     await page.getByRole('button', { name: /^Run Heat/ }).waitFor({ timeout: 10000 });
   } else {
     await page.evaluate(() => {
@@ -395,13 +395,14 @@ Given('heat {int} completed with car #{int} in lane {int} and car #{int} in lane
     // Record the ACTUAL cars in the first two lanes (the scheduler may not
     // place the exact cars the feature mentions — that's just illustrative).
     const sec = await getSectionState(page);
-    const heat = sec.heats.find(h => h.heat_number === heatNum);
+    const result = sec.results[heatNum];
+    const lanes = (sec.lane_corrections && sec.lane_corrections[heatNum]) || result?.lanes || [];
     raceContext.correctionHeat = heatNum;
     raceContext.actualSwap = {
-      lane1: heat.lanes[0].lane,
-      car1: heat.lanes[0].car_number,
-      lane2: heat.lanes[1].lane,
-      car2: heat.lanes[1].car_number,
+      lane1: lanes[0].lane,
+      car1: lanes[0].car_number,
+      lane2: lanes[1].lane,
+      car2: lanes[1].car_number,
     };
   });
 
@@ -472,7 +473,7 @@ Given('Scout Trucks is racing with lanes {int}, {int}, and {int}',
     }, { sid, lanes });
 
     await page.waitForSelector('.console-header', { timeout: 10000 });
-    await page.getByRole('button', { name: 'Resume Racing' }).click();
+    await page.getByRole('button', { name: /Resume Racing|Resume in Manual Mode/ }).click();
     await page.getByRole('button', { name: /^Run Heat/ }).waitFor({ timeout: 10000 });
     raceContext.availableLanes = lanes;
   });
@@ -499,7 +500,7 @@ Given('Scout Trucks is in the staging state for heat {int}',
     }, { sid, participants: SCOUT_TRUCKS_ROSTER, lanes: defaultLanes });
 
     await page.waitForSelector('.console-header', { timeout: 10000 });
-    await page.getByRole('button', { name: 'Resume Racing' }).click();
+    await page.getByRole('button', { name: /Resume Racing|Resume in Manual Mode/ }).click();
     await page.getByRole('button', { name: /^Run Heat/ }).waitFor({ timeout: 10000 });
     raceContext.checkedIn = SCOUT_TRUCKS_ROSTER.map(p => p.car_number);
     raceContext.availableLanes = defaultLanes;
@@ -572,7 +573,7 @@ Given('section A is started with all cars checked in', async ({ page, raceContex
   }, { sid, lanes });
 
   await page.waitForSelector('.console-header', { timeout: 10000 });
-  await page.getByRole('button', { name: 'Resume Racing' }).click();
+  await page.getByRole('button', { name: /Resume Racing|Resume in Manual Mode/ }).click();
   await page.getByRole('button', { name: /^Run Heat/ }).waitFor({ timeout: 10000 });
 });
 
@@ -678,10 +679,11 @@ When('the operator corrects the lane assignments for heat {int}',
       const app = await import('/js/operator/app.js');
       const state = window.__rallylab.state;
       const sec = state.race_day.sections[sid];
-      const heat = sec.heats.find(h => h.heat_number === heatNum);
-      if (!heat || heat.lanes.length < 2) return;
+      const result = sec.results[heatNum];
+      const lanes = (sec.lane_corrections && sec.lane_corrections[heatNum]) || result?.lanes || [];
+      if (lanes.length < 2) return;
       // Swap first two lanes' car assignments
-      const corrected = heat.lanes.map(l => ({ ...l }));
+      const corrected = lanes.map(l => ({ ...l }));
       const tmp = corrected[0].car_number;
       const tmpName = corrected[0].name;
       corrected[0].car_number = corrected[1].car_number;
@@ -1000,9 +1002,9 @@ Then('car #{int} should now be assigned to lane {int} with time {float}s',
 
     const sec = await getSectionState(page);
     const heatNum = raceContext.correctionHeat;
-    const heat = sec.heats.find(h => h.heat_number === heatNum);
-    expect(heat, `Heat ${heatNum} not found`).toBeTruthy();
-    const lane = heat.lanes.find(l => l.lane === laneNum);
+    const lanes = (sec.lane_corrections && sec.lane_corrections[heatNum]) || sec.results[heatNum]?.lanes || [];
+    expect(lanes.length, `Lanes for heat ${heatNum} not found`).toBeGreaterThan(0);
+    const lane = lanes.find(l => l.lane === laneNum);
     expect(lane, `Lane ${laneNum} not found in heat ${heatNum}`).toBeTruthy();
     expect(lane.car_number).toBe(expectedCar);
   });
@@ -1013,9 +1015,10 @@ Then('the leaderboard should update to reflect the corrected assignments', async
 
 Then('the correction should apply retroactively', async ({ page, raceContext }) => {
   const sec = await getSectionState(page);
-  const heat = sec.heats.find(h => h.heat_number === raceContext.correctionHeat);
-  expect(heat).toBeTruthy();
-  // Just verify the correction event was applied (lanes changed)
+  const heatNum = raceContext.correctionHeat;
+  const correction = sec.lane_corrections && sec.lane_corrections[heatNum];
+  expect(correction, `Lane correction for heat ${heatNum} not found`).toBeTruthy();
+  // Just verify the correction event was applied (lane_corrections populated)
   // The actual swap was done in the When step
 });
 

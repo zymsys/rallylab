@@ -63,12 +63,6 @@ export function computeLeaderboard(section) {
   const acceptedResults = getAcceptedResults(section);
   const avgTime = sectionAverageTime(acceptedResults);
 
-  // Build heat schedule lookup: heat_number → lanes array
-  const heatSchedule = {};
-  for (const heat of section.heats) {
-    heatSchedule[heat.heat_number] = heat.lanes;
-  }
-
   // Compute scores for each participant
   const scores = {};
   const removedSet = new Set(section.removed);
@@ -85,8 +79,10 @@ export function computeLeaderboard(section) {
   }
 
   for (const result of acceptedResults) {
-    const heatLanes = heatSchedule[result.heat_number];
-    if (!heatLanes) continue;
+    // Effective lanes: lane_corrections override result.lanes
+    const heatLanes = (section.lane_corrections && section.lane_corrections[result.heat_number])
+      || result.lanes;
+    if (!heatLanes || heatLanes.length === 0) continue;
 
     if (result.type === 'RaceCompleted' && result.times_ms) {
       for (const assignment of heatLanes) {

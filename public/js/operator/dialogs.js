@@ -40,11 +40,10 @@ function esc(str) {
 
 // ─── Manual Rank Dialog ──────────────────────────────────────────
 
-export function showManualRankDialog(sectionId, heatNumber, section, ctx) {
-  const heat = section.heats.find(h => h.heat_number === heatNumber);
-  if (!heat) return;
+export function showManualRankDialog(sectionId, heatNumber, heatLanes, ctx) {
+  if (!heatLanes || heatLanes.length === 0) return;
 
-  const lanes = [...heat.lanes].sort((a, b) => a.lane - b.lane);
+  const lanes = [...heatLanes].sort((a, b) => a.lane - b.lane);
 
   let laneRows = '';
   for (const lane of lanes) {
@@ -121,6 +120,7 @@ export function showManualRankDialog(sectionId, heatNumber, section, ctx) {
         type: 'ResultManuallyEntered',
         section_id: sectionId,
         heat_number: heatNumber,
+        lanes: heatLanes,
         rankings: rankings.sort((a, b) => a.place - b.place),
         timestamp: Date.now()
       });
@@ -207,11 +207,10 @@ export function showRemoveCarDialog(sectionId, section, ctx) {
 
 // ─── Correct Lanes Dialog ────────────────────────────────────────
 
-export function showCorrectLanesDialog(sectionId, heatNumber, section, ctx) {
-  const heat = section.heats.find(h => h.heat_number === heatNumber);
-  if (!heat) return;
+export function showCorrectLanesDialog(sectionId, heatNumber, heatLanes, ctx) {
+  if (!heatLanes || heatLanes.length === 0) return;
 
-  const lanes = [...heat.lanes].sort((a, b) => a.lane - b.lane);
+  const lanes = [...heatLanes].sort((a, b) => a.lane - b.lane);
   const carsInHeat = lanes.map(l => ({ car_number: l.car_number, name: l.name }));
 
   let laneRows = '';
@@ -552,6 +551,108 @@ export function showRestoreFromUSBDialog(ctx) {
       restoreBtn.textContent = 'Restore Backup';
     }
   };
+}
+
+// ─── Connect Track Dialog ─────────────────────────────────────────
+
+export function showConnectTrackDialog(ctx) {
+  const savedIp = ctx.getSavedTrackIp() || '';
+  const showUsb = ctx.isSerialSupported();
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Connect Track</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="dlg-track-ip">Track Controller IP Address</label>
+        <input id="dlg-track-ip" class="form-input" type="text"
+          placeholder="e.g. 192.168.4.1" value="${esc(savedIp)}">
+        <p class="form-hint">Shown on the Pico serial output when WiFi starts.</p>
+      </div>
+      ${showUsb ? `
+      <div style="text-align:center;margin:1rem 0;color:var(--color-text-muted)">— or —</div>
+      <div class="form-group" style="text-align:center">
+        <button class="btn btn-secondary" data-action="usb">Connect via USB</button>
+        <p class="form-hint" style="margin-top:0.5rem">Plug in the Pico via USB cable — no WiFi needed.</p>
+      </div>
+      ` : ''}
+      <div id="dlg-track-error" class="form-error" style="margin-top:0.5rem"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="connect">Connect</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  const ipInput = d.querySelector('#dlg-track-ip');
+  const errorEl = d.querySelector('#dlg-track-error');
+  const connectBtn = d.querySelector('[data-action="connect"]');
+
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+
+  async function doConnect() {
+    errorEl.textContent = '';
+    const ip = ipInput.value.trim();
+    if (!ip) {
+      errorEl.textContent = 'Enter an IP address';
+      return;
+    }
+
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+
+    try {
+      await ctx.connectWifi(ip);
+      closeDialog();
+      ctx.showToast(`Track connected at ${ip}`, 'success');
+      afterTrackConnect(ctx);
+    } catch (e) {
+      errorEl.textContent = e.message;
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Connect';
+    }
+  }
+
+  connectBtn.onclick = doConnect;
+  ipInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doConnect(); }
+  });
+
+  const usbBtn = d.querySelector('[data-action="usb"]');
+  if (usbBtn) {
+    usbBtn.onclick = async () => {
+      errorEl.textContent = '';
+      usbBtn.disabled = true;
+      usbBtn.textContent = 'Connecting...';
+      try {
+        await ctx.connectSerial();
+        closeDialog();
+        ctx.showToast('Track connected via USB', 'success');
+        afterTrackConnect(ctx);
+      } catch (e) {
+        errorEl.textContent = e.message;
+        usbBtn.disabled = false;
+        usbBtn.textContent = 'Connect via USB';
+      }
+    };
+  }
+}
+
+/**
+ * After a track connects, auto-resume if on live-console with a paused section.
+ */
+function afterTrackConnect(ctx) {
+  const hash = location.hash.replace(/^#/, '');
+  const match = hash.match(/^live-console\/sectionId=([^/]+)/);
+  if (match && !ctx.liveSection) {
+    ctx.resumeSection(match[1]);
+  } else {
+    ctx.renderCurrentScreen();
+  }
 }
 
 // ─── Load Roster Dialog ──────────────────────────────────────────

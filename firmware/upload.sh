@@ -11,7 +11,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Uploading firmware to ${PORT}..."
 
-for f in config.py uuid_gen.py engine.py gpio_manager.py serial_handler.py main.py; do
+for f in config.py uuid_gen.py json_format.py engine.py gpio_manager.py wifi_manager.py serial_handler.py http_handler.py main.py; do
     echo "  ${f}"
     mpremote connect "${PORT}" fs cp "${DIR}/${f}" ":${f}"
 done

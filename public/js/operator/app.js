@@ -6,12 +6,15 @@
 
 import { isDemoMode } from '../config.js';
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
-import { rebuildState, deriveRaceDayPhase, getCurrentHeat } from '../state-manager.js';
+import { rebuildState, deriveRaceDayPhase } from '../state-manager.js';
 import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, generateCatchUpHeats } from '../scheduler.js';
 import {
   connect as trackConnect, waitForRace, waitForGate,
   getInfo as trackInfo, isConnected, isUsingFakeTrack,
-  triggerManualRace, triggerManualGate
+  triggerManualRace, triggerManualGate,
+  connectWifi, disconnectWifi, isUsingWifi, getSavedTrackIp,
+  getTrackMode, getWifiError,
+  connectSerial, disconnectSerial, isUsingSerial, isSerialSupported
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
@@ -54,10 +57,23 @@ function getTrackLaneCount() {
   return trackInfo().lane_count;
 }
 
+/**
+ * Get the current heat number for a section by finding the first
+ * schedule heat without a result. Returns 0 if no schedule or no heats.
+ * @param {string} sectionId
+ * @returns {number}
+ */
+function getLastCompletedHeatNumber(sectionId) {
+  const sec = _state?.race_day.sections[sectionId];
+  if (!sec) return 0;
+  const completedNums = Object.keys(sec.results).map(Number);
+  return completedNums.length > 0 ? Math.max(...completedNums) : 0;
+}
+
 // ─── Module State ────────────────────────────────────────────────
 
 let _state = null;
-let _liveSection = null;  // { sectionId, schedule }
+let _liveSection = null;  // { sectionId, schedule, stagingHeat }
 let _raceAbort = null;     // AbortController for current race loop
 
 // Test bridge — exposes internal state for E2E assertions
@@ -142,15 +158,27 @@ function renderScreen(screenName, params) {
     correctLanes,
     showToast,
     getSchedule: () => _liveSection?.schedule,
+    getStagingHeat: () => _liveSection?.stagingHeat || null,
     getAvailableLanes,
     getTrackLaneCount,
     isUsingFakeTrack,
     triggerManualRace,
     triggerManualGate,
+    connectWifi,
+    disconnectWifi,
+    isUsingWifi,
+    getSavedTrackIp,
+    getTrackMode,
+    getWifiError,
+    connectSerial,
+    disconnectSerial,
+    isUsingSerial,
+    isSerialSupported,
     configureUSBBackup,
     disableUSBBackup,
     isUSBBackupConfigured,
-    isUSBBackupSupported
+    isUSBBackupSupported,
+    renderCurrentScreen
   };
 
   const result = renderFn(container, params, ctx);
@@ -362,23 +390,13 @@ async function reconstructSchedule(sectionId) {
           schedule = { ...schedule, heats: renumbered, metadata: { ...schedule.metadata, total_heats: renumbered.length } };
         }
       }
-    } else if (evt.type === 'HeatStaged') {
-      currentHeat = evt.heat_number;
-      // Track which cars have been in completed heats
-      const heat = sec.heats.find(h => h.heat_number === evt.heat_number);
-      if (heat && sec.results[evt.heat_number]) {
-        for (const lane of heat.lanes) {
-          completedCarNumbers.add(lane.car_number);
-        }
-      }
     } else if (evt.type === 'RaceCompleted' || evt.type === 'ResultManuallyEntered') {
+      currentHeat = evt.heat_number;
       completedResultCount++;
-      // Update completedCarNumbers from the heat's lanes
-      const heat = sec.heats.find(h => h.heat_number === evt.heat_number);
-      if (heat) {
-        for (const lane of heat.lanes) {
-          completedCarNumbers.add(lane.car_number);
-        }
+      // Update completedCarNumbers from the result's lanes
+      const lanes = evt.lanes || [];
+      for (const lane of lanes) {
+        completedCarNumbers.add(lane.car_number);
       }
     }
   }
@@ -452,7 +470,7 @@ async function resumeSection(sectionId) {
     return;
   }
 
-  _liveSection = { sectionId, schedule };
+  _liveSection = { sectionId, schedule, stagingHeat: null };
 
   // Re-render so the resume button is replaced with heat controls
   renderCurrentScreen();
@@ -489,14 +507,8 @@ async function runRaceLoop(sectionId) {
 
       const heat = schedule.heats[heatIdx];
 
-      // Emit HeatStaged
-      await appendAndRebuild({
-        type: 'HeatStaged',
-        section_id: sectionId,
-        heat_number: heat.heat_number,
-        lanes: heat.lanes,
-        timestamp: Date.now()
-      });
+      // Set transient staging state (not persisted)
+      _liveSection.stagingHeat = heat;
 
       // Render staging + broadcast
       renderCurrentScreen();
@@ -507,14 +519,18 @@ async function runRaceLoop(sectionId) {
       // Wait for race (fake track: blocks on gate click; manual: blocks on button)
       const times_ms = await waitForRace(heat.lanes, signal);
 
-      // Emit RaceCompleted
+      // Emit RaceCompleted with lane assignments
       await appendAndRebuild({
         type: 'RaceCompleted',
         section_id: sectionId,
         heat_number: heat.heat_number,
+        lanes: heat.lanes,
         times_ms,
         timestamp: Date.now()
       });
+
+      // Clear staging state after result is recorded
+      _liveSection.stagingHeat = null;
 
       // Render results + broadcast
       renderCurrentScreen();
@@ -553,8 +569,10 @@ function buildResultsForBroadcast(section, heat) {
   const result = section.results[heat.heat_number];
   if (!result) return [];
 
+  const lanes = result.lanes || heat.lanes;
+
   if (result.type === 'RaceCompleted') {
-    return heat.lanes.map(lane => ({
+    return lanes.map(lane => ({
       lane: lane.lane,
       car_number: lane.car_number,
       name: lane.name,
@@ -612,9 +630,9 @@ async function removeCar(sectionId, carNumber, reason) {
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
   if (remaining.length >= 2) {
-    const currentHeat = getCurrentHeat(_state, sectionId);
+    const currentHeatNum = getLastCompletedHeatNumber(sectionId);
     _liveSection.schedule = regenerateAfterRemoval(
-      _liveSection.schedule, remaining, currentHeat, availableLanes
+      _liveSection.schedule, remaining, currentHeatNum, availableLanes
     );
   }
 
@@ -649,14 +667,14 @@ async function changeLanes(sectionId, newLanes, reason) {
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
   if (participants.length >= 2) {
-    const currentHeat = getCurrentHeat(_state, sectionId);
-    const completedHeats = _liveSection?.schedule?.heats.filter(h => h.heat_number <= currentHeat) || [];
+    const currentHeatNum = getLastCompletedHeatNumber(sectionId);
+    const completedHeats = _liveSection?.schedule?.heats.filter(h => h.heat_number <= currentHeatNum) || [];
     const newSchedule = generateSchedule({ participants, available_lanes: newLanes });
 
     // Renumber new heats to continue after completed heats
     const renumberedHeats = newSchedule.heats.map((heat, i) => ({
       ...heat,
-      heat_number: currentHeat + i + 1
+      heat_number: currentHeatNum + i + 1
     }));
 
     _liveSection = {
@@ -692,18 +710,18 @@ export function handleLateArrival(sectionId) {
   const allParticipants = sec.participants
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
-  const currentHeat = getCurrentHeat(_state, sectionId);
+  const currentHeatNum = getLastCompletedHeatNumber(sectionId);
 
   // Regenerate schedule with all current participants
   _liveSection.schedule = regenerateAfterLateArrival(
-    _liveSection.schedule, allParticipants, currentHeat, availableLanes
+    _liveSection.schedule, allParticipants, currentHeatNum, availableLanes
   );
 
   // Detect new participants who missed completed heats and need catch-up runs
   const completedCarNumbers = new Set();
-  for (const heat of sec.heats) {
-    if (sec.results[heat.heat_number]) {
-      for (const lane of heat.lanes) {
+  for (const result of Object.values(sec.results)) {
+    if (result.lanes) {
+      for (const lane of result.lanes) {
         completedCarNumbers.add(lane.car_number);
       }
     }
@@ -723,12 +741,12 @@ export function handleLateArrival(sectionId) {
 
   if (allCatchUpHeats.length > 0) {
     const schedule = _liveSection.schedule;
-    // Split: completed heats (≤ currentHeat) and remaining group heats (> currentHeat)
-    const completed = schedule.heats.filter(h => h.heat_number <= currentHeat);
-    const remaining = schedule.heats.filter(h => h.heat_number > currentHeat);
+    // Split: completed heats (≤ currentHeatNum) and remaining group heats (> currentHeatNum)
+    const completed = schedule.heats.filter(h => h.heat_number <= currentHeatNum);
+    const remaining = schedule.heats.filter(h => h.heat_number > currentHeatNum);
 
     // Renumber: catch-up heats first, then remaining group heats
-    let nextNum = currentHeat + 1;
+    let nextNum = currentHeatNum + 1;
     for (const h of allCatchUpHeats) { h.heat_number = nextNum++; }
     for (const h of remaining) { h.heat_number = nextNum++; }
 
@@ -833,19 +851,44 @@ function updateUserInfo() {
   const el = document.getElementById('user-info');
   const user = getUser();
 
-  const buttons = [
+  const viewWrap = document.createElement('div');
+  viewWrap.className = 'view-menu';
+
+  const viewBtn = document.createElement('button');
+  viewBtn.className = 'btn btn-sm btn-ghost';
+  viewBtn.textContent = 'Open \u25BE';
+  viewWrap.appendChild(viewBtn);
+
+  const menu = document.createElement('div');
+  menu.className = 'view-menu-dropdown';
+  menu.hidden = true;
+
+  const realTrack = getTrackMode() === 'wifi' || getTrackMode() === 'serial';
+  const items = [
+    { label: 'Debug View', href: 'debug.html' },
     { label: 'Registrar', href: 'registrar.html' },
     { label: 'Audience', href: 'audience.html' },
-    { label: 'Fake Track', href: 'fake-track.html' }
+    ...(!realTrack ? [{ label: 'Fake Track', href: 'fake-track.html' }] : []),
+    ...(realTrack ? [{ label: 'Pico Debug', href: 'pico-debug.html' }] : [])
   ];
 
-  for (const { label, href } of buttons) {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-sm btn-ghost';
-    btn.textContent = label;
-    btn.onclick = () => window.open(href);
-    el.appendChild(btn);
+  for (const { label, href } of items) {
+    const a = document.createElement('a');
+    a.className = 'view-menu-item';
+    a.textContent = label;
+    a.href = href;
+    a.target = '_blank';
+    a.onclick = () => { menu.hidden = true; };
+    menu.appendChild(a);
   }
+
+  viewBtn.onclick = () => { menu.hidden = !menu.hidden; };
+  document.addEventListener('click', (e) => {
+    if (!viewWrap.contains(e.target)) menu.hidden = true;
+  });
+
+  viewWrap.appendChild(menu);
+  el.appendChild(viewWrap);
 
   if (user) {
     const email = document.createElement('span');

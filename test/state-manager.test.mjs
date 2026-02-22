@@ -181,9 +181,9 @@ describe('SectionCreated', () => {
     assert.strictEqual(rd.available_lanes, null);
     assert.strictEqual(rd.started, false);
     assert.strictEqual(rd.completed, false);
-    assert.deepStrictEqual(rd.heats, []);
     assert.deepStrictEqual(rd.results, {});
     assert.deepStrictEqual(rd.reruns, {});
+    assert.deepStrictEqual(rd.lane_corrections, {});
   });
 });
 

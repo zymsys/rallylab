@@ -21,7 +21,7 @@ class Engine:
         self.start_ms = None
         self.times_ms = {}            # lane (int) -> elapsed ms
         self.last_race = None         # dict returned by state command, or None
-        self._on_complete = None      # callback(result_dict)
+        self._on_complete = []        # list of callback(result_dict)
         self._gate_ready = True       # tracks physical gate state
 
     # -- gate ready tracking (independent of race state) -------------------
@@ -53,8 +53,12 @@ class Engine:
         self.race_id = uuid4()
         self.start_ms = None
         self.times_ms = {}
-        self._on_complete = on_complete
+        self._on_complete = [on_complete]
         self.phase = ARMED
+
+    def add_listener(self, callback):
+        """Append a completion listener. Only valid while ARMED or RACING."""
+        self._on_complete.append(callback)
 
     def cancel(self):
         """Cancel any active wait (ARMED -> IDLE). Safe to call in any state."""
@@ -62,7 +66,7 @@ class Engine:
             self.phase = IDLE
             self.race_id = None
             self.active_lanes = None
-            self._on_complete = None
+            self._on_complete = []
 
     # -- callbacks from gpio_manager ---------------------------------------
 
@@ -112,7 +116,7 @@ class Engine:
             "times_ms": times,
         }
         self.last_race = result
-        cb = self._on_complete
+        callbacks = self._on_complete
 
         # Reset state
         self.phase = IDLE
@@ -120,7 +124,7 @@ class Engine:
         self.active_lanes = None
         self.start_ms = None
         self.times_ms = {}
-        self._on_complete = None
+        self._on_complete = []
 
-        if cb:
+        for cb in callbacks:
             cb(result)

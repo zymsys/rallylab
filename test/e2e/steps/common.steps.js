@@ -4,7 +4,7 @@ import { Given, When, Then } from './fixtures.js';
 // ─── Navigation ──────────────────────────────────────────────────
 
 Given('I am on the login page', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/registration.html');
   await expect(page.locator('.login-container')).toBeVisible();
 });
 

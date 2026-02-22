@@ -10,12 +10,14 @@ import json
 import select
 import time
 from config import FIRMWARE_VERSION, PROTOCOL_VERSION, LANE_COUNT, DEBOUNCE_MS
+from json_format import pretty
 
 
 class SerialHandler:
-    def __init__(self, engine, gpio):
+    def __init__(self, engine, gpio, wifi=None):
         self._engine = engine
         self._gpio = gpio
+        self._wifi = wifi
         self._buf = ""
         self._poller = select.poll()
         self._poller.register(sys.stdin, select.POLLIN)
@@ -59,6 +61,14 @@ class SerialHandler:
             self._cmd_dbg()
         elif cmd == "dbg_watch":
             self._cmd_dbg_watch()
+        elif cmd == "wifi":
+            self._cmd_wifi()
+        elif cmd == "wifi_scan":
+            self._cmd_wifi_scan()
+        elif cmd == "wifi_setup":
+            self._cmd_wifi_setup(line)
+        elif cmd == "wifi_clear":
+            self._cmd_wifi_clear()
         else:
             self._respond({"error": "unknown command: %s" % cmd})
 
@@ -89,35 +99,7 @@ class SerialHandler:
 
     def _respond(self, obj):
         """Send a pretty-printed JSON response to serial."""
-        print(self._pretty(obj))
-
-    @staticmethod
-    def _pretty(obj, indent=0):
-        """Minimal pretty-printer (MicroPython ujson lacks indent)."""
-        sp = "  " * indent
-        sp1 = "  " * (indent + 1)
-        if obj is None:
-            return "null"
-        if isinstance(obj, bool):
-            return "true" if obj else "false"
-        if isinstance(obj, int):
-            return str(obj)
-        if isinstance(obj, str):
-            return json.dumps(obj)
-        if isinstance(obj, list):
-            if not obj:
-                return "[]"
-            parts = [sp1 + SerialHandler._pretty(v, indent + 1) for v in obj]
-            return "[\n" + ",\n".join(parts) + "\n" + sp + "]"
-        if isinstance(obj, dict):
-            if not obj:
-                return "{}"
-            parts = []
-            for k in sorted(obj.keys(), key=str):
-                v = obj[k]
-                parts.append(sp1 + json.dumps(str(k)) + ": " + SerialHandler._pretty(v, indent + 1))
-            return "{\n" + ",\n".join(parts) + "\n" + sp + "}"
-        return str(obj)
+        print(pretty(obj))
 
     def _respond_null(self):
         """Send null (for state when no race completed)."""
@@ -165,8 +147,11 @@ class SerialHandler:
                 self._respond({"error": "invalid lanes: %s" % lanes})
                 return
 
-        # Arm the engine and enter waiting state
-        self._engine.arm(lanes, self._on_race_complete)
+        # Arm or attach as listener
+        if self._engine.phase in ("ARMED", "RACING"):
+            self._engine.add_listener(self._on_race_complete)
+        else:
+            self._engine.arm(lanes, self._on_race_complete)
         self._waiting = True
         self._wait_type = "race"
 
@@ -182,7 +167,7 @@ class SerialHandler:
         self._wait_type = "gate"
 
     def _cmd_dbg(self):
-        self._respond({
+        result = {
             "controller": {
                 "protocol": PROTOCOL_VERSION,
                 "firmware": FIRMWARE_VERSION,
@@ -199,7 +184,10 @@ class SerialHandler:
                 "active_lanes": sorted(list(self._engine.active_lanes)) if self._engine.active_lanes else None,
                 "gate_ready": self._engine.gate_ready,
             },
-        })
+        }
+        if self._wifi:
+            result["wifi"] = self._wifi.status()
+        self._respond(result)
 
     def _cmd_dbg_watch(self):
         self._gpio.start_watch()
@@ -211,6 +199,54 @@ class SerialHandler:
     def _on_watch_edge(self, info):
         """Called by gpio_manager on every debounced edge during watch."""
         print(json.dumps(info))
+
+    # -- wifi commands -----------------------------------------------------
+
+    def _cmd_wifi(self):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        self._respond(self._wifi.status())
+
+    def _cmd_wifi_scan(self):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        self._respond(self._wifi.scan())
+
+    def _cmd_wifi_setup(self, line):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        # Parse: wifi_setup <SSID> <PASSWORD>
+        # Password may contain spaces/equals, so split positionally
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            self._respond({"error": "usage: wifi_setup <ssid> <password>"})
+            return
+        ssid = parts[1]
+        password = parts[2]
+        self._wifi.save_credentials(ssid, password)
+        ok = self._wifi.connect(ssid, password)
+        if ok:
+            self._respond({
+                "connected": True,
+                "ssid": ssid,
+                "ip": self._wifi.ip_address,
+            })
+        else:
+            self._respond({
+                "connected": False,
+                "error": "connection failed",
+            })
+
+    def _cmd_wifi_clear(self):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        self._wifi.disconnect()
+        self._wifi.clear_credentials()
+        self._respond({"cleared": True})
 
     # -- wait callbacks and cancellation -----------------------------------
 

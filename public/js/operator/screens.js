@@ -5,8 +5,8 @@
  */
 
 import { computeLeaderboard } from '../scoring.js';
-import { deriveRaceDayPhase, getCurrentHeat, getAcceptedResult } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog } from './dialogs.js';
+import { deriveRaceDayPhase, getAcceptedResult } from '../state-manager.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showConnectTrackDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -129,6 +129,64 @@ export function renderRallyHome(container, params, ctx) {
         }
       };
       actionsDiv.appendChild(enableBtn);
+    }
+  }
+
+  // Track Connection controls
+  {
+    const actionsDiv = header.querySelector('#rally-home-actions');
+    const trackMode = ctx.getTrackMode();
+    if (trackMode === 'wifi') {
+      const savedIp = ctx.getSavedTrackIp() || '';
+      const badge = document.createElement('span');
+      badge.className = 'status-badge status-active';
+      badge.textContent = `Track: ${savedIp}`;
+      actionsDiv.appendChild(badge);
+
+      const disconnBtn = document.createElement('button');
+      disconnBtn.className = 'btn btn-sm btn-ghost';
+      disconnBtn.textContent = 'Disconnect';
+      disconnBtn.onclick = () => {
+        ctx.disconnectWifi();
+        navigate('rally-home', {}, { replace: true });
+        showToast('Track disconnected', 'info');
+      };
+      actionsDiv.appendChild(disconnBtn);
+    } else if (trackMode === 'serial') {
+      const badge = document.createElement('span');
+      badge.className = 'status-badge status-active';
+      badge.textContent = 'Track: USB';
+      actionsDiv.appendChild(badge);
+
+      const disconnBtn = document.createElement('button');
+      disconnBtn.className = 'btn btn-sm btn-ghost';
+      disconnBtn.textContent = 'Disconnect';
+      disconnBtn.onclick = () => {
+        ctx.disconnectSerial();
+        navigate('rally-home', {}, { replace: true });
+        showToast('Track disconnected', 'info');
+      };
+      actionsDiv.appendChild(disconnBtn);
+    } else if (trackMode === 'fake') {
+      const badge = document.createElement('span');
+      badge.className = 'status-badge status-active';
+      badge.textContent = 'Fake Track';
+      actionsDiv.appendChild(badge);
+    } else {
+      const connectBtn = document.createElement('button');
+      connectBtn.className = 'btn btn-secondary';
+      connectBtn.textContent = 'Connect Track';
+      connectBtn.onclick = () => showConnectTrackDialog(ctx);
+      actionsDiv.appendChild(connectBtn);
+
+      const savedIp = ctx.getSavedTrackIp();
+      if (savedIp) {
+        const hint = document.createElement('span');
+        hint.className = 'form-hint';
+        hint.style.marginLeft = '0.5rem';
+        hint.textContent = `${savedIp} (offline)`;
+        actionsDiv.appendChild(hint);
+      }
     }
   }
 
@@ -362,10 +420,15 @@ export function renderLiveConsole(container, params, ctx) {
     return;
   }
 
-  const phase = deriveRaceDayPhase(state, sectionId);
-  const currentHeat = getCurrentHeat(state, sectionId);
   const schedule = ctx.getSchedule();
   const totalHeats = schedule ? schedule.heats.length : 0;
+  const stagingHeat = ctx.getStagingHeat();
+  const isStaging = stagingHeat != null;
+
+  // Derive current heat number from staging heat or last result
+  const resultHeatNumbers = Object.keys(sec.results).map(Number);
+  const lastResultHeat = resultHeatNumbers.length > 0 ? Math.max(...resultHeatNumbers) : 0;
+  const currentHeat = isStaging ? stagingHeat.heat_number : lastResultHeat;
 
   // If section is started but no schedule in memory for THIS section → show resume UI
   const isLiveForThisSection = ctx.liveSection?.sectionId === sectionId;
@@ -379,21 +442,29 @@ export function renderLiveConsole(container, params, ctx) {
 
   let stateLabel;
   if (needsResume) stateLabel = 'Paused';
-  else if (phase === 'staging') stateLabel = 'Staging';
-  else if (phase === 'results') stateLabel = 'Results';
-  else if (phase === 'section-complete') stateLabel = 'Complete';
+  else if (isStaging) stateLabel = 'Staging';
+  else if (lastResultHeat > 0) stateLabel = 'Results';
+  else if (sec.completed) stateLabel = 'Complete';
   else stateLabel = 'Ready';
 
   const activeLanes = ctx.getAvailableLanes(sectionId);
   const lanesStr = activeLanes.join(', ');
 
+  const trackMode = ctx.getTrackMode();
+  const trackBadgeLabel = trackMode === 'serial' ? 'Serial Track' : trackMode === 'wifi' ? 'WiFi Track' : trackMode === 'fake' ? 'Fake Track' : 'Manual';
+  const trackBadgeClass = trackMode === 'manual' ? 'status-idle' : 'status-active';
+
   header.innerHTML = `
     <div class="console-title-row">
       <h2 class="screen-title">${esc(sec.section_name)}</h2>
+      <span class="status-badge ${trackBadgeClass}" id="console-track-badge" style="${trackMode === 'manual' ? 'cursor:pointer' : ''}">${trackBadgeLabel}</span>
       <span class="console-state-label">${stateLabel}</span>
     </div>
     <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'} &middot; Lanes: ${lanesStr}</p>
   `;
+  if (trackMode === 'manual') {
+    header.querySelector('#console-track-badge').onclick = () => showConnectTrackDialog(ctx);
+  }
   container.appendChild(header);
 
   // Resume Racing prompt
@@ -403,15 +474,25 @@ export function renderLiveConsole(container, params, ctx) {
     resumeWrap.style.textAlign = 'center';
     resumeWrap.style.padding = '2rem 0';
 
+    const trackReady = trackMode === 'serial' || trackMode === 'wifi' || trackMode === 'fake';
+
     const hint = document.createElement('p');
     hint.className = 'info-line';
     hint.style.marginBottom = '1rem';
-    hint.textContent = 'Race loop is not running. Reconnect to the track and resume to continue.';
+    if (trackReady) {
+      hint.textContent = 'Track connected. Press Resume Racing to continue.';
+    } else {
+      hint.innerHTML = 'Race loop is not running. <a href="#" id="reconnect-link">Reconnect</a> to the track, then resume.';
+      hint.querySelector('#reconnect-link').onclick = (e) => {
+        e.preventDefault();
+        showConnectTrackDialog(ctx);
+      };
+    }
     resumeWrap.appendChild(hint);
 
     const resumeBtn = document.createElement('button');
     resumeBtn.className = 'btn btn-primary';
-    resumeBtn.textContent = 'Resume Racing';
+    resumeBtn.textContent = trackReady ? 'Resume Racing' : 'Resume in Manual Mode';
     resumeBtn.onclick = async () => {
       resumeBtn.disabled = true;
       resumeBtn.textContent = 'Resuming...';
@@ -444,30 +525,31 @@ export function renderLiveConsole(container, params, ctx) {
   leftPanel.className = 'console-panel';
 
   if (currentHeat > 0) {
-    const currentHeatData = sec.heats.find(h => h.heat_number === currentHeat);
     const result = getAcceptedResult(sec, currentHeat);
+    // Lane data: from staging heat (if staging) or from result (if showing results)
+    const currentLanes = isStaging ? stagingHeat.lanes : (result?.lanes || []);
 
     leftPanel.innerHTML = `<h3 class="area-heading">Heat ${currentHeat}</h3>`;
 
-    if (currentHeatData) {
+    if (currentLanes.length > 0) {
       const gMap = buildGroupMap(sec, state);
-      const heatHasGroups = currentHeatData.lanes.some(l => gMap[l.car_number]);
+      const heatHasGroups = currentLanes.some(l => gMap[l.car_number]);
       const laneTable = document.createElement('div');
       laneTable.className = 'table-wrap';
       let tableHtml = `
         <table class="lane-table">
           <thead><tr><th>Lane</th><th>Car #</th><th>Name</th>`;
       if (heatHasGroups) tableHtml += '<th>Group</th>';
-      if (result && result.type === 'RaceCompleted') {
+      if (result && result.type === 'RaceCompleted' && result.times_ms) {
         tableHtml += '<th>Time</th>';
       }
       tableHtml += '</tr></thead><tbody>';
 
-      const sortedLanes = [...currentHeatData.lanes].sort((a, b) => a.lane - b.lane);
+      const sortedLanes = [...currentLanes].sort((a, b) => a.lane - b.lane);
 
       for (const lane of sortedLanes) {
         let timeStr = '';
-        if (result && result.type === 'RaceCompleted') {
+        if (result && result.type === 'RaceCompleted' && result.times_ms) {
           const t = result.times_ms[String(lane.lane)];
           timeStr = `<td>${t != null ? formatTime(t) : '—'}</td>`;
         }
@@ -535,12 +617,12 @@ export function renderLiveConsole(container, params, ctx) {
   container.appendChild(panels);
 
   // ─── Heat History Log ───────────────────────────────────────
-  // Show all past heats (with results, excluding current heat) in reverse order
-  const pastHeats = sec.heats
-    .filter(h => h.heat_number !== currentHeat && sec.results[h.heat_number])
-    .reverse();
+  // Show all past results (excluding current heat) in reverse order
+  const pastResults = Object.values(sec.results)
+    .filter(r => r.heat_number !== currentHeat)
+    .sort((a, b) => b.heat_number - a.heat_number);
 
-  if (pastHeats.length > 0) {
+  if (pastResults.length > 0) {
     const historySection = document.createElement('div');
     historySection.className = 'heat-history';
 
@@ -553,10 +635,15 @@ export function renderLiveConsole(container, params, ctx) {
     const gMap = buildGroupMap(sec, state);
     const histHasGroups = sec.participants.some(p => p.group_id);
 
-    for (const heat of pastHeats) {
-      const result = sec.results[heat.heat_number];
-      const rerunCount = sec.reruns[heat.heat_number] || 0;
+    for (const result of pastResults) {
+      const hn = result.heat_number;
+      const rerunCount = sec.reruns[hn] || 0;
       const sourceType = result.type === 'RaceCompleted' ? 'Timed' : 'Manual';
+      // Effective lanes: lane_corrections override result.lanes
+      const effectiveLanes = sec.lane_corrections[hn] || result.lanes || [];
+      // Get catch_up flag from schedule if available
+      const scheduleHeat = schedule?.heats.find(h => h.heat_number === hn);
+      const isCatchUp = scheduleHeat?.catch_up || false;
 
       const details = document.createElement('details');
       details.className = 'heat-history-item';
@@ -568,11 +655,11 @@ export function renderLiveConsole(container, params, ctx) {
       if (rerunCount > 0) {
         badges += ` <span class="status-badge status-idle">Rerun x${rerunCount}</span>`;
       }
-      if (heat.catch_up) {
+      if (isCatchUp) {
         badges += ' <span class="status-badge status-idle">Catch-up</span>';
       }
       summary.innerHTML = `
-        <span class="heat-history-label">Heat ${heat.heat_number}</span>
+        <span class="heat-history-label">Heat ${hn}</span>
         ${badges}
       `;
       details.appendChild(summary);
@@ -581,7 +668,7 @@ export function renderLiveConsole(container, params, ctx) {
       const body = document.createElement('div');
       body.className = 'heat-history-body';
 
-      const sortedLanes = [...heat.lanes].sort((a, b) => a.lane - b.lane);
+      const sortedLanes = [...effectiveLanes].sort((a, b) => a.lane - b.lane);
       let tHtml = '<div class="table-wrap"><table><thead><tr><th>Lane</th><th>Car #</th><th>Name</th>';
       if (histHasGroups) tHtml += '<th>Group</th>';
       if (result.type === 'RaceCompleted') tHtml += '<th>Time</th>';
@@ -613,7 +700,7 @@ export function renderLiveConsole(container, params, ctx) {
       correctBtn.className = 'btn btn-sm btn-secondary';
       correctBtn.style.marginTop = '0.5rem';
       correctBtn.textContent = 'Correct Lanes';
-      correctBtn.onclick = () => showCorrectLanesDialog(sectionId, heat.heat_number, sec, ctx);
+      correctBtn.onclick = () => showCorrectLanesDialog(sectionId, hn, effectiveLanes, ctx);
       body.appendChild(correctBtn);
 
       details.appendChild(body);
@@ -629,24 +716,25 @@ export function renderLiveConsole(container, params, ctx) {
   const controls = document.createElement('div');
   controls.className = 'console-controls';
 
-  const usingFakeTrack = ctx.isUsingFakeTrack();
+  const usingAutomatedTrack = ctx.isUsingFakeTrack() || ctx.isUsingWifi() || ctx.isUsingSerial();
 
-  // Run Heat button — manual fallback only (fake track uses gate click)
-  if (!usingFakeTrack && currentHeat > 0 && phase === 'staging') {
-    const currentHeatData = sec.heats.find(h => h.heat_number === currentHeat);
+  const isResults = !isStaging && lastResultHeat > 0;
+
+  // Run Heat button — manual fallback only (automated tracks drive the flow)
+  if (!usingAutomatedTrack && currentHeat > 0 && isStaging) {
     const runBtn = document.createElement('button');
     runBtn.className = 'btn btn-primary';
     runBtn.textContent = 'Run Heat ' + currentHeat;
     runBtn.onclick = () => {
       runBtn.disabled = true;
       runBtn.textContent = 'Racing...';
-      if (currentHeatData) ctx.triggerManualRace(currentHeatData.lanes);
+      ctx.triggerManualRace(stagingHeat.lanes);
     };
     controls.appendChild(runBtn);
   }
 
-  // Next Heat button — manual fallback only (fake track uses reset click)
-  if (!usingFakeTrack && currentHeat > 0 && phase === 'results') {
+  // Next Heat button — manual fallback only (automated tracks drive the flow)
+  if (!usingAutomatedTrack && currentHeat > 0 && isResults) {
     const nextBtn = document.createElement('button');
     nextBtn.className = 'btn btn-primary';
     nextBtn.textContent = 'Next Heat';
@@ -659,7 +747,7 @@ export function renderLiveConsole(container, params, ctx) {
   }
 
   // Re-Run button
-  if (currentHeat > 0 && phase === 'results') {
+  if (currentHeat > 0 && isResults) {
     const rerunBtn = document.createElement('button');
     rerunBtn.className = 'btn btn-secondary';
     rerunBtn.textContent = 'Re-Run Heat ' + currentHeat;
@@ -672,20 +760,22 @@ export function renderLiveConsole(container, params, ctx) {
   }
 
   // Correct Lanes button
-  if (currentHeat > 0 && phase === 'results') {
+  if (currentHeat > 0 && isResults) {
+    const lastResult = sec.results[currentHeat];
+    const effectiveLanes = sec.lane_corrections[currentHeat] || lastResult?.lanes || [];
     const correctBtn = document.createElement('button');
     correctBtn.className = 'btn btn-secondary';
     correctBtn.textContent = 'Correct Lanes';
-    correctBtn.onclick = () => showCorrectLanesDialog(sectionId, currentHeat, sec, ctx);
+    correctBtn.onclick = () => showCorrectLanesDialog(sectionId, currentHeat, effectiveLanes, ctx);
     controls.appendChild(correctBtn);
   }
 
   // Manual Rank button
-  if (currentHeat > 0 && phase === 'staging') {
+  if (currentHeat > 0 && isStaging) {
     const manualBtn = document.createElement('button');
     manualBtn.className = 'btn btn-secondary';
     manualBtn.textContent = 'Manual Rank';
-    manualBtn.onclick = () => showManualRankDialog(sectionId, currentHeat, sec, ctx);
+    manualBtn.onclick = () => showManualRankDialog(sectionId, currentHeat, stagingHeat.lanes, ctx);
     controls.appendChild(manualBtn);
   }
 

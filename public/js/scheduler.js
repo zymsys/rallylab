@@ -432,7 +432,7 @@ export function calculateAverageTimes(participants, results) {
     if (result.type === 'RaceCompleted' && result.times_ms) {
       // We need to map lane → car_number from the schedule
       // But results contain times_ms keyed by lane string
-      // The schedule's HeatStaged tells us which car is in which lane
+      // The result's lanes field tells us which car is in which lane
       // For the scheduler, we receive results with lane-keyed times
       // and need to cross-reference with the heat's lane assignments
       // Since we don't have the full schedule context here, results

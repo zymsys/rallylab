@@ -4,7 +4,7 @@ import { test as base, createBdd } from 'playwright-bdd';
 export const test = base.extend({
   page: async ({ page }, use) => {
     // Navigate to base URL first so we have a valid origin for storage APIs
-    await page.goto('/');
+    await page.goto('/registration.html');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
