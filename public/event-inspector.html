@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Inspector — RallyLab</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1.25rem;
+      background: #16162a;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+
+    .toolbar h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      flex: 1;
+    }
+
+    .toolbar button {
+      background: #2a2a4a;
+      color: #ccc;
+      border: 1px solid #3a3a5a;
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .toolbar button:hover { background: #3a3a5a; color: #fff; }
+
+    /* ── Open menu ── */
+    .view-menu { position: relative; }
+    .view-menu-btn {
+      background: #2a2a4a;
+      color: #ccc;
+      border: 1px solid #3a3a5a;
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .view-menu-btn:hover { background: #3a3a5a; color: #fff; }
+    .view-menu-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 0.25rem;
+      background: #252540;
+      border: 1px solid #444;
+      border-radius: 6px;
+      min-width: 10rem;
+      padding: 0.25rem 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 100;
+    }
+    .view-menu-item {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      color: #e0e0e0;
+      text-decoration: none;
+      font-size: 0.8rem;
+    }
+    .view-menu-item:hover { background: rgba(255,255,255,0.08); }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 1.5rem;
+      padding: 0.6rem 1.25rem;
+      background: #1e1e36;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 0.8rem;
+      color: #888;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .stat-value { color: #bbb; font-weight: 600; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.6rem 1.25rem;
+      background: #1e1e36;
+      border-bottom: 1px solid #2a2a4a;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .filter-bar select, .filter-bar input {
+      background: #2a2a4a;
+      color: #ddd;
+      border: 1px solid #3a3a5a;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .filter-bar select { min-width: 160px; }
+    .filter-bar input { flex: 1; min-width: 200px; }
+
+    .filter-bar label {
+      font-size: 0.75rem;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    /* ── Main layout ── */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Event table ── */
+    .table-panel {
+      flex: 1;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    thead { position: sticky; top: 0; z-index: 10; }
+
+    th {
+      background: #22223a;
+      color: #999;
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid #3a3a5a;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #2a2a4a;
+      white-space: nowrap;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    tr { cursor: pointer; }
+    tr:hover td { background: rgba(80, 80, 140, 0.15); }
+    tr.selected td { background: rgba(100, 100, 200, 0.2); }
+
+    .type-badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #2a2a4a;
+      color: #aaa;
+    }
+
+    .type-badge.pre-race { background: #1a3a2e; color: #6ec89b; }
+    .type-badge.race-day { background: #3a2a1a; color: #d4a050; }
+    .type-badge.system { background: #2a2a4a; color: #8888cc; }
+
+    .synced-yes { color: #6ec89b; }
+    .synced-no { color: #cc6666; }
+
+    .mono { font-family: 'SF Mono', Monaco, 'Consolas', monospace; font-size: 0.78rem; color: #999; }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      width: 420px;
+      min-width: 320px;
+      border-left: 1px solid #2a2a4a;
+      background: #16162a;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .detail-panel.hidden { display: none; }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+
+    .detail-header h3 {
+      font-size: 0.85rem;
+      color: #ccc;
+      font-weight: 600;
+    }
+
+    .detail-header button {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.2rem;
+      line-height: 1;
+    }
+    .detail-header button:hover { color: #aaa; }
+
+    .detail-tabs {
+      display: flex;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+
+    .detail-tab {
+      padding: 0.45rem 1rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #777;
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .detail-tab:hover { color: #aaa; }
+    .detail-tab.active { color: #aad; border-bottom-color: #6666aa; }
+
+    .detail-body {
+      flex: 1;
+      overflow: auto;
+      padding: 0.75rem 1rem;
+    }
+
+    .detail-body pre {
+      font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #bbb;
+    }
+
+    /* JSON syntax coloring */
+    .json-key { color: #7eaacc; }
+    .json-string { color: #98c379; }
+    .json-number { color: #d19a66; }
+    .json-bool { color: #c678dd; }
+    .json-null { color: #666; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #555;
+      gap: 0.5rem;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .empty-state .icon { font-size: 2.5rem; opacity: 0.4; }
+    .empty-state p { font-size: 0.9rem; }
+    .empty-state .hint { font-size: 0.8rem; color: #444; }
+
+    /* ── Loading ── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #666;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="view-menu" id="view-menu">
+      <button class="view-menu-btn" id="view-menu-btn">Open &#9662;</button>
+      <div class="view-menu-dropdown" id="view-menu-dropdown" hidden>
+        <a class="view-menu-item" href="operator.html" target="_blank">Operator</a>
+        <a class="view-menu-item" href="debug.html" target="_blank">Debug View</a>
+        <a class="view-menu-item" href="registrar.html" target="_blank">Registrar</a>
+        <a class="view-menu-item" href="audience.html" target="_blank">Audience</a>
+        <a class="view-menu-item" href="pico-debug.html" target="_blank">Pico Debug</a>
+      </div>
+    </div>
+    <h1>Event Inspector</h1>
+    <button id="btn-refresh">Refresh</button>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="stats-bar"></div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Type</label>
+      <select id="filter-type"><option value="">All types</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Rally</label>
+      <select id="filter-rally"><option value="">All rallies</option></select>
+    </div>
+    <input type="search" id="filter-search" placeholder="Search event payload...">
+  </div>
+
+  <!-- Main layout -->
+  <div class="main-layout">
+
+    <!-- Event table -->
+    <div class="table-panel" id="table-panel">
+      <div class="loading" id="loading-msg">Loading events from IndexedDB...</div>
+      <table id="events-table" style="display:none">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Type</th>
+            <th>Rally ID</th>
+            <th>Section ID</th>
+            <th>Timestamp</th>
+            <th>Synced</th>
+          </tr>
+        </thead>
+        <tbody id="events-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-panel hidden" id="detail-panel">
+      <div class="detail-header">
+        <h3 id="detail-title">Event #—</h3>
+        <button id="btn-close-detail" title="Close">&times;</button>
+      </div>
+      <div class="detail-tabs">
+        <button class="detail-tab active" data-tab="payload">Payload</button>
+        <button class="detail-tab" data-tab="replay">Replay to Here</button>
+      </div>
+      <div class="detail-body">
+        <pre id="detail-content"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { openStore, getAllEvents } from './js/event-store.js';
+    import { rebuildState } from './js/state-manager.js';
+
+    // ── State ──
+    let allEvents = [];
+    let filteredEvents = [];
+    let selectedEvent = null;
+    let activeTab = 'payload';
+
+    // ── DOM refs ──
+    const eventsTable = document.getElementById('events-table');
+    const eventsBody = document.getElementById('events-body');
+    const loadingMsg = document.getElementById('loading-msg');
+    const statsBar = document.getElementById('stats-bar');
+    const filterType = document.getElementById('filter-type');
+    const filterRally = document.getElementById('filter-rally');
+    const filterSearch = document.getElementById('filter-search');
+    const detailPanel = document.getElementById('detail-panel');
+    const detailTitle = document.getElementById('detail-title');
+    const detailContent = document.getElementById('detail-content');
+    const tabs = document.querySelectorAll('.detail-tab');
+
+    // ── Pre-race vs race-day classification ──
+    const PRE_RACE_TYPES = new Set([
+      'RallyCreated', 'SectionCreated', 'GroupCreated', 'ParticipantAdded',
+      'ParticipantRemoved', 'RosterUpdated', 'RegistrarInvited',
+      'OperatorInvited', 'CheckInVolunteerInvited'
+    ]);
+    const RACE_DAY_TYPES = new Set([
+      'RaceDayLoaded', 'CarArrived', 'CarUnarrived', 'SectionStarted',
+      'RaceCompleted', 'ResultManuallyEntered', 'RerunDeclared',
+      'CarRemoved', 'LanesChanged', 'SectionCompleted', 'LateArrival'
+    ]);
+
+    function classifyType(type) {
+      if (PRE_RACE_TYPES.has(type)) return 'pre-race';
+      if (RACE_DAY_TYPES.has(type)) return 'race-day';
+      return 'system';
+    }
+
+    // ── Load events ──
+    async function loadEvents() {
+      loadingMsg.style.display = '';
+      eventsTable.style.display = 'none';
+
+      try {
+        await openStore();
+        allEvents = await getAllEvents();
+      } catch (err) {
+        loadingMsg.textContent = 'Failed to open IndexedDB: ' + err.message;
+        return;
+      }
+
+      loadingMsg.style.display = 'none';
+      eventsTable.style.display = '';
+
+      populateFilters();
+      applyFilters();
+      renderStats();
+    }
+
+    // ── Populate filter dropdowns ──
+    function populateFilters() {
+      const types = [...new Set(allEvents.map(e => (e.payload || e).type))].sort();
+      const rallies = [...new Set(allEvents.map(e => e.rally_id).filter(Boolean))];
+
+      filterType.innerHTML = '<option value="">All types (' + types.length + ')</option>';
+      for (const t of types) {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        filterType.appendChild(opt);
+      }
+
+      filterRally.innerHTML = '<option value="">All rallies (' + rallies.length + ')</option>';
+      for (const r of rallies) {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r.substring(0, 8) + '...';
+        filterRally.appendChild(opt);
+      }
+    }
+
+    // ── Stats ──
+    function renderStats() {
+      const types = {};
+      const rallies = new Set();
+      let synced = 0;
+
+      for (const e of allEvents) {
+        const t = (e.payload || e).type;
+        types[t] = (types[t] || 0) + 1;
+        if (e.rally_id) rallies.add(e.rally_id);
+        if (e.synced) synced++;
+      }
+
+      const topTypes = Object.entries(types)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([t, c]) => `${t}: <span class="stat-value">${c}</span>`)
+        .join(' &middot; ');
+
+      statsBar.innerHTML = `
+        <span>Events: <span class="stat-value">${allEvents.length}</span></span>
+        <span>Showing: <span class="stat-value">${filteredEvents.length}</span></span>
+        <span>Rallies: <span class="stat-value">${rallies.size}</span></span>
+        <span>Synced: <span class="stat-value">${synced}/${allEvents.length}</span></span>
+        <span>${topTypes}</span>
+      `;
+    }
+
+    // ── Filtering ──
+    function applyFilters() {
+      const typeVal = filterType.value;
+      const rallyVal = filterRally.value;
+      const searchVal = filterSearch.value.toLowerCase();
+
+      filteredEvents = allEvents.filter(e => {
+        const payload = e.payload || e;
+        if (typeVal && payload.type !== typeVal) return false;
+        if (rallyVal && e.rally_id !== rallyVal) return false;
+        if (searchVal) {
+          const json = JSON.stringify(e).toLowerCase();
+          if (!json.includes(searchVal)) return false;
+        }
+        return true;
+      });
+
+      renderTable();
+      renderStats();
+    }
+
+    filterType.addEventListener('change', applyFilters);
+    filterRally.addEventListener('change', applyFilters);
+    filterSearch.addEventListener('input', applyFilters);
+
+    // ── Render table ──
+    function renderTable() {
+      if (filteredEvents.length === 0) {
+        eventsBody.innerHTML = `<tr><td colspan="6">
+          <div class="empty-state">
+            <div class="icon">&#9744;</div>
+            <p>No events found</p>
+            <div class="hint">${allEvents.length === 0 ? 'Load demo data from the Operator or Registration page first.' : 'Try adjusting your filters.'}</div>
+          </div>
+        </td></tr>`;
+        return;
+      }
+
+      eventsBody.innerHTML = '';
+      for (const event of filteredEvents) {
+        const payload = event.payload || event;
+        const tr = document.createElement('tr');
+        if (selectedEvent && selectedEvent.id === event.id) tr.classList.add('selected');
+        tr.dataset.id = event.id;
+
+        const typeClass = classifyType(payload.type);
+        const ts = event.stored_at ? new Date(event.stored_at) : null;
+        const timeStr = ts ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+        const dateStr = ts ? ts.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+        tr.innerHTML = `
+          <td class="mono">${event.id}</td>
+          <td><span class="type-badge ${typeClass}">${payload.type}</span></td>
+          <td class="mono" title="${event.rally_id || ''}">${event.rally_id ? event.rally_id.substring(0, 8) : '—'}</td>
+          <td class="mono" title="${payload.section_id || ''}">${payload.section_id ? payload.section_id.substring(0, 8) : '—'}</td>
+          <td title="${dateStr}">${timeStr}</td>
+          <td class="${event.synced ? 'synced-yes' : 'synced-no'}">${event.synced ? 'Yes' : 'No'}</td>
+        `;
+
+        tr.addEventListener('click', () => selectEvent(event));
+        eventsBody.appendChild(tr);
+      }
+    }
+
+    // ── Event selection ──
+    function selectEvent(event) {
+      selectedEvent = event;
+      detailPanel.classList.remove('hidden');
+      detailTitle.textContent = `Event #${event.id} — ${(event.payload || event).type}`;
+      activeTab = 'payload';
+      updateTabUI();
+      renderDetail();
+      renderTable(); // re-render for selection highlight
+    }
+
+    document.getElementById('btn-close-detail').addEventListener('click', () => {
+      selectedEvent = null;
+      detailPanel.classList.add('hidden');
+      renderTable();
+    });
+
+    // ── Tabs ──
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        activeTab = tab.dataset.tab;
+        updateTabUI();
+        renderDetail();
+      });
+    });
+
+    function updateTabUI() {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
+    }
+
+    // ── Detail rendering ──
+    function renderDetail() {
+      if (!selectedEvent) return;
+
+      if (activeTab === 'payload') {
+        detailContent.innerHTML = syntaxHighlight(JSON.stringify(selectedEvent, null, 2));
+      } else if (activeTab === 'replay') {
+        renderReplay();
+      }
+    }
+
+    function renderReplay() {
+      const idx = allEvents.findIndex(e => e.id === selectedEvent.id);
+      if (idx < 0) {
+        detailContent.textContent = 'Event not found in full stream.';
+        return;
+      }
+
+      const eventsUpToHere = allEvents.slice(0, idx + 1);
+      try {
+        const state = rebuildState(eventsUpToHere);
+        detailContent.innerHTML =
+          `<span class="json-key">// State after replaying ${eventsUpToHere.length} event${eventsUpToHere.length !== 1 ? 's' : ''}</span>\n` +
+          syntaxHighlight(JSON.stringify(state, null, 2));
+      } catch (err) {
+        detailContent.textContent = 'Replay error: ' + err.message;
+      }
+    }
+
+    // ── JSON syntax highlighting ──
+    function syntaxHighlight(json) {
+      return json.replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|\bnull\b)/g,
+        (match) => {
+          let cls = 'json-number';
+          if (/^"/.test(match)) {
+            cls = /:$/.test(match) ? 'json-key' : 'json-string';
+          } else if (/true|false/.test(match)) {
+            cls = 'json-bool';
+          } else if (/null/.test(match)) {
+            cls = 'json-null';
+          }
+          // Escape HTML entities in the match
+          const escaped = match.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return `<span class="${cls}">${escaped}</span>`;
+        }
+      );
+    }
+
+    // ── Refresh ──
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      selectedEvent = null;
+      detailPanel.classList.add('hidden');
+      loadEvents();
+    });
+
+    // ── Open menu ──
+    const viewMenuBtn = document.getElementById('view-menu-btn');
+    const viewMenuDropdown = document.getElementById('view-menu-dropdown');
+    const viewMenu = document.getElementById('view-menu');
+    viewMenuBtn.addEventListener('click', () => { viewMenuDropdown.hidden = !viewMenuDropdown.hidden; });
+    document.addEventListener('click', (e) => {
+      if (!viewMenu.contains(e.target)) viewMenuDropdown.hidden = true;
+    });
+
+    // ── Init ──
+    loadEvents();
+  </script>
+</body>
+</html>

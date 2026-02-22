@@ -20,7 +20,7 @@ The microcontroller hardware and firmware that:
 - Detects start gate release
 - Detects lane finish events
 - Timestamps finish events
-- Communicates race data to the Race Controller
+- Communicates race data to the Race Controller via USB serial or WiFi HTTP
 
 The Track Controller has no knowledge of Participants, Heats, or competition structure.
 

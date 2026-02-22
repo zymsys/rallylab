@@ -871,7 +871,8 @@ function updateUserInfo() {
     { label: 'Registrar', href: 'registrar.html' },
     { label: 'Audience', href: 'audience.html' },
     ...(!realTrack ? [{ label: 'Fake Track', href: 'fake-track.html' }] : []),
-    ...(realTrack ? [{ label: 'Pico Debug', href: 'pico-debug.html' }] : [])
+    ...(realTrack ? [{ label: 'Pico Debug', href: 'pico-debug.html' }] : []),
+    { label: 'Event Inspector', href: 'event-inspector.html' }
   ];
 
   for (const { label, href } of items) {

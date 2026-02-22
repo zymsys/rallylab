@@ -95,7 +95,7 @@ body {
   top: 100%;
   right: 0;
   margin-top: 0.25rem;
-  background: var(--color-surface, #252540);
+  background: #252540;
   border: 1px solid #444;
   border-radius: 6px;
   min-width: 10rem;

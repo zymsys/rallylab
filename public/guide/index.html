@@ -413,6 +413,7 @@
         <ul class="toc-sections">
           <li><a href="#loading-data" class="toc-section-link">Loading Race Data</a></li>
           <li><a href="#operator-rally-home" class="toc-section-link">Rally Home</a></li>
+          <li><a href="#track-connection" class="toc-section-link">Track Connection</a></li>
           <li><a href="#check-in" class="toc-section-link">Check-In</a></li>
           <li><a href="#starting-section" class="toc-section-link">Starting a Section</a></li>
           <li><a href="#console-staging" class="toc-section-link">Staging</a></li>
@@ -449,6 +450,15 @@
           <li><a href="#pico-connecting" class="toc-section-link">Connecting</a></li>
           <li><a href="#pico-terminal" class="toc-section-link">Terminal</a></li>
           <li><a href="#pico-files" class="toc-section-link">Files</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#event-inspector" class="toc-chapter-link">8. Event Inspector</a>
+        <ul class="toc-sections">
+          <li><a href="#inspector-overview" class="toc-section-link">Overview</a></li>
+          <li><a href="#inspector-columns" class="toc-section-link">Columns &amp; Filters</a></li>
+          <li><a href="#inspector-replay" class="toc-section-link">State Replay</a></li>
         </ul>
       </div>
 
@@ -582,54 +592,66 @@
 
         <div class="guide-section" id="operator-rally-home">
           <h3>3.2 Rally Home</h3>
-          <p>The operator rally home shows all sections with their participant counts, check-in progress, and status. From here you can check in participants, start racing a section, or view the live console for an active section.</p>
+          <p>The operator rally home shows all sections with their participant counts, check-in progress, and status. From here you can check in participants, start racing a section, or view the live console for an active section. The track connection badge in the top-right opens the Track Manager.</p>
           <img src="images/operator-rally-home.png" alt="Operator Rally Home" class="guide-img" loading="lazy">
         </div>
 
+        <div class="guide-section" id="track-connection">
+          <h3>3.3 Track Connection</h3>
+          <p>Click the track badge on the Rally Home or Live Console screen to open the Track Manager dialog. RallyLab supports three ways to connect to a Pico W track controller, plus a manual fallback:</p>
+          <ul>
+            <li><strong>WiFi</strong> &mdash; Enter the Pico's IP address and click Connect WiFi. The controller communicates over HTTP, so no USB cable is needed during the race. The IP is remembered for reconnection.</li>
+            <li><strong>USB</strong> &mdash; Click Connect USB to use Web Serial (Chrome/Edge only). While connected via USB, you can also configure the Pico's WiFi from the Track Manager &mdash; scan for networks, enter a password, and switch to wireless.</li>
+            <li><strong>Fake Track</strong> &mdash; Open the fake track simulator (<code>debug.html</code>) in another tab. It connects automatically via BroadcastChannel for testing without hardware.</li>
+            <li><strong>Manual</strong> &mdash; No track controller. The operator clicks &ldquo;Run Heat&rdquo; and &ldquo;Next Heat&rdquo; buttons to advance through the race, and uses Manual Rank to enter results by hand.</li>
+          </ul>
+          <p>When a track is connected (WiFi, USB, or Fake), gate release and finish times are detected automatically. The connection status is shown as a badge on both the Rally Home and Live Console screens.</p>
+        </div>
+
         <div class="guide-section" id="check-in">
-          <h3>3.3 Check-In</h3>
+          <h3>3.4 Check-In</h3>
           <p>The check-in screen shows all participants in a section with checkboxes to mark their arrival. Once at least 2 participants are checked in, the "Start This Section" button becomes available.</p>
           <img src="images/operator-check-in.png" alt="Check-In Screen" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="starting-section">
-          <h3>3.4 Starting a Section</h3>
+          <h3>3.5 Starting a Section</h3>
           <p>The Start Section dialog lets you choose which lanes to use. Uncheck any lanes that are unavailable (e.g., broken sensor). The schedule is automatically generated based on available lanes and checked-in participants.</p>
           <img src="images/operator-dlg-start-section.png" alt="Start Section Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="console-staging">
-          <h3>3.5 Live Console &mdash; Staging</h3>
-          <p>During staging, the live console shows the current heat assignment with lane numbers, car numbers, and participant names. The "Run Heat" button triggers the race (in manual mode) or the system waits for the track controller to detect the start gate release.</p>
+          <h3>3.6 Live Console &mdash; Staging</h3>
+          <p>During staging, the live console shows the current heat assignment with lane numbers, car numbers, and participant names. With a connected track, the system automatically detects the start gate release. In manual mode, click &ldquo;Run Heat&rdquo; to advance.</p>
           <img src="images/operator-live-console-staging.png" alt="Live Console — Staging" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="console-results">
-          <h3>3.6 Live Console &mdash; Results</h3>
+          <h3>3.7 Live Console &mdash; Results</h3>
           <p>After a heat completes, the results panel shows finish times for each lane. The standings panel on the right updates with cumulative average times. Click "Next Heat" to advance to the next heat, or "Re-Run" if there was an issue.</p>
           <img src="images/operator-live-console-results.png" alt="Live Console — Results" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="manual-rank">
-          <h3>3.7 Manual Rank</h3>
+          <h3>3.8 Manual Rank</h3>
           <p>If the timing system fails for a heat, use Manual Rank to enter finish positions by hand. Assign a place (1st, 2nd, etc.) or DNF to each lane.</p>
           <img src="images/operator-dlg-manual-rank.png" alt="Manual Rank Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="remove-car">
-          <h3>3.8 Remove Car</h3>
+          <h3>3.9 Remove Car</h3>
           <p>Remove a car from the remaining heats if it is destroyed, disqualified, or withdrawn. Completed heat results are preserved. The schedule is regenerated for remaining heats.</p>
           <img src="images/operator-dlg-remove-car.png" alt="Remove Car Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="change-lanes">
-          <h3>3.9 Change Lanes</h3>
+          <h3>3.10 Change Lanes</h3>
           <p>Change which lanes are active mid-race (e.g., if a lane sensor breaks). The schedule is regenerated for remaining heats using the new lane configuration.</p>
           <img src="images/operator-dlg-change-lanes.png" alt="Change Lanes Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="section-complete">
-          <h3>3.10 Section Complete / Final Results</h3>
+          <h3>3.11 Section Complete / Final Results</h3>
           <p>When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count. Results can be exported to CSV or sent to the audience display for a dramatic progressive reveal.</p>
           <img src="images/operator-section-complete.png" alt="Section Complete" class="guide-img" loading="lazy">
         </div>
@@ -739,6 +761,40 @@
       <hr class="chapter-sep">
 
       <!-- ============================================ -->
+      <!-- Chapter 8: Event Inspector                    -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="event-inspector">
+        <h2>Chapter 8: Event Inspector</h2>
+        <p class="chapter-intro">A developer tool for inspecting the raw event stream stored in IndexedDB. Useful for debugging state issues, verifying event ordering, and understanding how state is derived from events.</p>
+
+        <div class="guide-section" id="inspector-overview">
+          <h3>8.1 Overview</h3>
+          <p>Open the Event Inspector at <code><a href="../event-inspector.html">event-inspector.html</a></code>. It reads all domain events from IndexedDB and displays them in a sortable, filterable table. You need to have loaded data first &mdash; either demo data from the Operator console, or real rally data from Registration.</p>
+        </div>
+
+        <div class="guide-section" id="inspector-columns">
+          <h3>8.2 Columns &amp; Filters</h3>
+          <p>The event table shows these columns:</p>
+          <ul>
+            <li><strong>#</strong> &mdash; Auto-incremented IndexedDB ID (insertion order)</li>
+            <li><strong>Type</strong> &mdash; Domain event type (e.g., RallyCreated, RaceCompleted). Color-coded: green for pre-race events, amber for race-day events</li>
+            <li><strong>Rally ID</strong> &mdash; Truncated rally UUID. Hover to see the full ID</li>
+            <li><strong>Section ID</strong> &mdash; Truncated section UUID, if the event is section-scoped</li>
+            <li><strong>Timestamp</strong> &mdash; When the event was stored locally</li>
+            <li><strong>Synced</strong> &mdash; Whether the event has been synced to Supabase</li>
+          </ul>
+          <p>Use the filter bar to narrow results by event type, rally, or free-text search across the full JSON payload. The stats bar updates to show the filtered count and type breakdown.</p>
+        </div>
+
+        <div class="guide-section" id="inspector-replay">
+          <h3>8.3 State Replay</h3>
+          <p>Click any event row to open the detail panel. The <strong>Payload</strong> tab shows the full event as formatted, syntax-highlighted JSON. Switch to the <strong>Replay to Here</strong> tab to see the application state that results from replaying all events up to and including the selected one. This uses the same <code>rebuildState()</code> function that powers the Operator console, so the output matches what the application sees.</p>
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
       <!-- Appendix A: Domain Language Reference         -->
       <!-- ============================================ -->
       <section class="guide-chapter" id="appendix">
@@ -759,7 +815,7 @@
           <p>The Track contains no software intelligence.</p>
 
           <h4>Track Controller</h4>
-          <p>The microcontroller hardware and firmware that reads Track switches, detects start gate release and lane finish events, timestamps finish events, and communicates race data to the Race Controller. The Track Controller has no knowledge of Participants, Heats, or competition structure.</p>
+          <p>The microcontroller hardware and firmware that reads Track switches, detects start gate release and lane finish events, timestamps finish events, and communicates race data to the Race Controller via USB serial or WiFi HTTP. The Track Controller has no knowledge of Participants, Heats, or competition structure.</p>
 
           <h4>Race Controller</h4>
           <p>The computer running race management software. Hosts the web server, Operator Display, and Audience Display. Stores race results and manages competition structure (Heats, Participants, Rally).</p>
