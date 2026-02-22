@@ -302,6 +302,46 @@ Debug is read-only and may evolve. Intended for wiring, sensor, and state-machin
 
 ---
 
+### 4.7 `dbg_watch` (Live Edge Monitor)
+
+Stream every debounced edge as it happens. Intended for verifying wiring — press each button or sensor one at a time and confirm the correct label appears.
+
+#### HTTP
+
+Not available (streaming is not compatible with HTTP GET).
+
+#### Serial
+
+`dbg_watch`
+
+#### Behavior
+
+- Immediately prints `{ "watching": true }`.
+- On each debounced edge (gate or lane), prints a single-line JSON object.
+- **Cancel rule applies:** any typed line stops the watch (no closing message), then dispatches as the next command.
+
+#### Output (one line per edge)
+
+Gate edge:
+
+```json
+{ "pin": "gate", "edge": "opened", "ms": 4523 }
+```
+
+```json
+{ "pin": "gate", "edge": "closed", "ms": 4801 }
+```
+
+Lane edge (falling edge only — car arrival):
+
+```json
+{ "pin": "lane", "lane": 3, "edge": "triggered", "ms": 5190 }
+```
+
+The `ms` value is uptime (same as `dbg` controller `uptime_ms`).
+
+---
+
 ## 5. Implementation Notes (Non-Normative)
 
 - Consider limiting concurrent HTTP `/wait` clients to a small fixed number (e.g., 8 or 16) to protect RAM. If exceeded, return:
