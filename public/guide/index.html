@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RallyLab User Guide</title>
+  <meta name="description" content="Complete user guide for RallyLab pinewood derby race management — registration, operator console, audience display, and more.">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1a1a2e;
+      --cream: #faf6f0;
+      --cream-dark: #f0e8dc;
+      --amber: #c77d1a;
+      --amber-light: #d4a017;
+      --green: #2d6a4f;
+      --text: #1a1a2e;
+      --text-muted: #5a5670;
+      --border: #e2ddd4;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+      --sidebar-w: 260px;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      line-height: 1.7;
+      background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Top nav ===== */
+    .guide-topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1.5rem;
+      background: rgba(26, 26, 46, 0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .topnav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .topnav-logo {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .topnav-sep {
+      color: rgba(255, 255, 255, 0.2);
+      font-weight: 300;
+    }
+
+    .topnav-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .topnav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .topnav-link {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+      transition: color 150ms;
+    }
+    .topnav-link:hover { color: #fff; }
+
+    .topnav-cta {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--amber-light);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 150ms;
+    }
+    .topnav-cta:hover { background: #e6b422; }
+
+    /* Mobile menu toggle */
+    .toc-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 0.2rem;
+      line-height: 1;
+    }
+
+    /* ===== Layout ===== */
+    .guide-layout {
+      display: flex;
+      padding-top: 3.25rem;
+      min-height: 100vh;
+    }
+
+    /* ===== Sidebar TOC ===== */
+    .guide-sidebar {
+      position: fixed;
+      top: 3.25rem;
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--cream);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 1.5rem 0;
+      z-index: 100;
+    }
+
+    .toc-label {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--amber);
+      padding: 0 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .toc-chapter {
+      margin-bottom: 0.25rem;
+    }
+
+    .toc-chapter-link {
+      display: block;
+      padding: 0.4rem 1.25rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      transition: background 100ms, color 100ms;
+      border-left: 3px solid transparent;
+    }
+    .toc-chapter-link:hover {
+      background: rgba(0, 0, 0, 0.03);
+    }
+    .toc-chapter-link.active {
+      color: var(--amber);
+      border-left-color: var(--amber);
+      background: rgba(199, 125, 26, 0.06);
+    }
+
+    .toc-sections {
+      list-style: none;
+    }
+
+    .toc-section-link {
+      display: block;
+      padding: 0.25rem 1.25rem 0.25rem 2rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 100ms;
+    }
+    .toc-section-link:hover {
+      color: var(--text);
+    }
+
+    /* ===== Main content ===== */
+    .guide-main {
+      flex: 1;
+      margin-left: var(--sidebar-w);
+      max-width: 780px;
+      padding: 2.5rem 3rem 4rem;
+    }
+
+    .guide-hero {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .guide-hero h1 {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    /* Chapter headings */
+    .guide-chapter {
+      margin-bottom: 3rem;
+    }
+
+    .guide-chapter > h2 {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      padding-top: 1rem;
+    }
+
+    .guide-chapter > .chapter-intro {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+      font-style: italic;
+    }
+
+    /* Section headings */
+    .guide-section {
+      margin-bottom: 2.5rem;
+    }
+
+    .guide-section h3 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.6rem;
+      color: var(--text);
+    }
+
+    .guide-section p {
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    /* Images */
+    .guide-img {
+      display: block;
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+      margin: 1rem 0 0.25rem;
+    }
+
+    .guide-img-caption {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+
+    /* Lists (for appendix) */
+    .guide-section ul, .guide-section ol {
+      margin: 0.5rem 0 1rem 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .guide-section li {
+      margin-bottom: 0.25rem;
+    }
+
+    /* Definition-style entries for appendix */
+    .guide-section h4 {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    /* Separator between chapters */
+    .chapter-sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 0 2rem;
+    }
+
+    /* ===== Footer ===== */
+    .guide-footer {
+      margin-left: var(--sidebar-w);
+      padding: 1.5rem 3rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .guide-footer a {
+      color: var(--amber);
+      text-decoration: none;
+    }
+    .guide-footer a:hover { text-decoration: underline; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) {
+      :root { --sidebar-w: 0px; }
+
+      .guide-sidebar {
+        transform: translateX(-100%);
+        transition: transform 250ms ease;
+        width: 280px;
+        z-index: 150;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+      }
+
+      .guide-sidebar.open {
+        transform: translateX(0);
+      }
+
+      .toc-toggle { display: block; }
+
+      .guide-main {
+        margin-left: 0;
+        padding: 2rem 1.5rem 3rem;
+      }
+
+      .guide-footer {
+        margin-left: 0;
+        padding: 1.5rem;
+      }
+
+      .topnav-title { display: none; }
+      .topnav-sep { display: none; }
+    }
+
+    /* Sidebar backdrop on mobile */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.3);
+      z-index: 140;
+    }
+    .sidebar-backdrop.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top nav -->
+  <nav class="guide-topnav">
+    <div class="topnav-left">
+      <button class="toc-toggle" id="toc-toggle" aria-label="Toggle table of contents">&#9776;</button>
+      <a href="../" class="topnav-logo">RallyLab</a>
+      <span class="topnav-sep">/</span>
+      <span class="topnav-title">User Guide</span>
+    </div>
+    <div class="topnav-links">
+      <a href="../" class="topnav-link">Home</a>
+      <a href="../registration.html" class="topnav-cta">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Mobile backdrop -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <div class="guide-layout">
+
+    <!-- Sidebar TOC -->
+    <aside class="guide-sidebar" id="guide-sidebar">
+      <div class="toc-label">User Guide</div>
+
+      <div class="toc-chapter">
+        <a href="#getting-started" class="toc-chapter-link">1. Getting Started</a>
+        <ul class="toc-sections">
+          <li><a href="#login-screen" class="toc-section-link">Login Screen</a></li>
+          <li><a href="#demo-mode" class="toc-section-link">Demo Mode</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#pre-race" class="toc-chapter-link">2. Pre-Race Registration</a>
+        <ul class="toc-sections">
+          <li><a href="#rally-list" class="toc-section-link">Rally List</a></li>
+          <li><a href="#rally-home" class="toc-section-link">Rally Home</a></li>
+          <li><a href="#section-detail" class="toc-section-link">Section Detail</a></li>
+          <li><a href="#creating-rally" class="toc-section-link">Creating a Rally</a></li>
+          <li><a href="#adding-sections" class="toc-section-link">Adding Sections</a></li>
+          <li><a href="#adding-groups" class="toc-section-link">Adding Groups</a></li>
+          <li><a href="#uploading-roster" class="toc-section-link">Uploading a Roster</a></li>
+          <li><a href="#adding-participant" class="toc-section-link">Adding a Participant</a></li>
+          <li><a href="#inviting-registrar" class="toc-section-link">Inviting a Registrar</a></li>
+          <li><a href="#inviting-operator" class="toc-section-link">Inviting an Operator</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#operator" class="toc-chapter-link">3. Operator Console</a>
+        <ul class="toc-sections">
+          <li><a href="#loading-data" class="toc-section-link">Loading Race Data</a></li>
+          <li><a href="#operator-rally-home" class="toc-section-link">Rally Home</a></li>
+          <li><a href="#check-in" class="toc-section-link">Check-In</a></li>
+          <li><a href="#starting-section" class="toc-section-link">Starting a Section</a></li>
+          <li><a href="#console-staging" class="toc-section-link">Staging</a></li>
+          <li><a href="#console-results" class="toc-section-link">Results</a></li>
+          <li><a href="#manual-rank" class="toc-section-link">Manual Rank</a></li>
+          <li><a href="#remove-car" class="toc-section-link">Remove Car</a></li>
+          <li><a href="#change-lanes" class="toc-section-link">Change Lanes</a></li>
+          <li><a href="#section-complete" class="toc-section-link">Section Complete</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#registrar" class="toc-chapter-link">4. Registrar</a>
+        <ul class="toc-sections">
+          <li><a href="#registrar-section-list" class="toc-section-link">Section List</a></li>
+          <li><a href="#registrar-check-in" class="toc-section-link">Section Check-In</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#audience" class="toc-chapter-link">5. Audience Display</a>
+        <ul class="toc-sections">
+          <li><a href="#audience-welcome" class="toc-section-link">Welcome</a></li>
+          <li><a href="#audience-staging" class="toc-section-link">Heat Staging</a></li>
+          <li><a href="#audience-results" class="toc-section-link">Heat Results</a></li>
+          <li><a href="#audience-leaderboard" class="toc-section-link">Leaderboard</a></li>
+          <li><a href="#audience-complete" class="toc-section-link">Section Complete</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#pico-debug" class="toc-chapter-link">7. Pico Debug Console</a>
+        <ul class="toc-sections">
+          <li><a href="#pico-connecting" class="toc-section-link">Connecting</a></li>
+          <li><a href="#pico-terminal" class="toc-section-link">Terminal</a></li>
+          <li><a href="#pico-files" class="toc-section-link">Files</a></li>
+        </ul>
+      </div>
+
+      <div class="toc-chapter">
+        <a href="#appendix" class="toc-chapter-link">A. Domain Language</a>
+        <ul class="toc-sections">
+          <li><a href="#system-layers" class="toc-section-link">System Layers</a></li>
+          <li><a href="#human-roles" class="toc-section-link">Human Roles</a></li>
+          <li><a href="#ui-surfaces" class="toc-section-link">UI Surfaces</a></li>
+          <li><a href="#race-lifecycle" class="toc-section-link">Race Lifecycle</a></li>
+          <li><a href="#competition-structure" class="toc-section-link">Competition Structure</a></li>
+          <li><a href="#design-boundary" class="toc-section-link">Design Boundary</a></li>
+          <li><a href="#operational-modes" class="toc-section-link">Operational Modes</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="guide-main">
+
+      <div class="guide-hero">
+        <h1>RallyLab User Guide</h1>
+        <p>Everything you need to set up and run a pinewood derby with RallyLab.</p>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- Chapter 1: Getting Started                   -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="getting-started">
+        <h2>Chapter 1: Getting Started</h2>
+
+        <div class="guide-section" id="login-screen">
+          <h3>1.1 Login Screen</h3>
+          <p>The login screen is the entry point to RallyLab. You can sign in with your email using a magic link, or try the demo mode to explore all features with sample data.</p>
+          <img src="images/pre-race-login.png" alt="Login Screen" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="demo-mode">
+          <h3>1.2 Demo Mode</h3>
+          <p>Click "Try Demo" to load sample rally data and explore all features without signing in. Demo mode creates a sample rally with three sections (Beaver Buggies, Kub Kars, Scout Trucks), groups, and participant rosters.</p>
+          <img src="images/pre-race-rally-list.png" alt="Demo Mode — Rally List" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Chapter 2: Pre-Race Registration             -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="pre-race">
+        <h2>Chapter 2: Pre-Race Registration</h2>
+
+        <div class="guide-section" id="rally-list">
+          <h3>2.1 Rally List</h3>
+          <p>The rally list shows all rallies you have access to. From here you can create a new rally or manage an existing one.</p>
+          <img src="images/pre-race-rally-list.png" alt="Rally List" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="rally-home">
+          <h3>2.2 Rally Home (Organizer Dashboard)</h3>
+          <p>The rally home screen is the central dashboard for managing a rally before race day. It shows sections with participant counts, groups, invited registrars, and operators. Use the action buttons to add sections, groups, and invite collaborators.</p>
+          <img src="images/pre-race-rally-home.png" alt="Rally Home" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="section-detail">
+          <h3>2.3 Section Detail &mdash; Full Roster</h3>
+          <p>The section detail view shows all participants in a section, organized by group. Each participant shows their assigned car number and name. You can upload a roster from a spreadsheet or add participants individually.</p>
+          <img src="images/pre-race-section-detail-grouped.png" alt="Section Detail — Full Roster" class="guide-img" loading="lazy">
+
+          <h3>2.4 Section Detail &mdash; Group Roster</h3>
+          <p>When viewing a section filtered by group, only participants from that group are shown. This is the view a registrar sees when managing their assigned group.</p>
+          <img src="images/pre-race-section-detail-filtered.png" alt="Section Detail — Group Roster" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="creating-rally">
+          <h3>2.5 Creating a Rally</h3>
+          <p>The Create Rally dialog lets you set the rally name and date. After creation, you can add sections, groups, and invite collaborators.</p>
+          <img src="images/pre-race-dlg-create-rally.png" alt="Create Rally Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="adding-sections">
+          <h3>2.6 Adding Sections</h3>
+          <p>Add sections to organize your rally by age group or category. Common sections are Beaver Buggies, Kub Kars, and Scout Trucks.</p>
+          <img src="images/pre-race-dlg-add-section.png" alt="Add Section Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="adding-groups">
+          <h3>2.7 Adding Groups</h3>
+          <p>Groups represent Scout troops or packs (e.g., "1st Newmarket", "2nd Aurora"). Groups help organize participants and can be assigned to registrars for distributed check-in.</p>
+          <img src="images/pre-race-dlg-add-group.png" alt="Add Group Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="uploading-roster">
+          <h3>2.8 Uploading a Roster</h3>
+          <p>Upload participants from a CSV or Excel spreadsheet. The system automatically detects column mappings for participant names and group assignments.</p>
+          <img src="images/pre-race-dlg-upload-roster.png" alt="Upload Roster Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="adding-participant">
+          <h3>2.9 Adding a Participant</h3>
+          <p>Add individual participants manually. A car number is automatically assigned based on the next available number in the section.</p>
+          <img src="images/pre-race-dlg-add-participant.png" alt="Add Participant Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="inviting-registrar">
+          <h3>2.10 Inviting a Registrar</h3>
+          <p>Invite a registrar by email to help manage check-in on race day. You can assign them to specific groups and sections, controlling what they can see and manage.</p>
+          <img src="images/pre-race-dlg-invite-registrar.png" alt="Invite Registrar Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="inviting-operator">
+          <h3>2.11 Inviting an Operator</h3>
+          <p>Invite an additional operator by email to help run the race day console. Operators have full control over the race flow.</p>
+          <img src="images/pre-race-dlg-invite-operator.png" alt="Invite Operator Dialog" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Chapter 3: Race Day — Operator Console       -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="operator">
+        <h2>Chapter 3: Race Day &mdash; Operator Console</h2>
+
+        <div class="guide-section" id="loading-data">
+          <h3>3.1 Loading Race Data</h3>
+          <p>On race day, the operator loads participant data either from a roster package exported during pre-race, or by loading demo data for testing. The demo data dialog lets you configure the number of participants per section and their check-in status.</p>
+          <img src="images/operator-dlg-demo-data.png" alt="Load Demo Data Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="operator-rally-home">
+          <h3>3.2 Rally Home</h3>
+          <p>The operator rally home shows all sections with their participant counts, check-in progress, and status. From here you can check in participants, start racing a section, or view the live console for an active section.</p>
+          <img src="images/operator-rally-home.png" alt="Operator Rally Home" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="check-in">
+          <h3>3.3 Check-In</h3>
+          <p>The check-in screen shows all participants in a section with checkboxes to mark their arrival. Once at least 2 participants are checked in, the "Start This Section" button becomes available.</p>
+          <img src="images/operator-check-in.png" alt="Check-In Screen" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="starting-section">
+          <h3>3.4 Starting a Section</h3>
+          <p>The Start Section dialog lets you choose which lanes to use. Uncheck any lanes that are unavailable (e.g., broken sensor). The schedule is automatically generated based on available lanes and checked-in participants.</p>
+          <img src="images/operator-dlg-start-section.png" alt="Start Section Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="console-staging">
+          <h3>3.5 Live Console &mdash; Staging</h3>
+          <p>During staging, the live console shows the current heat assignment with lane numbers, car numbers, and participant names. The "Run Heat" button triggers the race (in manual mode) or the system waits for the track controller to detect the start gate release.</p>
+          <img src="images/operator-live-console-staging.png" alt="Live Console — Staging" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="console-results">
+          <h3>3.6 Live Console &mdash; Results</h3>
+          <p>After a heat completes, the results panel shows finish times for each lane. The standings panel on the right updates with cumulative average times. Click "Next Heat" to advance to the next heat, or "Re-Run" if there was an issue.</p>
+          <img src="images/operator-live-console-results.png" alt="Live Console — Results" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="manual-rank">
+          <h3>3.7 Manual Rank</h3>
+          <p>If the timing system fails for a heat, use Manual Rank to enter finish positions by hand. Assign a place (1st, 2nd, etc.) or DNF to each lane.</p>
+          <img src="images/operator-dlg-manual-rank.png" alt="Manual Rank Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="remove-car">
+          <h3>3.8 Remove Car</h3>
+          <p>Remove a car from the remaining heats if it is destroyed, disqualified, or withdrawn. Completed heat results are preserved. The schedule is regenerated for remaining heats.</p>
+          <img src="images/operator-dlg-remove-car.png" alt="Remove Car Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="change-lanes">
+          <h3>3.9 Change Lanes</h3>
+          <p>Change which lanes are active mid-race (e.g., if a lane sensor breaks). The schedule is regenerated for remaining heats using the new lane configuration.</p>
+          <img src="images/operator-dlg-change-lanes.png" alt="Change Lanes Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="section-complete">
+          <h3>3.10 Section Complete / Final Results</h3>
+          <p>When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count. Results can be exported to CSV or sent to the audience display for a dramatic progressive reveal.</p>
+          <img src="images/operator-section-complete.png" alt="Section Complete" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Chapter 4: Race Day — Registrar              -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="registrar">
+        <h2>Chapter 4: Race Day &mdash; Registrar</h2>
+        <p class="chapter-intro">The registrar interface is a simplified check-in view designed for group leaders and section contacts. It shares the same data as the operator console via IndexedDB, so changes made by registrars appear immediately on the operator screen.</p>
+
+        <div class="guide-section" id="registrar-section-list">
+          <h3>4.1 Section List</h3>
+          <p>The registrar section list shows all sections with participant counts, check-in progress, and status badges.</p>
+          <img src="images/registrar-section-list.png" alt="Registrar Section List" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="registrar-check-in">
+          <h3>4.2 Section Check-In</h3>
+          <p>The registrar check-in screen shows each participant with a "Check In" button. Checking in a participant marks their car as arrived and updates the count. Late arrivals after racing has started will trigger schedule regeneration.</p>
+          <img src="images/registrar-section-checkin.png" alt="Registrar Check-In" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Chapter 5: Audience Display                  -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="audience">
+        <h2>Chapter 5: Audience Display</h2>
+        <p class="chapter-intro">The audience display is designed for projectors and large screens. It uses a dark theme with large fonts for maximum visibility. The display is controlled by the operator &mdash; it automatically shows the current heat staging, results, and leaderboard as racing progresses.</p>
+
+        <div class="guide-section" id="audience-welcome">
+          <h3>5.1 Welcome</h3>
+          <p>The welcome screen displays the rally name and is shown before racing begins.</p>
+          <img src="images/audience-welcome.png" alt="Welcome Screen" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="audience-staging">
+          <h3>5.2 Heat Staging</h3>
+          <p>During staging, the audience sees the current heat with lane assignments and an "Up Next" preview of the following heat. This helps participants prepare and builds anticipation.</p>
+          <img src="images/audience-staging.png" alt="Heat Staging" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="audience-results">
+          <h3>5.3 Heat Results</h3>
+          <p>After each heat, results are displayed with finish times and place indicators (gold, silver, bronze medals for the top 3).</p>
+          <img src="images/audience-results.png" alt="Heat Results" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="audience-leaderboard">
+          <h3>5.4 Leaderboard</h3>
+          <p>The leaderboard shows cumulative standings based on average times across all heats completed so far.</p>
+          <img src="images/audience-leaderboard.png" alt="Leaderboard" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="audience-complete">
+          <h3>5.5 Section Complete (Progressive Reveal)</h3>
+          <p>When a section finishes, the operator can trigger a dramatic reveal of final standings &mdash; starting from last place and building up to first. Medals animate in for the top 3 finishers.</p>
+          <img src="images/audience-section-complete.png" alt="Section Complete" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Chapter 7: Pico W Debug Console               -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="pico-debug">
+        <h2>Chapter 7: Pico W Debug Console</h2>
+        <p class="chapter-intro">A browser-based tool for communicating with the track controller's Raspberry Pi Pico W over USB serial. Requires Chrome or Edge on desktop &mdash; the console uses the Web Serial API, which is not available in Firefox or Safari.</p>
+
+        <div class="guide-section" id="pico-connecting">
+          <h3>7.1 Connecting</h3>
+          <p>Click <strong>Connect</strong> in the header toolbar and select the Pico W from the browser's serial port picker. The status indicator turns green when connected. Click <strong>Disconnect</strong> to release the port.</p>
+        </div>
+
+        <div class="guide-section" id="pico-terminal">
+          <h3>7.2 Terminal Tab</h3>
+          <p>The terminal tab provides a serial console for interacting with the Pico W firmware.</p>
+          <ul>
+            <li>Type a command in the input field and press <strong>Enter</strong> to send it</li>
+            <li>Use <strong>Up/Down arrow keys</strong> to recall previous commands from history</li>
+            <li>Quick-command buttons below the output send common commands with one click: <code>info</code>, <code>state</code>, <code>gate</code>, <code>dbg</code>, <code>dbg_watch</code></li>
+          </ul>
+          <p>Output is color-coded: commands in blue, responses in white, errors in red, and system messages in gray italic.</p>
+          <img src="images/pico-debug-terminal.png" alt="Pico Debug — Terminal" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="pico-files">
+          <h3>7.3 Files Tab</h3>
+          <p>The files tab provides a file browser and code editor for MicroPython files stored on the Pico W.</p>
+          <ul>
+            <li><strong>File list</strong> (left panel) &mdash; shows all files on the device. Click a filename to open it in the editor. Click <strong>Refresh</strong> to reload the file list</li>
+            <li><strong>Editor</strong> (right panel) &mdash; CodeMirror editor with Python syntax highlighting. Edit the file and click <strong>Save</strong> (or press <strong>Cmd/Ctrl+S</strong>) to write it back to the device</li>
+            <li><strong>Upload</strong> &mdash; upload a <code>.py</code> file from your computer to the Pico W</li>
+            <li><strong>Restart Firmware</strong> &mdash; soft-resets the Pico W to reload the firmware with any saved changes</li>
+          </ul>
+          <img src="images/pico-debug-files.png" alt="Pico Debug — Files" class="guide-img" loading="lazy">
+        </div>
+      </section>
+
+      <hr class="chapter-sep">
+
+      <!-- ============================================ -->
+      <!-- Appendix A: Domain Language Reference         -->
+      <!-- ============================================ -->
+      <section class="guide-chapter" id="appendix">
+        <h2>Appendix A: Domain Language Reference</h2>
+        <p class="chapter-intro">Authoritative terminology used throughout RallyLab. Consistent use of these terms ensures clear communication between organizers, operators, registrars, and the software.</p>
+
+        <div class="guide-section" id="system-layers">
+          <h3>1. System Layers</h3>
+
+          <h4>Track</h4>
+          <p>The physical wooden track assembly, including:</p>
+          <ul>
+            <li>Lanes</li>
+            <li>Finish switches (normally open)</li>
+            <li>Start gate switch (normally closed)</li>
+            <li>Wiring and DB15 interface</li>
+          </ul>
+          <p>The Track contains no software intelligence.</p>
+
+          <h4>Track Controller</h4>
+          <p>The microcontroller hardware and firmware that reads Track switches, detects start gate release and lane finish events, timestamps finish events, and communicates race data to the Race Controller. The Track Controller has no knowledge of Participants, Heats, or competition structure.</p>
+
+          <h4>Race Controller</h4>
+          <p>The computer running race management software. Hosts the web server, Operator Display, and Audience Display. Stores race results and manages competition structure (Heats, Participants, Rally).</p>
+        </div>
+
+        <div class="guide-section" id="human-roles">
+          <h3>2. Human Roles</h3>
+
+          <h4>Operator</h4>
+          <p>The person operating the Race Controller software. Arms the system, oversees race start, declares re-runs when necessary, manages Heats and Races, and finalizes results. The Operator does not physically release the starting gate.</p>
+
+          <h4>Track Operator</h4>
+          <p>The person managing the physical Track hardware. Loads cars onto lanes, ensures cars are properly staged, physically releases the starting gate, and monitors physical track condition.</p>
+
+          <h4>Audience</h4>
+          <p>Spectators watching the race &mdash; youth, parents, friends, and Scouters.</p>
+        </div>
+
+        <div class="guide-section" id="ui-surfaces">
+          <h3>3. UI Surfaces</h3>
+
+          <h4>Operator Display</h4>
+          <p>The browser interface used by the Operator. Provides control, monitoring, and race management tools.</p>
+
+          <h4>Audience Display</h4>
+          <p>The browser interface shown publicly. Provides high-visibility race visuals and results.</p>
+        </div>
+
+        <div class="guide-section" id="race-lifecycle">
+          <h3>4. Race Lifecycle</h3>
+
+          <h4>Arm</h4>
+          <p>Operator action that prepares the system to detect a race start. The Track Controller begins monitoring the start gate, finish lane timers are cleared, and the system enters the Armed state.</p>
+
+          <h4>Armed (State)</h4>
+          <p>System state in which the start gate is closed, the system is waiting for gate release, and no timing has started.</p>
+
+          <h4>Start</h4>
+          <p>The moment the start gate transitions from closed to open. Detected by the Track Controller. The race clock starts, lane timers become active, and the system enters the Running state. Start is detected, not initiated by software.</p>
+
+          <h4>Running (State)</h4>
+          <p>The race is in progress. At least one lane has not yet finished.</p>
+
+          <h4>Finish (Lane Finish)</h4>
+          <p>The moment a specific lane's finish switch transitions from open to closed. That lane's time is frozen and the lane is marked Finished. Each lane finishes independently.</p>
+
+          <h4>Complete (Race Complete)</h4>
+          <p>State reached when all active lanes have finished. No automatic timeout is defined. The Operator may intervene if a race cannot complete normally.</p>
+
+          <h4>Re-run</h4>
+          <p>Operator decision that the current race result is invalid. Recorded times are discarded and the Heat is run again.</p>
+
+          <h4>Reset</h4>
+          <p>Operator action that clears lane results, returns the system to Idle state, and prepares for the next Arm.</p>
+        </div>
+
+        <div class="guide-section" id="competition-structure">
+          <h3>5. Competition Structure</h3>
+
+          <h4>Lane</h4>
+          <p>A numbered physical path on the Track. Has a lane number, an assigned Participant (per Heat), and a finish time (per Race).</p>
+
+          <h4>Participant</h4>
+          <p>A person entered in the competition. Properties include name, car name (optional), and group/rank (optional).</p>
+
+          <h4>Heat</h4>
+          <p>A scheduled grouping of Participants assigned to lanes for one Race. A Heat may require a Re-run.</p>
+
+          <h4>Race</h4>
+          <p>A single timed run of a Heat. A Heat may have one valid Race or multiple attempts (if Re-run is declared). A Heat is the scheduled assignment; a Race is the physical execution.</p>
+
+          <h4>Rally</h4>
+          <p>The full competition (a pinewood derby race day). Contains all Participants, all Heats, and all Results. "Rally" is the preferred term over "Event" or "Meet".</p>
+        </div>
+
+        <div class="guide-section" id="design-boundary">
+          <h3>6. Design Boundary Principle</h3>
+          <p>The Track Controller knows nothing about Participants. The Race Controller knows nothing about physical switch wiring.</p>
+          <p>The Race Controller governs competition structure (Rally, Heat, Race) and software state. The Track hardware and Track Operator govern physical staging and gate release. The Track Controller bridges physical events into the software domain but does not interpret competition rules.</p>
+          <p>This separation is intentional and foundational.</p>
+        </div>
+
+        <div class="guide-section" id="operational-modes">
+          <h3>7. Operational Modes</h3>
+
+          <h4>Dry Run Mode</h4>
+          <p>A non-competitive operational mode used for testing hardware and software. No results are persisted as official, participants may not be assigned. Used for validation, setup, or demonstrations.</p>
+
+          <h4>Rally Mode</h4>
+          <p>Competitive operational mode. Heats and Races are recorded as official results. Results are persisted and standings contribute to the Rally.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="guide-footer">
+    <p>
+      <a href="../">RallyLab</a> is
+      <a href="https://github.com/vmetcalfe/KubKars/blob/main/LICENSE">MIT licensed</a> &middot;
+      <a href="https://github.com/vmetcalfe/KubKars">GitHub</a>
+    </p>
+  </footer>
+
+  <script>
+    // ── Mobile TOC toggle ──
+    const sidebar = document.getElementById('guide-sidebar');
+    const toggle = document.getElementById('toc-toggle');
+    const backdrop = document.getElementById('sidebar-backdrop');
+
+    function openToc() {
+      sidebar.classList.add('open');
+      backdrop.classList.add('visible');
+    }
+    function closeToc() {
+      sidebar.classList.remove('open');
+      backdrop.classList.remove('visible');
+    }
+
+    toggle.addEventListener('click', () => {
+      sidebar.classList.contains('open') ? closeToc() : openToc();
+    });
+    backdrop.addEventListener('click', closeToc);
+
+    // TOC link clicks — use instant scroll to avoid layout-shift issues
+    // with lazy-loaded images causing smooth scroll to land short
+    sidebar.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'instant' });
+          history.pushState(null, '', a.getAttribute('href'));
+        }
+        if (window.innerWidth <= 900) closeToc();
+      });
+    });
+
+    // ── Active TOC tracking ──
+    const chapters = document.querySelectorAll('.guide-chapter');
+    const chapterLinks = document.querySelectorAll('.toc-chapter-link');
+
+    const tocObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          chapterLinks.forEach(l => l.classList.remove('active'));
+          const id = entry.target.id;
+          const link = sidebar.querySelector(`a[href="#${id}"]`);
+          if (link) link.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+
+    chapters.forEach(ch => tocObserver.observe(ch));
+  </script>
+</body>
+</html>

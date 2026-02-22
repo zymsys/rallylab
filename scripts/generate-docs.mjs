@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
-const GUIDE_DIR = join(ROOT, 'guide');
+const GUIDE_DIR = join(ROOT, 'public', 'guide');
 const GUIDE_IMAGES_DIR = join(GUIDE_DIR, 'images');
 const PUBLIC_DIR = join(ROOT, 'public');
 const OUTPUT_PATH = join(ROOT, 'RallyLab-User-Guide.docx');
@@ -46,7 +46,7 @@ function startServer() {
 async function waitForServer(maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const resp = await fetch(`${BASE}/index.html`);
+      const resp = await fetch(`${BASE}/registration.html`);
       if (resp.ok) return;
     } catch {}
     await sleep(300);
@@ -102,7 +102,7 @@ async function capturePreRace(browser) {
   const page = await ctx.newPage();
 
   // 1. Login screen
-  await page.goto(`${BASE}/index.html`);
+  await page.goto(`${BASE}/registration.html`);
   await page.waitForSelector('.login-container');
   await capture(page, 'pre-race-login');
 
@@ -524,6 +524,111 @@ async function captureAudience(ctx) {
   await page.close();
 }
 
+// ─── Pico Debug Console Screenshots ─────────────────────────────
+
+async function capturePicoDebug(browser) {
+  log('--- Pico Debug Console ---');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+
+  await page.goto(`${BASE}/pico-debug.html`);
+  await sleep(500);
+
+  // Read actual firmware file for the editor
+  const enginePy = readFileSync(join(ROOT, 'firmware', 'engine.py'), 'utf-8');
+
+  // Playwright's Chromium lacks Web Serial — hide the banner and fake connected state
+  await page.evaluate(() => {
+    document.querySelector('#no-serial-banner').style.display = 'none';
+    document.querySelector('#status-dot').classList.add('connected');
+    document.querySelector('#status-label').textContent = 'Connected';
+    document.querySelector('#btn-connect').disabled = true;
+    document.querySelector('#btn-disconnect').disabled = false;
+    document.querySelector('#terminal-input').disabled = false;
+
+    const content = document.querySelector('#terminal-content');
+    function addLine(text, cls) {
+      const span = document.createElement('span');
+      span.className = cls;
+      span.textContent = text;
+      content.appendChild(span);
+    }
+
+    addLine('Connected to Pico W\n', 'sys');
+    addLine('> info\n', 'cmd');
+    addLine('{\n  "firmware": "0.1.0",\n  "lane_count": 6,\n  "protocol": "1.0"\n}\n', 'resp');
+    addLine('> state\n', 'cmd');
+    addLine('null\n', 'resp');
+    addLine('> gate\n', 'cmd');
+    addLine('{\n  "gate_ready": true\n}\n', 'resp');
+    addLine('> dbg\n', 'cmd');
+    addLine(`{
+  "controller": {
+    "firmware": "0.1.0",
+    "protocol": "1.0",
+    "uptime_ms": 45231
+  },
+  "engine": {
+    "active_lanes": null,
+    "gate_ready": true,
+    "phase": "IDLE",
+    "race_id": null
+  },
+  "io": {
+    "debounce_ms": 10,
+    "start_gate": {
+      "debounced": 1,
+      "invert": true,
+      "pull": "up",
+      "raw": 1
+    }
+  }
+}\n`, 'resp');
+  });
+
+  await capture(page, 'pico-debug-terminal');
+
+  // Switch to Files tab
+  await page.click('[data-tab="files"]');
+  await sleep(200);
+
+  // Inject file list and load engine.py into CodeMirror
+  await page.evaluate((engineContent) => {
+    const files = ['config.py', 'engine.py', 'gpio_manager.py', 'main.py', 'serial_handler.py', 'uuid_gen.py'];
+    const fileList = document.querySelector('#file-list');
+    fileList.innerHTML = '';
+    for (const name of files) {
+      const div = document.createElement('div');
+      div.className = 'file-item' + (name === 'engine.py' ? ' active' : '');
+      div.textContent = name;
+      fileList.appendChild(div);
+    }
+
+    document.querySelector('#editor-filename').textContent = 'engine.py';
+    document.querySelector('#btn-save').disabled = false;
+
+    const container = document.querySelector('#editor-container');
+    container.innerHTML = '';
+    const editor = CodeMirror(container, {
+      value: engineContent,
+      mode: 'python',
+      theme: 'material-darker',
+      lineNumbers: true,
+      indentUnit: 4,
+      tabSize: 4,
+      indentWithTabs: false,
+      lineWrapping: true,
+      readOnly: false,
+    });
+    setTimeout(() => editor.refresh(), 0);
+  }, enginePy);
+
+  await sleep(500);
+  await capture(page, 'pico-debug-files');
+
+  await ctx.close();
+}
+
 // ─── Markdown → docx paragraphs ────────────────────────────────
 
 /**
@@ -707,6 +812,7 @@ async function main() {
       await captureRegistrar(ctx);
       await captureAudience(ctx);
       await ctx.close();
+      await capturePicoDebug(browser);
     } catch (err) {
       console.error('\nError during screenshot capture:', err.message);
       console.error(err.stack);
