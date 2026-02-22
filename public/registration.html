@@ -8,15 +8,10 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1a1a2e">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script type="module" src="js/shared/rally-header.js"></script>
 </head>
 <body>
-  <header id="site-header">
-    <div class="header-brand">
-      <h1 class="logo">RallyLab</h1>
-      <nav id="breadcrumbs" aria-label="Breadcrumb"></nav>
-    </div>
-    <div id="user-info"></div>
-  </header>
+  <rally-header></rally-header>
   <main id="app"></main>
   <div id="dialog-backdrop" class="dialog-backdrop hidden" aria-hidden="true">
     <div id="dialog" class="dialog" role="dialog" aria-modal="true"></div>
