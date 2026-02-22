@@ -167,7 +167,7 @@ function updateUserInfo() {
   btn.textContent = 'Sign Out';
   btn.onclick = async () => {
     await signOut();
-    window.location.href = 'index.html';
+    window.location.href = 'registration.html';
   };
   el.appendChild(btn);
 }

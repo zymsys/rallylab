@@ -9,7 +9,7 @@ const CACHE_VERSION = 'rallylab-v1';
 
 const APP_SHELL = [
   './',
-  'index.html',
+  'registration.html',
   'operator.html',
   'registrar.html',
   'audience.html',
