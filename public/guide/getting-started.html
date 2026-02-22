@@ -605,7 +605,15 @@ mpremote cp firmware/*.py :</code></pre>
 
 <pre><code>wifi_setup MyNetworkName MyPassword</code></pre>
 
-      <p>The Pico saves credentials and auto-connects on future boots. Once connected, it starts an HTTP server. In the Operator Console, choose <strong>WiFi (HTTP)</strong> as the connection type and enter the Pico's IP address (shown in the terminal on boot).</p>
+      <p>The Pico saves credentials and auto-connects on future boots. Once connected, it starts an HTTP server and advertises itself on the local network via mDNS. You can connect using either the IP address (shown on boot) or the <code>.local</code> hostname.</p>
+
+      <p>By default, the hostname is based on the device's MAC address (e.g., <code>rallylab-a1b2c3.local</code>). For race day, you can set a memorable name so it's easy to share:</p>
+
+<pre><code>hostname_set pack42</code></pre>
+
+      <p>Now the Pico is reachable at <code>pack42.local</code>. The name is saved and persists across reboots. You can also configure the hostname from the Operator Console's Track Manager dialog when connected via USB.</p>
+
+      <p>In the Operator Console, choose <strong>WiFi</strong> as the connection type and enter the Pico's address &mdash; either an IP like <code>192.168.1.42</code> or a hostname like <code>pack42.local</code>.</p>
 
       <div class="eval-tip">
         <strong>USB vs. WiFi:</strong> USB serial is the most reliable option &mdash; no network to worry about. WiFi is useful when the computer running the Operator Console can't be physically near the track. Both use the same protocol; the Operator Console handles either transparently.

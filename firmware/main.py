@@ -32,7 +32,7 @@ def main():
 
     # Try to auto-connect from saved credentials
     if wifi and wifi.auto_connect():
-        print("WiFi connected: %s" % wifi.ip_address)
+        print("WiFi connected: %s (%s.local)" % (wifi.ip_address, wifi.hostname))
 
     print("RallyLab Track Controller ready")
 

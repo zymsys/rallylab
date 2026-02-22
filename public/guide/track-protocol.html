@@ -430,6 +430,8 @@
       <h3>WiFi (HTTP)</h3>
       <p>When configured with WiFi credentials, the controller runs an HTTP server. All endpoints use <strong>GET</strong> requests. This is useful when the computer running the Operator Console can't be physically near the track.</p>
 
+      <p>The controller advertises itself on the local network using <strong>mDNS</strong> (Bonjour), so you can connect by hostname instead of IP address. By default, the hostname is derived from the device's MAC address (e.g., <code>rallylab-a1b2c3.local</code>). You can set a custom hostname with the <code>hostname_set</code> command &mdash; for example, <code>hostname_set pack42</code> makes the controller reachable at <code>pack42.local</code>.</p>
+
       <div class="tip">
         <strong>Which should I use?</strong> USB serial for reliability, WiFi for convenience. You can switch between them at any time &mdash; the Operator Console handles either transparently.
       </div>
@@ -610,6 +612,8 @@
   },
   "wifi": {
     "mode": "sta",
+    "connected": true,
+    "hostname": "rallylab-a1b2c3.local",
     "ssid": "MyNetwork",
     "ip": "192.168.1.50",
     "rssi": -61
@@ -631,6 +635,34 @@
 { "gpio": 17, "pin": "lane", "lane": 3, "edge": "triggered", "ms": 5190 }</code></pre>
         <p>Each edge includes the <code>gpio</code> pin number for diagnosis. Configured pins (lanes and gate) include a <code>pin</code> label; unconfigured pins in the GP0&ndash;GP22 range report raw <code>"fall"</code> or <code>"rise"</code> edges.</p>
         <p>Type any command to stop the watch. The cancel rule applies &mdash; the typed line stops the watch and is dispatched as the next command.</p>
+      </div>
+
+      <div class="endpoint" id="cmd-hostname-set">
+        <h3>hostname_set</h3>
+        <p class="endpoint-desc">Set a custom mDNS hostname. The name is persisted and survives reboots. <strong>Serial only.</strong></p>
+        <div class="transport-row">
+          <span class="transport-label">Serial</span>
+          <code>hostname_set &lt;name&gt;</code>
+        </div>
+        <p>The name must be lowercase alphanumeric with optional hyphens, max 32 characters. After setting, the controller is reachable at <code>&lt;name&gt;.local</code> on the local network.</p>
+<pre><code>hostname_set pack42
+
+{
+  "hostname": "pack42.local"
+}</code></pre>
+        <p>The hostname can also be configured from the Operator Console's Track Manager dialog when connected via USB.</p>
+      </div>
+
+      <div class="endpoint" id="cmd-hostname-clear">
+        <h3>hostname_clear</h3>
+        <p class="endpoint-desc">Remove the custom hostname and revert to the default MAC-based name (e.g., <code>rallylab-a1b2c3</code>). <strong>Serial only.</strong></p>
+        <div class="transport-row">
+          <span class="transport-label">Serial</span>
+          <code>hostname_clear</code>
+        </div>
+<pre><code>{
+  "hostname": "rallylab-a1b2c3.local"
+}</code></pre>
       </div>
     </section>
 

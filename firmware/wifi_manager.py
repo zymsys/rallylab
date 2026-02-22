@@ -11,32 +11,73 @@ from config import WIFI_CONNECT_TIMEOUT_MS
 _CRED_FILE = "wifi.json"
 
 
+def _default_hostname():
+    """Build unique hostname from last 3 octets of MAC, e.g. rallylab-a1b2c3."""
+    wlan = network.WLAN(network.STA_IF)
+    mac = wlan.config("mac")
+    suffix = "".join("%02x" % b for b in mac[-3:])
+    return "rallylab-" + suffix
+
+
 class WiFiManager:
     def __init__(self):
         self._wlan = network.WLAN(network.STA_IF)
+        self.hostname = self._load_hostname() or _default_hostname()
+        network.hostname(self.hostname)
 
-    # -- credential persistence ------------------------------------------------
+    # -- persistence -----------------------------------------------------------
 
-    def load_credentials(self):
-        """Read wifi.json from flash. Return dict {ssid, password} or None."""
+    def _load_config(self):
+        """Read wifi.json from flash. Return dict or empty dict."""
         try:
             with open(_CRED_FILE, "r") as f:
                 return json.load(f)
         except (OSError, ValueError):
-            return None
+            return {}
 
-    def save_credentials(self, ssid, password):
+    def _save_config(self, data):
         """Write wifi.json to flash."""
         with open(_CRED_FILE, "w") as f:
-            json.dump({"ssid": ssid, "password": password}, f)
+            json.dump(data, f)
+
+    def load_credentials(self):
+        """Return {ssid, password} or None."""
+        cfg = self._load_config()
+        if "ssid" in cfg and "password" in cfg:
+            return {"ssid": cfg["ssid"], "password": cfg["password"]}
+        return None
+
+    def save_credentials(self, ssid, password):
+        cfg = self._load_config()
+        cfg["ssid"] = ssid
+        cfg["password"] = password
+        self._save_config(cfg)
 
     def clear_credentials(self):
-        """Delete wifi.json from flash."""
-        try:
-            import os
-            os.remove(_CRED_FILE)
-        except OSError:
-            pass
+        cfg = self._load_config()
+        cfg.pop("ssid", None)
+        cfg.pop("password", None)
+        self._save_config(cfg)
+
+    def _load_hostname(self):
+        """Return saved custom hostname, or None."""
+        return self._load_config().get("hostname")
+
+    def set_hostname(self, name):
+        """Persist a custom hostname. Takes effect on next boot."""
+        cfg = self._load_config()
+        cfg["hostname"] = name
+        self._save_config(cfg)
+        self.hostname = name
+        network.hostname(name)
+
+    def clear_hostname(self):
+        """Remove custom hostname, reverting to MAC-based default."""
+        cfg = self._load_config()
+        cfg.pop("hostname", None)
+        self._save_config(cfg)
+        self.hostname = _default_hostname()
+        network.hostname(self.hostname)
 
     # -- connection ------------------------------------------------------------
 
@@ -111,6 +152,7 @@ class WiFiManager:
         result = {
             "mode": "sta",
             "connected": connected,
+            "hostname": self.hostname + ".local",
         }
         if connected:
             result["ssid"] = self._wlan.config("essid")

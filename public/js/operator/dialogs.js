@@ -596,6 +596,20 @@ export function showTrackManagerDialog(ctx) {
         </div>
         <div id="dlg-wifi-result" style="display:none;margin-top:0.75rem"></div>
         <div id="dlg-wifi-error" class="form-error" style="margin-top:0.5rem"></div>
+      </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:1rem;margin-top:1rem">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.25rem;color:var(--color-text-secondary)">Hostname</label>
+        <div id="dlg-hostname-status" class="form-hint" style="margin-bottom:0.5rem">Checking&hellip;</div>
+        <div style="display:flex;gap:0.5rem;align-items:flex-end">
+          <div class="form-group" style="flex:1;margin:0">
+            <input id="dlg-hostname-input" class="form-input" type="text"
+              placeholder="e.g. pack42" maxlength="32" style="font-family:monospace">
+          </div>
+          <button class="btn btn-primary btn-sm" data-action="hostname-set" id="dlg-hostname-set-btn">Set</button>
+          <button class="btn btn-secondary btn-sm" data-action="hostname-clear" id="dlg-hostname-clear-btn">Reset</button>
+        </div>
+        <p class="form-hint" style="margin-top:0.25rem">Lowercase letters, numbers, and hyphens. Devices on the network can reach this Pico at <strong><span id="dlg-hostname-preview">rallylab-XXXXXX</span>.local</strong></p>
+        <div id="dlg-hostname-error" class="form-error" style="margin-top:0.5rem"></div>
       </div>`;
   }
 
@@ -604,9 +618,9 @@ export function showTrackManagerDialog(ctx) {
     const savedIp = ctx.getSavedTrackIp() || '';
     bodyHtml += `
       <div class="form-group">
-        <label for="dlg-track-ip">WiFi IP Address</label>
+        <label for="dlg-track-ip">WiFi Address</label>
         <input id="dlg-track-ip" class="form-input" type="text"
-          placeholder="e.g. 192.168.4.1" value="${esc(savedIp)}">
+          placeholder="e.g. 192.168.4.1 or rallylab.local" value="${esc(savedIp)}">
       </div>
       <div style="display:flex;gap:0.5rem">
         <button class="btn btn-primary" data-action="connect-wifi">Connect WiFi</button>
@@ -673,8 +687,61 @@ function _setupWifiSection(d, ctx) {
 
   let selectedSsid = null;
 
+  // -- Hostname section --
+  const hostnameStatusEl = d.querySelector('#dlg-hostname-status');
+  const hostnameInput = d.querySelector('#dlg-hostname-input');
+  const hostnamePreview = d.querySelector('#dlg-hostname-preview');
+  const hostnameSetBtn = d.querySelector('#dlg-hostname-set-btn');
+  const hostnameClearBtn = d.querySelector('#dlg-hostname-clear-btn');
+  const hostnameError = d.querySelector('#dlg-hostname-error');
+
+  function updateHostnamePreview() {
+    const val = hostnameInput.value.trim().toLowerCase();
+    hostnamePreview.textContent = val || 'rallylab-XXXXXX';
+  }
+  hostnameInput.addEventListener('input', updateHostnamePreview);
+
+  function showHostname(hostname) {
+    // hostname is e.g. "rallylab-a1b2c3.local"
+    const name = hostname.replace(/\.local$/, '');
+    hostnameStatusEl.innerHTML = `Currently <strong>${esc(hostname)}</strong>`;
+    hostnameInput.value = name;
+    hostnamePreview.textContent = name;
+  }
+
+  hostnameSetBtn.onclick = async () => {
+    const name = hostnameInput.value.trim().toLowerCase();
+    if (!name) { hostnameError.textContent = 'Enter a hostname'; return; }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || name.length > 32) {
+      hostnameError.textContent = 'Lowercase letters, numbers, and hyphens only (max 32 chars)';
+      return;
+    }
+    hostnameError.textContent = '';
+    hostnameSetBtn.disabled = true;
+    try {
+      const result = await ctx.sendSerialCommand(`hostname_set ${name}`);
+      if (result.error) { hostnameError.textContent = result.error; }
+      else { showHostname(result.hostname); ctx.showToast(`Hostname set to ${result.hostname}`, 'success'); }
+    } catch (e) { hostnameError.textContent = e.message; }
+    hostnameSetBtn.disabled = false;
+  };
+
+  hostnameClearBtn.onclick = async () => {
+    hostnameError.textContent = '';
+    hostnameClearBtn.disabled = true;
+    try {
+      const result = await ctx.sendSerialCommand('hostname_clear');
+      if (result.error) { hostnameError.textContent = result.error; }
+      else { showHostname(result.hostname); ctx.showToast('Hostname reset to default', 'info'); }
+    } catch (e) { hostnameError.textContent = e.message; }
+    hostnameClearBtn.disabled = false;
+  };
+
   // Check current WiFi status on the Pico
   ctx.sendSerialCommand('wifi').then(status => {
+    if (status.hostname) showHostname(status.hostname);
+    else hostnameStatusEl.textContent = '';
+
     if (status.connected) {
       wifiStatusEl.innerHTML = `Connected to <strong>${esc(status.ssid)}</strong> &mdash; ${esc(status.ip)}`;
       const switchBtn = document.createElement('button');
@@ -700,6 +767,7 @@ function _setupWifiSection(d, ctx) {
     scanBtn.disabled = false;
   }).catch(() => {
     wifiStatusEl.textContent = 'Could not query WiFi status';
+    hostnameStatusEl.textContent = '';
     scanBtn.disabled = false;
   });
 
@@ -784,9 +852,11 @@ function _setupWifiSection(d, ctx) {
         wifiForm.style.display = 'none';
         networkList.style.display = 'none';
         wifiResult.style.display = '';
+        const hn = hostnameInput.value.trim();
+        const addrHint = hn ? `${esc(result.ip)} (${esc(hn)}.local)` : esc(result.ip);
         wifiResult.innerHTML = `
           <div class="wifi-result-success">
-            <strong>WiFi connected</strong> &mdash; ${esc(result.ip)}
+            <strong>WiFi connected</strong> &mdash; ${addrHint}
             <p class="form-hint" style="margin:0.5rem 0">
               Disconnect USB and power the Pico separately, or switch now.
             </p>
@@ -884,10 +954,10 @@ export function showConnectTrackDialog(ctx) {
     </div>
     <div class="dialog-body">
       <div class="form-group">
-        <label for="dlg-track-ip">Track Controller IP Address</label>
+        <label for="dlg-track-ip">Track Controller Address</label>
         <input id="dlg-track-ip" class="form-input" type="text"
-          placeholder="e.g. 192.168.4.1" value="${esc(savedIp)}">
-        <p class="form-hint">Shown on the Pico serial output when WiFi starts.</p>
+          placeholder="e.g. 192.168.4.1 or rallylab.local" value="${esc(savedIp)}">
+        <p class="form-hint">IP address or .local hostname from the Pico.</p>
       </div>
       ${showUsb ? `
       <div style="text-align:center;margin:1rem 0;color:var(--color-text-muted)">— or —</div>

@@ -69,6 +69,10 @@ class SerialHandler:
             self._cmd_wifi_setup(line)
         elif cmd == "wifi_clear":
             self._cmd_wifi_clear()
+        elif cmd == "hostname_set":
+            self._cmd_hostname_set(line)
+        elif cmd == "hostname_clear":
+            self._cmd_hostname_clear()
         else:
             self._respond({"error": "unknown command: %s" % cmd})
 
@@ -247,6 +251,30 @@ class SerialHandler:
         self._wifi.disconnect()
         self._wifi.clear_credentials()
         self._respond({"cleared": True})
+
+    # -- hostname commands -------------------------------------------------
+
+    def _cmd_hostname_set(self, line):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        parts = line.split(None, 1)
+        if len(parts) < 2:
+            self._respond({"error": "usage: hostname_set <name>"})
+            return
+        name = parts[1].strip().lower()
+        if not name or len(name) > 32 or not all(c.isalnum() or c == '-' for c in name):
+            self._respond({"error": "invalid hostname (a-z, 0-9, hyphens, max 32 chars)"})
+            return
+        self._wifi.set_hostname(name)
+        self._respond({"hostname": name + ".local"})
+
+    def _cmd_hostname_clear(self):
+        if not self._wifi:
+            self._respond({"error": "wifi not available"})
+            return
+        self._wifi.clear_hostname()
+        self._respond({"hostname": self._wifi.hostname + ".local"})
 
     # -- wait callbacks and cancellation -----------------------------------
 

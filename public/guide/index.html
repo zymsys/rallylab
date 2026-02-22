@@ -611,8 +611,8 @@
           <h3>3.3 Track Connection</h3>
           <p>Click the track badge on the Rally Home or Live Console screen to open the Track Manager dialog. RallyLab supports three ways to connect to a Pico W track controller, plus a manual fallback:</p>
           <ul>
-            <li><strong>WiFi</strong> &mdash; Enter the Pico's IP address and click Connect WiFi. The controller communicates over HTTP, so no USB cable is needed during the race. The IP is remembered for reconnection.</li>
-            <li><strong>USB</strong> &mdash; Click Connect USB to use Web Serial (Chrome/Edge only). While connected via USB, you can also configure the Pico's WiFi from the Track Manager &mdash; scan for networks, enter a password, and switch to wireless.</li>
+            <li><strong>WiFi</strong> &mdash; Enter the Pico's IP address or <code>.local</code> hostname (e.g., <code>pack42.local</code>) and click Connect WiFi. The controller communicates over HTTP, so no USB cable is needed during the race. The address is remembered for reconnection.</li>
+            <li><strong>USB</strong> &mdash; Click Connect USB to use Web Serial (Chrome/Edge only). While connected via USB, you can also configure the Pico's WiFi from the Track Manager &mdash; scan for networks, enter a password, and switch to wireless. The Track Manager also lets you set a custom <strong>hostname</strong> so the Pico is reachable at a memorable <code>.local</code> address instead of an IP.</li>
             <li><strong>Fake Track</strong> &mdash; Open the fake track simulator (<code>debug.html</code>) in another tab. It connects automatically via BroadcastChannel for testing without hardware.</li>
             <li><strong>Manual</strong> &mdash; No track controller. The operator clicks &ldquo;Run Heat&rdquo; and &ldquo;Next Heat&rdquo; buttons to advance through the race, and uses Manual Rank to enter results by hand.</li>
           </ul>
