@@ -5,7 +5,7 @@
  * Bump CACHE_VERSION to force an update on next visit.
  */
 
-const CACHE_VERSION = 'rallylab-v1';
+const CACHE_VERSION = 'rallylab-v2';
 
 const APP_SHELL = [
   './',
@@ -71,17 +71,16 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   if (url.hostname.includes('supabase')) return;
 
+  // Stale-while-revalidate: serve cached immediately, fetch fresh in background
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(response => {
-        // Cache all successful GET responses (Supabase API excluded above)
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    })
+    caches.open(CACHE_VERSION).then(cache =>
+      cache.match(event.request).then(cached => {
+        const fetchPromise = fetch(event.request).then(response => {
+          if (response.ok) cache.put(event.request, response.clone());
+          return response;
+        });
+        return cached || fetchPromise;
+      })
+    )
   );
 });

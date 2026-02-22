@@ -603,6 +603,60 @@ async function capturePicoDebug(browser) {
   await ctx.close();
 }
 
+// ─── Debug View Screenshot ──────────────────────────────────────
+
+async function captureDebugView(browser) {
+  log('--- Debug View ---');
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+
+  await page.goto(`${BASE}/debug.html`);
+  await sleep(500);
+
+  // Wait for operator iframe to load
+  const operatorFrame = page.frameLocator('.panel-operator iframe');
+  await operatorFrame.locator('.screen-title').waitFor({ timeout: 10000 });
+
+  // Load demo data in the operator frame
+  await operatorFrame.locator('text=Load Demo Data').click();
+  await operatorFrame.locator('[data-action="load"]').waitFor();
+  await sleep(200);
+  await operatorFrame.locator('#dlg-checkin-mode').selectOption('all');
+  await operatorFrame.locator('[data-action="load"]').click();
+
+  // Wait for operator rally home
+  await operatorFrame.locator('.screen-title').waitFor({ timeout: 15000 });
+  await page.waitForFunction(() => {
+    const f = document.querySelector('.panel-operator iframe');
+    const el = f?.contentDocument?.querySelector('.screen-title');
+    return el && !el.textContent.includes('Race Day');
+  }, { timeout: 15000 });
+  await sleep(500);
+
+  // Check in and start a section
+  await operatorFrame.locator('text=Check In >> nth=0').click();
+  await operatorFrame.locator('.checkin-counter').waitFor();
+  await sleep(300);
+
+  const startBtn = operatorFrame.locator('text=Start This Section');
+  await startBtn.click();
+  await operatorFrame.locator('#dlg-lane-grid').waitFor();
+  await operatorFrame.locator('[data-action="start"]').click();
+
+  // Wait for staging to appear in operator
+  await operatorFrame.locator('.console-header').waitFor({ timeout: 10000 });
+  await sleep(800);
+
+  // Wait for the fake track to show staged cars
+  const fakeTrackFrame = page.frameLocator('#fake-track-iframe');
+  await fakeTrackFrame.locator('.ft-gate-btn').waitFor({ timeout: 5000 }).catch(() => {});
+  await sleep(500);
+
+  await capture(page, 'debug-view-staging');
+
+  await ctx.close();
+}
+
 // ─── Main ───────────────────────────────────────────────────────
 
 async function main() {
@@ -629,6 +683,7 @@ async function main() {
     await captureAudience(ctx);
     await ctx.close();
     await capturePicoDebug(browser);
+    await captureDebugView(browser);
   } catch (err) {
     console.error('\nError during screenshot capture:', err.message);
     console.error(err.stack);

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RallyLab Evaluation Guide</title>
+  <meta name="description" content="A hands-on walkthrough of RallyLab — try the demo, run a race, and see results in under 10 minutes.">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1a1a2e;
+      --cream: #faf6f0;
+      --cream-dark: #f0e8dc;
+      --amber: #c77d1a;
+      --amber-light: #d4a017;
+      --green: #2d6a4f;
+      --text: #1a1a2e;
+      --text-muted: #5a5670;
+      --border: #e2ddd4;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      line-height: 1.7;
+      background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Top nav ===== */
+    .guide-topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1.5rem;
+      background: rgba(26, 26, 46, 0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .topnav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .topnav-logo {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .topnav-sep {
+      color: rgba(255, 255, 255, 0.2);
+      font-weight: 300;
+    }
+
+    .topnav-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .topnav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .topnav-link {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+      transition: color 150ms;
+    }
+    .topnav-link:hover { color: #fff; }
+
+    .topnav-cta {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--amber-light);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 150ms;
+    }
+    .topnav-cta:hover { background: #e6b422; }
+
+    /* ===== Main content ===== */
+    .guide-main {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 5rem 3rem 4rem;
+    }
+
+    .guide-hero {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .guide-hero h1 {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    .guide-hero .crosslink {
+      display: inline-block;
+      margin-top: 0.75rem;
+      font-size: 0.88rem;
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .guide-hero .crosslink:hover { text-decoration: underline; }
+
+    /* ===== Steps ===== */
+    .eval-step {
+      margin-bottom: 3rem;
+      padding-top: 1rem;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: var(--amber-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .step-header h2 {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .eval-step p {
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .eval-step ol, .eval-step ul {
+      margin: 0.5rem 0 1rem 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .eval-step li {
+      margin-bottom: 0.35rem;
+    }
+
+    /* Tip callouts */
+    .eval-tip {
+      background: var(--cream);
+      border-left: 3px solid var(--amber);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.9rem;
+    }
+
+    .eval-tip strong {
+      color: var(--amber);
+    }
+
+    /* Images */
+    .guide-img {
+      display: block;
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+      margin: 1rem 0 0.25rem;
+    }
+
+    .guide-img-caption {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+
+    /* Separator between steps */
+    .step-sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 0 2rem;
+    }
+
+    /* ===== Inline code ===== */
+    code {
+      font-size: 0.88em;
+      background: var(--cream);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* ===== Next steps box ===== */
+    .next-steps {
+      background: var(--cream);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin-top: 2rem;
+    }
+
+    .next-steps h2 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .next-steps ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .next-steps li {
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .next-steps a {
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .next-steps a:hover { text-decoration: underline; }
+
+    /* ===== Footer ===== */
+    .guide-footer {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 1.5rem 3rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .guide-footer a {
+      color: var(--amber);
+      text-decoration: none;
+    }
+    .guide-footer a:hover { text-decoration: underline; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 700px) {
+      .guide-main {
+        padding: 4.5rem 1.5rem 3rem;
+      }
+
+      .guide-footer {
+        padding: 1.5rem;
+      }
+
+      .topnav-title { display: none; }
+      .topnav-sep { display: none; }
+
+      .step-header h2 {
+        font-size: 1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top nav -->
+  <nav class="guide-topnav">
+    <div class="topnav-left">
+      <a href="../" class="topnav-logo">RallyLab</a>
+      <span class="topnav-sep">/</span>
+      <span class="topnav-title">Evaluation Guide</span>
+    </div>
+    <div class="topnav-links">
+      <a href="../" class="topnav-link">Home</a>
+      <a href="./" class="topnav-link">User Guide</a>
+      <a href="../registration.html" class="topnav-cta">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="guide-main">
+
+    <div class="guide-hero">
+      <h1>Evaluation Guide</h1>
+      <p>A hands-on walkthrough of RallyLab. Follow these steps to experience the full flow &mdash; from creating a rally to running a race and seeing results on the audience display. No account or hardware needed; everything runs in demo mode right in your browser.</p>
+      <a href="./" class="crosslink">Looking for the full reference? See the User Guide &rarr;</a>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- Step 1: Enter Demo Mode                      -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-1">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <h2>Enter Demo Mode</h2>
+      </div>
+
+      <p>From the <a href="../">RallyLab home page</a>, click <strong>"Sign In"</strong> (or <strong>"Try the Demo"</strong>). You'll see the login screen with two options: sign in with email, or try the demo.</p>
+
+      <ol>
+        <li>Click <strong>"Try Demo"</strong> at the bottom of the login screen.</li>
+        <li>RallyLab creates a sample rally with three sections (Beaver Buggies, Kub Kars, Scout Trucks), several groups, and pre-populated rosters.</li>
+        <li>You'll land on the <strong>Rally Home</strong> screen showing the demo rally dashboard.</li>
+      </ol>
+
+      <img src="images/pre-race-login.png" alt="Login screen with Try Demo button" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The login screen &mdash; click "Try Demo" to get started without an account.</div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 2: Explore Pre-Race Setup               -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-2">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <h2>Explore Pre-Race Setup</h2>
+      </div>
+
+      <p>The rally home screen is the organizer's dashboard. Take a moment to look around:</p>
+
+      <ul>
+        <li><strong>Sections</strong> &mdash; the demo rally has three sections (Beaver Buggies, Kub Kars, Scout Trucks), each with participants already registered.</li>
+        <li><strong>Groups</strong> &mdash; participants are organized by their Scout group (e.g., "1st Newmarket").</li>
+        <li><strong>Operators &amp; Registrars</strong> &mdash; you can invite collaborators to help manage registration and race day.</li>
+      </ul>
+
+      <img src="images/pre-race-rally-home.png" alt="Rally Home dashboard" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The Rally Home screen shows sections, groups, and participant counts at a glance.</div>
+
+      <p>Click on any section name to see its roster. You'll see participants listed by group, each with an assigned car number.</p>
+
+      <img src="images/pre-race-section-detail-grouped.png" alt="Section roster grouped by troop" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">A section's roster, organized by group.</div>
+
+      <div class="eval-tip">
+        <strong>Try it:</strong> Click "Add Participant" to add someone to a section. A car number is assigned automatically.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 3: Open the Debug View                  -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-3">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <h2>Open the Debug View</h2>
+      </div>
+
+      <p>RallyLab's debug view shows the operator console, a fake track simulator, and the audience display side by side in a single window. This is the best way to see the whole system in action.</p>
+
+      <ol>
+        <li>From the Rally Home screen (step 2), click the <strong>"Race Day"</strong> button. This opens the Operator Console.</li>
+        <li>Click <strong>"Load Demo Data"</strong>. Leave the defaults in the dialog and click <strong>"Load"</strong>.</li>
+        <li>You'll land on the <strong>Operator Rally Home</strong>. Click the <strong>"Open"</strong> menu in the top nav bar and select <strong>"Debug View"</strong>.</li>
+        <li>The debug view opens with three panels: the <strong>Operator</strong> console on the left, the <strong>Fake Track</strong> at top-right, and the <strong>Audience Display</strong> at bottom-right.</li>
+      </ol>
+
+      <img src="images/operator-dlg-demo-data.png" alt="Load Demo Data dialog" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The Demo Data dialog pre-configures participants and check-in status.</div>
+
+      <img src="images/debug-view-staging.png" alt="Debug view showing operator, fake track, and audience panels side by side during staging" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The debug view during staging &mdash; operator console (left), fake track with cars ready (top-right), and audience display (bottom-right).</div>
+
+      <div class="eval-tip">
+        <strong>Tip:</strong> The debug view works best on a wide monitor. If your screen is small, you can open the operator (<code>operator.html</code>) and audience (<code>audience.html</code>) in separate tabs instead.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 4: Check In & Start a Section           -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-4">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <h2>Check In &amp; Start a Section</h2>
+      </div>
+
+      <p>This is the Operator's job &mdash; the only setup needed before the Track Operator takes over.</p>
+
+      <ol>
+        <li>In the Operator panel, click <strong>"Check In"</strong> on any section. Check the boxes to mark participants as arrived. (With demo data, some may already be checked in.)</li>
+        <li>Once at least 2 participants are checked in, click <strong>"Start This Section"</strong>.</li>
+        <li>The lane selection dialog appears &mdash; leave all lanes checked and click <strong>"Start Racing"</strong>.</li>
+      </ol>
+
+      <img src="images/operator-check-in.png" alt="Check-in screen" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">Check in participants as they arrive with their cars.</div>
+
+      <img src="images/operator-dlg-start-section.png" alt="Lane selection dialog" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">Choose which lanes are active. The schedule is generated automatically.</div>
+
+      <p>The first heat is now staged. The operator console shows the lane assignments, and the audience display shows the same information to the crowd. From here, <strong>the Track Operator runs the race</strong> &mdash; the Operator doesn't need to click anything during normal heat progression.</p>
+
+      <img src="images/operator-live-console-staging.png" alt="Staging view" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The staging view shows which cars go in which lanes.</div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 5: Run Heats from the Fake Track        -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-5">
+      <div class="step-header">
+        <div class="step-number">5</div>
+        <h2>Run Heats from the Fake Track</h2>
+      </div>
+
+      <p>In a real race, the Track Operator is the person standing at the physical track &mdash; loading cars onto lanes, releasing the start gate, and resetting the finish switches between heats. The Operator at the computer doesn't need to touch anything; the track controller handles timing and heat advancement automatically.</p>
+
+      <p>In the debug view, <strong>you play both roles</strong>. The fake track panel simulates the physical track. Here's the cycle for each heat:</p>
+
+      <ol>
+        <li><strong>Release Gate</strong> &mdash; Click the <strong>"Release Gate"</strong> button in the Fake Track panel. Cars animate down the track and finish times are generated automatically.</li>
+        <li><strong>See Results</strong> &mdash; Results appear on both the operator console and the audience display simultaneously. The standings update with cumulative averages.</li>
+        <li><strong>Reset Switches</strong> &mdash; Click the <strong>"Reset Switches"</strong> button. The next heat stages automatically &mdash; no operator click needed.</li>
+        <li><strong>Repeat</strong> &mdash; Keep clicking Release Gate and Reset Switches to run through all the heats.</li>
+      </ol>
+
+      <div class="eval-tip">
+        <strong>Key insight:</strong> Notice that the Operator console advances through heats without any clicks. The entire race flow is driven by the Track Operator's two actions: release the gate, then reset the switches. This is how it works with real hardware too &mdash; the Pico W track controller detects gate release and finish times, so the Operator can focus on watching the race and handling exceptions.
+      </div>
+
+      <p>Watch the audience display update in real time as you run heats:</p>
+
+      <img src="images/audience-staging.png" alt="Audience staging view" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The audience sees the current heat staging with an "Up Next" preview.</div>
+
+      <img src="images/audience-results.png" alt="Audience results view" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">Heat results with finish times and medals for the top finishers.</div>
+
+      <img src="images/operator-live-console-results.png" alt="Operator results view" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The operator console shows results and running standings &mdash; updated automatically.</div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 6: Review Results & Inspect Events      -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-6">
+      <div class="step-header">
+        <div class="step-number">6</div>
+        <h2>Review Results &amp; Inspect Events</h2>
+      </div>
+
+      <p>After running all heats in a section, you'll see the final standings with rank, average time, best time, and heat count.</p>
+
+      <img src="images/operator-section-complete.png" alt="Final standings" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">Section complete &mdash; final standings with average and best times.</div>
+
+      <p>On the audience display, the operator can trigger a dramatic <strong>progressive reveal</strong> &mdash; standings appear from last place up to first, with medal animations for the top 3.</p>
+
+      <img src="images/audience-section-complete.png" alt="Audience medal reveal" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The audience sees a dramatic reveal of final standings.</div>
+
+      <h3 style="font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; margin: 1.5rem 0 0.5rem;">Event Inspector</h3>
+      <p>RallyLab is event-sourced &mdash; everything that happens is stored as a domain event. From the Operator console, click the <strong>"Open"</strong> menu and select <strong>"Event Inspector"</strong> to see the raw event stream.</p>
+
+      <p>You'll see every event that was generated during your demo session: <code>RallyCreated</code>, <code>ParticipantAdded</code>, <code>SectionStarted</code>, <code>RaceCompleted</code>, and more. Click any event to see its full JSON payload, or use the "Replay to Here" tab to see the application state at any point in time.</p>
+
+      <div class="eval-tip">
+        <strong>Why this matters:</strong> Event sourcing means RallyLab can recover from crashes, sync between devices, and provide a complete audit trail of everything that happened during a race.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- What's Next                                   -->
+    <!-- ============================================ -->
+    <div class="next-steps">
+      <h2>What's Next?</h2>
+      <ul>
+        <li><a href="./">Read the User Guide</a> &mdash; detailed reference for every screen and feature</li>
+        <li><a href="../registration.html">Create a real rally</a> &mdash; sign in with your email to set up your own event</li>
+        <li><a href="https://github.com/vmetcalfe/KubKars">View on GitHub</a> &mdash; explore the source, report issues, or contribute</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <footer class="guide-footer">
+    <p>
+      <a href="../">RallyLab</a> is
+      <a href="https://github.com/vmetcalfe/KubKars/blob/main/LICENSE">MIT licensed</a> &middot;
+      <a href="https://github.com/vmetcalfe/KubKars">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>
