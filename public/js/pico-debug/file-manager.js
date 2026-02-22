@@ -1,0 +1,126 @@
+/**
+ * file-manager.js — File operations on MicroPython device via raw REPL.
+ *
+ * Provides list, read, write, and delete for files on the Pico W.
+ * All operations enter raw REPL, execute Python, then exit + soft reset.
+ */
+
+import { escapePython } from './raw-repl.js';
+
+const WRITE_CHUNK_SIZE = 1536; // bytes per f.write() call within a single exec
+
+/**
+ * Creates a file manager.
+ *
+ * @param {object} rawRepl — raw REPL controller from raw-repl.js
+ */
+export function createFileManager(rawRepl) {
+
+  /**
+   * List files in root directory.
+   * @returns {Promise<string[]>} array of filenames
+   */
+  async function listFiles() {
+    await rawRepl.enter();
+    try {
+      const { stdout, stderr } = await rawRepl.exec(
+        'import os\nfor f in sorted(os.listdir("/")):\n print(f)'
+      );
+      if (stderr.trim()) {
+        throw new Error('listFiles error: ' + stderr.trim());
+      }
+      await rawRepl.exit();
+      await rawRepl.softReset();
+      return stdout.trim().split(/\r?\n/).map(f => f.trim()).filter(f => f.length > 0);
+    } catch (err) {
+      try { await rawRepl.exit(); await rawRepl.softReset(); } catch {}
+      throw err;
+    }
+  }
+
+  /**
+   * Read a file's contents.
+   * @param {string} filename
+   * @returns {Promise<string>} file contents
+   */
+  async function readFile(filename) {
+    await rawRepl.enter();
+    try {
+      const { stdout, stderr } = await rawRepl.exec(
+        `f=open('${filename}','r')\nprint(f.read(),end='')\nf.close()`
+      );
+      if (stderr.trim()) {
+        throw new Error(`readFile(${filename}) error: ${stderr.trim()}`);
+      }
+      await rawRepl.exit();
+      await rawRepl.softReset();
+      return stdout;
+    } catch (err) {
+      try { await rawRepl.exit(); await rawRepl.softReset(); } catch {}
+      throw err;
+    }
+  }
+
+  /**
+   * Write content to a file. For large files, splits into multiple f.write() calls.
+   * @param {string} filename
+   * @param {string} content
+   */
+  async function writeFile(filename, content) {
+    await rawRepl.enter();
+    try {
+      if (content.length <= WRITE_CHUNK_SIZE) {
+        // Single write
+        const escaped = escapePython(content);
+        const { stderr } = await rawRepl.exec(
+          `f=open('${filename}','w')\nf.write('''${escaped}''')\nf.close()\nprint('ok')`,
+          15000
+        );
+        if (stderr.trim()) {
+          throw new Error(`writeFile(${filename}) error: ${stderr.trim()}`);
+        }
+      } else {
+        // Multi-chunk write
+        let code = `f=open('${filename}','w')\n`;
+        for (let i = 0; i < content.length; i += WRITE_CHUNK_SIZE) {
+          const chunk = content.slice(i, i + WRITE_CHUNK_SIZE);
+          const escaped = escapePython(chunk);
+          code += `f.write('''${escaped}''')\n`;
+        }
+        code += `f.close()\nprint('ok')`;
+        const { stderr } = await rawRepl.exec(code, 30000);
+        if (stderr.trim()) {
+          throw new Error(`writeFile(${filename}) error: ${stderr.trim()}`);
+        }
+      }
+      await rawRepl.exit();
+      await rawRepl.softReset();
+    } catch (err) {
+      try { await rawRepl.exit(); await rawRepl.softReset(); } catch {}
+      throw err;
+    }
+  }
+
+  /**
+   * Delete a file.
+   * @param {string} filename
+   */
+  async function deleteFile(filename) {
+    await rawRepl.enter();
+    try {
+      const { stderr } = await rawRepl.exec(
+        `import os\nos.remove('${filename}')\nprint('ok')`
+      );
+      if (stderr.trim()) {
+        throw new Error(`deleteFile(${filename}) error: ${stderr.trim()}`);
+      }
+      await rawRepl.exit();
+      await rawRepl.softReset();
+    } catch (err) {
+      try { await rawRepl.exit(); await rawRepl.softReset(); } catch {}
+      throw err;
+    }
+  }
+
+  return { listFiles, readFile, writeFile, deleteFile };
+}

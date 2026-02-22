@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RallyLab — Pico W Debug Console</title>
+
+  <!-- CodeMirror 5 from CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/python/python.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { height: 100%; }
+    body { height: 100%; margin: 0; background: #1a1a2e; color: #e0e0e0; font-family: system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 12px;
+      background: #252540;
+      border-bottom: 1px solid #333;
+    }
+    .header h1 { font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
+    .back-link {
+      color: #60a5fa;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-right: auto;
+    }
+    .back-link:hover { text-decoration: underline; }
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    .status-dot.connected { background: #4ade80; }
+    .status-label {
+      font-size: 0.75rem;
+      color: #888;
+      min-width: 90px;
+    }
+    .header button {
+      padding: 4px 12px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #333;
+      color: #e0e0e0;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .header button:hover { background: #444; }
+    .header button:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── No Web Serial Banner ───────────────────────────── */
+    .no-serial-banner {
+      display: none;
+      padding: 10px 16px;
+      background: #4a1c1c;
+      color: #fca5a5;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    .no-serial-banner a { color: #93c5fd; }
+
+    /* ── Tabs ───────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      background: #1e1e36;
+      border-bottom: 1px solid #333;
+    }
+    .tab-btn {
+      padding: 6px 20px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #888;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn:hover { color: #bbb; }
+    .tab-btn.active { color: #60a5fa; border-bottom-color: #60a5fa; }
+
+    /* ── Tab Panels ─────────────────────────────────────── */
+    .tab-panel {
+      display: none;
+      flex: 1;
+      min-height: 0;
+    }
+    .tab-panel.active { display: flex; flex-direction: column; }
+
+    .main-area {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Terminal ────────────────────────────────────────── */
+    #terminal-output {
+      flex: 1;
+      overflow-y: auto;
+      overflow-anchor: none;
+      background: #12121f;
+    }
+    #terminal-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 100%;
+      padding: 8px 12px;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    #terminal-anchor {
+      overflow-anchor: auto;
+      height: 1px;
+    }
+    #terminal-output .cmd { color: #60a5fa; }
+    #terminal-output .resp { color: #e0e0e0; }
+    #terminal-output .err { color: #f87171; }
+    #terminal-output .sys { color: #888; font-style: italic; }
+
+    .terminal-input-row {
+      display: flex;
+      gap: 0;
+      border-top: 1px solid #333;
+      background: #252540;
+    }
+    .terminal-prompt {
+      padding: 6px 8px;
+      color: #4ade80;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.8rem;
+      user-select: none;
+    }
+    #terminal-input {
+      flex: 1;
+      padding: 6px 4px;
+      background: transparent;
+      border: none;
+      color: #e0e0e0;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    #terminal-input::placeholder { color: #555; }
+
+    .quick-cmds {
+      display: flex;
+      gap: 4px;
+      padding: 4px 8px;
+      background: #1e1e36;
+      border-top: 1px solid #333;
+      flex-wrap: wrap;
+    }
+    .quick-cmds button {
+      padding: 3px 10px;
+      border: 1px solid #444;
+      border-radius: 3px;
+      background: #2a2a4a;
+      color: #bbb;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+    .quick-cmds button:hover { background: #3a3a5a; color: #fff; }
+
+    /* ── Files Panel ────────────────────────────────────── */
+    .files-container {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .file-list-panel {
+      width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #333;
+      background: #1e1e36;
+    }
+    .file-list-toolbar {
+      display: flex;
+      gap: 4px;
+      padding: 4px 6px;
+      border-bottom: 1px solid #333;
+    }
+    .file-list-toolbar button {
+      padding: 3px 8px;
+      border: 1px solid #444;
+      border-radius: 3px;
+      background: #2a2a4a;
+      color: #bbb;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+    .file-list-toolbar button:hover { background: #3a3a5a; color: #fff; }
+    #file-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .file-item {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    }
+    .file-item:hover { background: #2a2a4a; }
+    .file-item.active { background: #333366; color: #60a5fa; }
+    .file-item.dir { color: #888; cursor: default; }
+
+    .editor-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: #252540;
+      border-bottom: 1px solid #333;
+    }
+    .editor-filename {
+      font-size: 0.75rem;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      color: #888;
+      flex: 1;
+    }
+    .editor-toolbar button {
+      padding: 3px 10px;
+      border: 1px solid #444;
+      border-radius: 3px;
+      background: #2a2a4a;
+      color: #bbb;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+    .editor-toolbar button:hover { background: #3a3a5a; color: #fff; }
+    .editor-toolbar button.primary {
+      background: #1d4ed8;
+      border-color: #2563eb;
+      color: #fff;
+    }
+    .editor-toolbar button.primary:hover { background: #2563eb; }
+    .editor-toolbar button.danger {
+      border-color: #7f1d1d;
+      color: #f87171;
+    }
+    .editor-toolbar button.danger:hover { background: #3a1c1c; }
+    #editor-container {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #editor-container .CodeMirror {
+      height: 100%;
+      font-size: 0.8rem;
+    }
+    .editor-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: #555;
+      font-size: 0.8rem;
+    }
+
+    /* ── Busy overlay ───────────────────────────────────── */
+    .busy-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      color: #e0e0e0;
+      font-size: 0.85rem;
+    }
+    .busy-overlay.active { display: flex; }
+    .busy-spinner {
+      width: 18px; height: 18px;
+      border: 2px solid #555;
+      border-top-color: #60a5fa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Upload input (hidden) ──────────────────────────── */
+    #upload-input { display: none; }
+  </style>
+</head>
+<body>
+  <!-- No Web Serial banner -->
+  <div class="no-serial-banner" id="no-serial-banner">
+    Web Serial API is not available. Use <a href="https://www.google.com/chrome/" target="_blank">Chrome</a> or Edge on desktop.
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <a href="index.html" class="back-link">&larr; Back</a>
+    <h1>Pico W Debug Console</h1>
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-label" id="status-label">Disconnected</span>
+    <button id="btn-connect">Connect</button>
+    <button id="btn-disconnect" disabled>Disconnect</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="terminal">Terminal</button>
+    <button class="tab-btn" data-tab="files">Files</button>
+  </div>
+
+  <!-- Main area -->
+  <div class="main-area">
+    <!-- Terminal tab -->
+    <div class="tab-panel active" id="tab-terminal">
+      <div id="terminal-output"><div id="terminal-content"></div><div id="terminal-anchor"></div></div>
+      <div class="quick-cmds">
+        <button data-cmd="info">info</button>
+        <button data-cmd="state">state</button>
+        <button data-cmd="gate">gate</button>
+        <button data-cmd="dbg">dbg</button>
+        <button data-cmd="dbg_watch">dbg_watch</button>
+      </div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt">&gt;</span>
+        <input type="text" id="terminal-input" placeholder="Type a command..." autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <!-- Files tab -->
+    <div class="tab-panel" id="tab-files">
+      <div class="files-container">
+        <div class="file-list-panel">
+          <div class="file-list-toolbar">
+            <button id="btn-refresh-files" title="Refresh file list">Refresh</button>
+            <button id="btn-upload-file" title="Upload .py file to Pico">Upload</button>
+          </div>
+          <div id="file-list"></div>
+        </div>
+        <div class="editor-panel">
+          <div class="editor-toolbar">
+            <span class="editor-filename" id="editor-filename">No file selected</span>
+            <button class="primary" id="btn-save" disabled>Save</button>
+            <button class="danger" id="btn-restart">Restart Firmware</button>
+          </div>
+          <div id="editor-container">
+            <div class="editor-placeholder">Select a file to edit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Busy overlay -->
+  <div class="busy-overlay" id="busy-overlay">
+    <div class="busy-spinner"></div>
+    <span id="busy-text">Working...</span>
+  </div>
+
+  <!-- Hidden file upload input -->
+  <input type="file" id="upload-input" accept=".py">
+
+  <script type="module" src="js/pico-debug/app.js"></script>
+</body>
+</html>
