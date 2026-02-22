@@ -7,11 +7,13 @@
     "test:cucumber": "cucumber-js",
     "test:e2e": "npx bddgen && npx playwright test",
     "test:e2e:headed": "npx bddgen && npx playwright test --headed",
-    "test:all": "node --test test/state-manager.test.mjs && cucumber-js && npx bddgen && npx playwright test"
+    "test:all": "node --test test/state-manager.test.mjs && cucumber-js && npx bddgen && npx playwright test",
+    "generate-docs": "node scripts/generate-docs.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.0.0",
     "@playwright/test": "^1.58.2",
+    "docx": "^9.5.3",
     "playwright-bdd": "^8.4.2"
   }
 }
