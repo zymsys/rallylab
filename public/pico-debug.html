@@ -356,7 +356,8 @@
         <div class="file-list-panel">
           <div class="file-list-toolbar">
             <button id="btn-refresh-files" title="Refresh file list">Refresh</button>
-            <button id="btn-upload-file" title="Upload .py file to Pico">Upload</button>
+            <button id="btn-upload-file" title="Upload .py files to Pico">Upload</button>
+            <button id="btn-load-github" title="Load firmware files from GitHub">Load from GitHub</button>
           </div>
           <div id="file-list"></div>
         </div>
@@ -381,7 +382,7 @@
   </div>
 
   <!-- Hidden file upload input -->
-  <input type="file" id="upload-input" accept=".py">
+  <input type="file" id="upload-input" accept=".py" multiple>
 
   <script type="module" src="js/pico-debug/app.js"></script>
 </body>

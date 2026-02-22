@@ -122,5 +122,47 @@ export function createFileManager(rawRepl) {
     }
   }
 
-  return { listFiles, readFile, writeFile, deleteFile };
+  /**
+   * Write multiple files in a single raw REPL session.
+   * @param {Array<{name: string, content: string}>} entries
+   * @param {function} [onProgress] — called with (filename, index, total) after each file
+   */
+  async function writeFiles(entries, onProgress) {
+    await rawRepl.enter();
+    try {
+      for (let i = 0; i < entries.length; i++) {
+        const { name, content } = entries[i];
+        if (content.length <= WRITE_CHUNK_SIZE) {
+          const escaped = escapePython(content);
+          const { stderr } = await rawRepl.exec(
+            `f=open('${name}','w')\nf.write('''${escaped}''')\nf.close()\nprint('ok')`,
+            15000
+          );
+          if (stderr.trim()) {
+            throw new Error(`writeFile(${name}) error: ${stderr.trim()}`);
+          }
+        } else {
+          let code = `f=open('${name}','w')\n`;
+          for (let j = 0; j < content.length; j += WRITE_CHUNK_SIZE) {
+            const chunk = content.slice(j, j + WRITE_CHUNK_SIZE);
+            const escaped = escapePython(chunk);
+            code += `f.write('''${escaped}''')\n`;
+          }
+          code += `f.close()\nprint('ok')`;
+          const { stderr } = await rawRepl.exec(code, 30000);
+          if (stderr.trim()) {
+            throw new Error(`writeFile(${name}) error: ${stderr.trim()}`);
+          }
+        }
+        if (onProgress) onProgress(name, i, entries.length);
+      }
+      await rawRepl.exit();
+      await rawRepl.softReset();
+    } catch (err) {
+      try { await rawRepl.exit(); await rawRepl.softReset(); } catch {}
+      throw err;
+    }
+  }
+
+  return { listFiles, readFile, writeFile, writeFiles, deleteFile };
 }

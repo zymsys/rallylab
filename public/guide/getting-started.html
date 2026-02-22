@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RallyLab Getting Started Guide</title>
+  <meta name="description" content="Set up a Raspberry Pi Pico W track controller, connect it to a pinewood derby track, and run your first race with RallyLab.">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1a1a2e;
+      --cream: #faf6f0;
+      --cream-dark: #f0e8dc;
+      --amber: #c77d1a;
+      --amber-light: #d4a017;
+      --green: #2d6a4f;
+      --text: #1a1a2e;
+      --text-muted: #5a5670;
+      --border: #e2ddd4;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      line-height: 1.7;
+      background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Top nav ===== */
+    .guide-topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1.5rem;
+      background: rgba(26, 26, 46, 0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .topnav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .topnav-logo {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .topnav-sep {
+      color: rgba(255, 255, 255, 0.2);
+      font-weight: 300;
+    }
+
+    .topnav-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .topnav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .topnav-link {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+      transition: color 150ms;
+    }
+    .topnav-link:hover { color: #fff; }
+
+    .topnav-cta {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--amber-light);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 150ms;
+    }
+    .topnav-cta:hover { background: #e6b422; }
+
+    /* ===== Main content ===== */
+    .guide-main {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 5rem 3rem 4rem;
+    }
+
+    .guide-hero {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .guide-hero h1 {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    .guide-hero .crosslink {
+      display: inline-block;
+      margin-top: 0.75rem;
+      font-size: 0.88rem;
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .guide-hero .crosslink:hover { text-decoration: underline; }
+
+    /* ===== Steps ===== */
+    .eval-step {
+      margin-bottom: 3rem;
+      padding-top: 1rem;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--navy);
+      color: var(--amber-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .step-header h2 {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .eval-step p {
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .eval-step h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    .eval-step ol, .eval-step ul {
+      margin: 0.5rem 0 1rem 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .eval-step li {
+      margin-bottom: 0.35rem;
+    }
+
+    /* Tip callouts */
+    .eval-tip {
+      background: var(--cream);
+      border-left: 3px solid var(--amber);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.9rem;
+    }
+
+    .eval-tip strong {
+      color: var(--amber);
+    }
+
+    .eval-tip.warning {
+      border-left-color: #c0392b;
+    }
+
+    .eval-tip.warning strong {
+      color: #c0392b;
+    }
+
+    /* Images */
+    .guide-img {
+      display: block;
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+      margin: 1rem 0 0.25rem;
+    }
+
+    .guide-img-caption {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+
+    /* Separator between steps */
+    .step-sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 0 2rem;
+    }
+
+    /* ===== Code blocks ===== */
+    code {
+      font-size: 0.88em;
+      background: var(--cream);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    pre {
+      background: var(--navy);
+      color: #e8e6e3;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 0.75rem 0 1rem;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      color: inherit;
+    }
+
+    /* ===== Checklist ===== */
+    .checklist {
+      list-style: none;
+      margin: 0.75rem 0 1rem;
+      padding: 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 1.75rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .checklist li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.35rem;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-radius: 3px;
+    }
+
+    /* ===== Wiring table ===== */
+    .wiring-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 0.88rem;
+    }
+
+    .wiring-table th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 0.75rem;
+      background: var(--cream);
+      border-bottom: 2px solid var(--border);
+    }
+
+    .wiring-table td {
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wiring-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ===== Next steps box ===== */
+    .next-steps {
+      background: var(--cream);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin-top: 2rem;
+    }
+
+    .next-steps h2 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .next-steps ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .next-steps li {
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .next-steps a {
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .next-steps a:hover { text-decoration: underline; }
+
+    /* ===== Footer ===== */
+    .guide-footer {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 1.5rem 3rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .guide-footer a {
+      color: var(--amber);
+      text-decoration: none;
+    }
+    .guide-footer a:hover { text-decoration: underline; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 700px) {
+      .guide-main {
+        padding: 4.5rem 1.5rem 3rem;
+      }
+
+      .guide-footer {
+        padding: 1.5rem;
+      }
+
+      .topnav-title { display: none; }
+      .topnav-sep { display: none; }
+
+      .step-header h2 {
+        font-size: 1.2rem;
+      }
+
+      pre {
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top nav -->
+  <nav class="guide-topnav">
+    <div class="topnav-left">
+      <a href="../" class="topnav-logo">RallyLab</a>
+      <span class="topnav-sep">/</span>
+      <span class="topnav-title">Getting Started</span>
+    </div>
+    <div class="topnav-links">
+      <a href="../" class="topnav-link">Home</a>
+      <a href="./" class="topnav-link">User Guide</a>
+      <a href="../registration.html" class="topnav-cta">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="guide-main">
+
+    <div class="guide-hero">
+      <h1>Getting Started</h1>
+      <p>Set up a Raspberry Pi Pico W as your track controller, wire it to your pinewood derby track, and run your first hardware-timed race. If you just want to try RallyLab without hardware, see the <a href="evaluation.html" style="color: var(--amber); text-decoration: none; font-weight: 500;">Evaluation Guide</a> instead.</p>
+      <a href="./" class="crosslink">Full feature reference &rarr; User Guide</a>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- Step 1: What You'll Need                     -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-1">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <h2>What You'll Need</h2>
+      </div>
+
+      <h3>Hardware</h3>
+      <ul class="checklist">
+        <li><strong>Raspberry Pi Pico W</strong> (recommended) or <strong>plain Pico</strong> &mdash; the W adds WiFi; a plain Pico works fine over USB serial</li>
+        <li><strong>Micro-USB cable</strong> &mdash; for power, firmware upload, and serial communication</li>
+        <li><strong>Pinewood derby track</strong> with lane finish sensors and a start gate switch</li>
+        <li><strong>Wiring</strong> to connect the track's sensors to the Pico's GPIO header pins (jumper wires, breakout board, or whatever suits your connector)</li>
+      </ul>
+
+      <h3>Software</h3>
+      <ul class="checklist">
+        <li><strong>Chrome or Edge</strong> (desktop) &mdash; required for both RallyLab and the Pico Debug Console (Web Serial API)</li>
+        <li><strong>MicroPython firmware</strong> &mdash; the Pico W runs MicroPython; you'll install it once</li>
+      </ul>
+
+      <div class="eval-tip">
+        <strong>No track yet?</strong> You can develop and test with just a breadboard and pushbuttons. The firmware ships with a breadboard preset in <code>config.py</code> &mdash; each button simulates a lane finish or gate release.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 2: Install MicroPython                   -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-2">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <h2>Install MicroPython on the Pico W</h2>
+      </div>
+
+      <p>If your Pico W already has MicroPython installed, skip to step 3.</p>
+
+      <ol>
+        <li>Download the latest <strong>MicroPython UF2</strong> for the Pico W from <a href="https://micropython.org/download/RPI_PICO_W/" style="color: var(--amber)">micropython.org</a>.</li>
+        <li>Hold the <strong>BOOTSEL</strong> button on the Pico W, then plug in the USB cable. A drive named <strong>RPI-RP2</strong> appears on your computer.</li>
+        <li>Drag the <code>.uf2</code> file onto the <strong>RPI-RP2</strong> drive. The Pico reboots automatically and the drive disappears &mdash; MicroPython is now installed.</li>
+      </ol>
+
+      <div class="eval-tip">
+        <strong>Verify:</strong> After the reboot, a new serial port appears (e.g., <code>/dev/cu.usbmodem*</code> on Mac, <code>COM3</code> on Windows). You'll use this port in the next step.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 3: Upload the Firmware                   -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-3">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <h2>Upload the RallyLab Firmware</h2>
+      </div>
+
+      <p>The firmware lives in the <code>firmware/</code> directory of the RallyLab repository. You can upload it using the <strong>Pico Debug Console</strong> in your browser, or with a command-line tool like <code>mpremote</code>.</p>
+
+      <h3>Option A: Pico Debug Console (browser)</h3>
+      <ol>
+        <li>From the Operator Console, click the <strong>"Open"</strong> menu and select <strong>"Pico Debug Console"</strong>.</li>
+        <li>Click <strong>Connect</strong> and select your Pico from the serial port picker.</li>
+        <li>Switch to the <strong>Files</strong> tab.</li>
+        <li>Click <strong>"Load from GitHub"</strong> &mdash; this downloads all firmware files from the repository and writes them to the Pico automatically. Alternatively, click <strong>"Upload"</strong> and select the <code>.py</code> files from the <code>firmware/</code> directory yourself (multi-select is supported).</li>
+        <li>Click <strong>Restart Firmware</strong> to soft-reset the Pico.</li>
+      </ol>
+
+      <img src="images/pico-debug-files.png" alt="Pico Debug Console files tab showing firmware files on the device" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The Files tab lets you upload, edit, and manage firmware files directly on the Pico W.</div>
+
+      <h3>Option B: mpremote (command line)</h3>
+      <p>Install <code>mpremote</code> with pip, then copy all firmware files to the Pico:</p>
+<pre><code>pip install mpremote
+mpremote cp firmware/*.py :</code></pre>
+      <p>Reset the Pico to start the new firmware:</p>
+<pre><code>mpremote reset</code></pre>
+
+      <div class="eval-tip warning">
+        <strong>Port lock:</strong> Only one program can use the serial port at a time. Disconnect from the Pico Debug Console before using <code>mpremote</code>, and vice versa.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 4: Wire the Track                        -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-4">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <h2>Wire the Track</h2>
+      </div>
+
+      <p>Most pinewood derby tracks have <strong>lane finish sensors</strong> (normally-open switches that close when a car arrives) and a <strong>start gate switch</strong> (often a magnetic reed switch that opens when the gate releases). Each sensor wire connects to a GPIO pin on the Pico; the Pico uses internal pull-ups, so a sensor triggering pulls the pin LOW.</p>
+
+      <p>The wiring depends on your specific track. Here's what you need to figure out:</p>
+
+      <ol>
+        <li><strong>How many lanes</strong> does your track have, and which wire goes to which lane?</li>
+        <li><strong>What kind of start gate switch</strong> does it use? A reed switch opens on release (rising edge = race start). A microswitch may work the opposite way.</li>
+        <li><strong>Is there a common ground?</strong> Most tracks share a ground wire across all sensors &mdash; connect it to the Pico's GND pin.</li>
+      </ol>
+
+      <p>Use a multimeter in continuity mode to map each sensor to its wire. Trip each lane sensor one at a time and note which wire shows continuity to ground.</p>
+
+      <h3>Update config.py</h3>
+      <p>Open <code>config.py</code> on the Pico (via the Debug Console's Files tab or <code>mpremote</code>) and set the pin mapping to match your wiring. The file ships with presets you can use as starting points:</p>
+
+      <ul>
+        <li><strong>Breadboard</strong> (default) &mdash; pushbuttons on GP5&ndash;GP13, for development without a track</li>
+        <li><strong>SuperTimer (dedicated gate)</strong> &mdash; for tracks with a DA-15 connector where the start gate has its own pin</li>
+        <li><strong>SuperTimer (shared pin)</strong> &mdash; for DA-15 tracks where Lane 2 and the start gate share a wire</li>
+      </ul>
+
+      <p>The key settings are <code>LANE_PINS</code> (a dict mapping lane number to GPIO number), <code>GATE_PIN</code>, and <code>GATE_INVERT</code> (set <code>True</code> for breadboard buttons, <code>False</code> for a real reed switch). Edit these to match your track and save.</p>
+
+      <p>After editing, click <strong>Restart Firmware</strong> (or run <code>mpremote reset</code>).</p>
+
+      <div class="eval-tip warning">
+        <strong>Watch out for voltage.</strong> The Pico runs on 3.3V logic. If your track's connector carries higher voltage (e.g., 5V supply lines), leave those pins unconnected.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 5: Verify with the Debug Console         -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-5">
+      <div class="step-header">
+        <div class="step-number">5</div>
+        <h2>Verify with the Debug Console</h2>
+      </div>
+
+      <p>Before running a race, verify that every sensor and the start gate are working correctly.</p>
+
+      <ol>
+        <li>Open the <strong>Pico Debug Console</strong> from the Operator Console's <strong>"Open"</strong> menu and connect to the Pico W.</li>
+        <li>In the <strong>Terminal</strong> tab, type <code>info</code> and press Enter. You should see the firmware version, protocol version, and lane count.</li>
+        <li>Type <code>dbg</code> to see a snapshot of all sensor states, WiFi status, and the engine state machine phase.</li>
+        <li>Type <code>dbg_watch</code> to start a live edge monitor. Now trip each lane sensor and the start gate one at a time &mdash; you should see a JSON line for each event confirming the correct pin label.</li>
+        <li>Type anything (e.g., <code>state</code>) to stop the watch and return to normal command mode.</li>
+      </ol>
+
+      <img src="images/pico-debug-terminal.png" alt="Pico Debug Console terminal showing command output" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The Terminal tab &mdash; send commands, see sensor edges, and diagnose wiring issues.</div>
+
+      <div class="eval-tip">
+        <strong>What to look for:</strong> When you run <code>dbg_watch</code> and trip Lane 3's sensor, you should see <code>{ "pin": "lane", "lane": 3, "edge": "triggered" }</code>. If you see the wrong lane number or no output, check your wiring and <code>config.py</code> pin mapping.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 6: Connect from the Operator Console     -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-6">
+      <div class="step-header">
+        <div class="step-number">6</div>
+        <h2>Connect from the Operator Console</h2>
+      </div>
+
+      <p>With the firmware verified, you're ready to connect the Operator Console to the track controller.</p>
+
+      <ol>
+        <li>Open the <strong>Operator Console</strong> (<code>operator.html</code>) and load your rally (or load demo data to test).</li>
+        <li>Click the <strong>Connect</strong> button in the top toolbar.</li>
+        <li>Select the <strong>Serial (USB)</strong> connection type and pick the Pico W's serial port.</li>
+        <li>The status indicator turns green when connected. The operator console now receives finish times automatically as races complete.</li>
+      </ol>
+
+      <img src="images/operator-rally-home.png" alt="Operator Rally Home screen" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">The Operator Rally Home &mdash; your race day command center.</div>
+
+      <h3>WiFi connection (optional)</h3>
+      <p>For a wireless setup, configure WiFi credentials on the Pico first. In the Debug Console terminal:</p>
+
+<pre><code>wifi_setup MyNetworkName MyPassword</code></pre>
+
+      <p>The Pico saves credentials and auto-connects on future boots. Once connected, it starts an HTTP server. In the Operator Console, choose <strong>WiFi (HTTP)</strong> as the connection type and enter the Pico's IP address (shown in the terminal on boot).</p>
+
+      <div class="eval-tip">
+        <strong>USB vs. WiFi:</strong> USB serial is the most reliable option &mdash; no network to worry about. WiFi is useful when the computer running the Operator Console can't be physically near the track. Both use the same protocol; the Operator Console handles either transparently.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 7: Run Your First Race                   -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-7">
+      <div class="step-header">
+        <div class="step-number">7</div>
+        <h2>Run Your First Race</h2>
+      </div>
+
+      <p>With the track connected, the race flow is fully automatic. The Track Operator at the physical track does two things per heat &mdash; everything else happens by itself.</p>
+
+      <ol>
+        <li><strong>Check in participants</strong> and <strong>start a section</strong> from the Operator Console (just like in the <a href="evaluation.html#step-4" style="color: var(--amber)">Evaluation Guide</a>).</li>
+        <li>The first heat is staged. The audience display shows lane assignments to the crowd.</li>
+        <li>The Track Operator <strong>loads cars</strong> onto the assigned lanes and <strong>releases the start gate</strong>.</li>
+        <li>The Pico detects the gate release (rising edge on the reed switch) and starts timing.</li>
+        <li>As each car crosses the finish line, the Pico records its time. When all active lanes have finished (or the timeout expires), it reports the results.</li>
+        <li>The Operator Console receives the times, records the heat, and the audience display updates automatically.</li>
+        <li>The Track Operator <strong>resets the start gate</strong> (pushes it back down). The Pico detects this, and the next heat stages automatically.</li>
+        <li>Repeat until all heats are complete.</li>
+      </ol>
+
+      <img src="images/operator-live-console-staging.png" alt="Operator console showing a staged heat with lane assignments" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">A staged heat &mdash; cars assigned to lanes, waiting for the gate release.</div>
+
+      <img src="images/operator-live-console-results.png" alt="Operator console showing heat results with finish times" class="guide-img" loading="lazy">
+      <div class="guide-img-caption">Heat results &mdash; finish times recorded automatically by the track controller.</div>
+
+      <div class="eval-tip">
+        <strong>Key insight:</strong> The Operator at the computer doesn't click anything during normal heat progression. The entire flow is driven by two physical actions: releasing the gate and resetting it. This keeps race day fast and reduces the chance of mistakes.
+      </div>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- Step 8: Troubleshooting                       -->
+    <!-- ============================================ -->
+    <section class="eval-step" id="step-8">
+      <div class="step-header">
+        <div class="step-number">8</div>
+        <h2>Troubleshooting</h2>
+      </div>
+
+      <h3>Pico not appearing as a serial port</h3>
+      <ul>
+        <li>Make sure you're using a <strong>data</strong> USB cable, not a charge-only cable.</li>
+        <li>Try a different USB port. Some USB hubs don't enumerate the Pico reliably.</li>
+        <li>On Mac, look for <code>/dev/cu.usbmodem*</code>. On Windows, check Device Manager for a new COM port.</li>
+      </ul>
+
+      <h3>Serial port is locked</h3>
+      <p>Only one program can use the serial port at a time. If the Debug Console says "Failed to open", make sure <code>mpremote</code>, another terminal, or another browser tab isn't already connected. Close the other connection and try again.</p>
+
+      <h3>Lane sensor not triggering</h3>
+      <ul>
+        <li>Run <code>dbg_watch</code> in the Debug Console and trip the sensor manually. If nothing appears, check the physical wiring between the sensor and the Pico GPIO pin.</li>
+        <li>Verify the pin mapping in <code>config.py</code> matches your actual wiring.</li>
+        <li>Check continuity between the sensor wire and the Pico's GPIO pin with a multimeter.</li>
+      </ul>
+
+      <h3>Gate release not detected</h3>
+      <ul>
+        <li>The start gate uses a <strong>reed switch</strong> (magnetic). Make sure the magnet is aligned &mdash; the switch should be closed (LOW) when the gate is down and open (HIGH) when released.</li>
+        <li>Check the <code>GATE_INVERT</code> setting in <code>config.py</code>. Breadboard buttons and reed switches have opposite logic: set <code>True</code> for breadboard buttons, <code>False</code> for the real reed switch.</li>
+        <li>Use <code>dbg_watch</code> to confirm you see a gate edge when the gate is released.</li>
+      </ul>
+
+      <h3>Finish times are consistently slow or delayed</h3>
+      <p>Some older tracks have <strong>debounce capacitors</strong> on the sensor lines (e.g., 10&nbsp;&micro;F electrolytics wired between each lane signal and ground). These were designed for the original timer hardware but slow down the edge that the Pico needs to see. If your finish times seem 100&ndash;500&nbsp;ms too high across all lanes, capacitors are the likely cause.</p>
+      <ul>
+        <li>Inspect the cable or connector for small cylindrical capacitors soldered inline.</li>
+        <li>Bypass or remove them &mdash; the Pico's firmware handles debouncing in software (<code>DEBOUNCE_MS</code> in <code>config.py</code>, default 10&nbsp;ms).</li>
+      </ul>
+
+      <h3>Race times are missing or wrong</h3>
+      <ul>
+        <li>Run <code>dbg</code> and check the <code>engine.phase</code>. It should be <code>IDLE</code> between races and <code>RACING</code> after the gate opens.</li>
+        <li>If a lane shows no time, its sensor may not have triggered. Check wiring for that lane.</li>
+        <li>If the race ends by timeout (default 15 seconds), it means one or more active lanes didn't finish. Inspect the lane sensors or reduce the active lane set.</li>
+      </ul>
+
+      <h3>WiFi won't connect</h3>
+      <ul>
+        <li>The Pico W supports <strong>2.4 GHz only</strong> &mdash; it cannot connect to 5 GHz networks.</li>
+        <li>Double-check the SSID and password. Credentials are case-sensitive.</li>
+        <li>After running <code>wifi_setup</code>, type <code>dbg</code> to check the <code>wifi</code> section for connection status, IP address, and signal strength (RSSI).</li>
+      </ul>
+    </section>
+
+    <hr class="step-sep">
+
+    <!-- ============================================ -->
+    <!-- What's Next                                   -->
+    <!-- ============================================ -->
+    <div class="next-steps">
+      <h2>What's Next?</h2>
+      <ul>
+        <li><a href="evaluation.html">Try the demo</a> &mdash; walk through the full race flow in your browser without hardware</li>
+        <li><a href="./">Read the User Guide</a> &mdash; detailed reference for every screen and feature</li>
+        <li><a href="../registration.html">Create a rally</a> &mdash; sign in to set up your real event</li>
+        <li><a href="https://github.com/vmetcalfe/KubKars">View on GitHub</a> &mdash; explore the source, firmware, and specs</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <footer class="guide-footer">
+    <p>
+      <a href="../">RallyLab</a> is
+      <a href="https://github.com/vmetcalfe/KubKars/blob/main/LICENSE">MIT licensed</a> &middot;
+      <a href="https://github.com/vmetcalfe/KubKars">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>

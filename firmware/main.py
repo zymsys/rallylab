@@ -7,13 +7,19 @@ import time
 from engine import Engine
 from gpio_manager import GpioManager
 from serial_handler import SerialHandler
-from wifi_manager import WiFiManager
 
 
 def main():
     engine = Engine()
     gpio = GpioManager()
-    wifi = WiFiManager()
+
+    # WiFi is optional — plain Pico (no W) works fine over USB serial
+    try:
+        from wifi_manager import WiFiManager
+        wifi = WiFiManager()
+    except Exception:
+        wifi = None
+
     serial = SerialHandler(engine, gpio, wifi)
 
     # Wire GPIO callbacks -> engine methods
@@ -25,7 +31,7 @@ def main():
     engine.set_gate_ready(gpio.is_gate_ready())
 
     # Try to auto-connect from saved credentials
-    if wifi.auto_connect():
+    if wifi and wifi.auto_connect():
         print("WiFi connected: %s" % wifi.ip_address)
 
     print("RallyLab Track Controller ready")
@@ -41,7 +47,7 @@ def main():
         serial.check_gate_ready()
 
         # Lazy HTTP server start
-        if http is None and wifi.is_connected():
+        if http is None and wifi and wifi.is_connected():
             from http_handler import HttpHandler
             http = HttpHandler(engine, gpio, wifi)
             http.start()

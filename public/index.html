@@ -77,6 +77,81 @@
     }
     .nav-link:hover { color: #fff; }
 
+    /* Docs dropdown */
+    .nav-dropdown {
+      position: relative;
+    }
+
+    .nav-dropdown-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.65);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      font-family: inherit;
+      transition: color 150ms;
+    }
+    .nav-dropdown-trigger:hover { color: #fff; }
+
+    .nav-dropdown-trigger svg {
+      transition: transform 150ms;
+    }
+
+    .nav-dropdown:hover .nav-dropdown-trigger svg,
+    .nav-dropdown:focus-within .nav-dropdown-trigger svg {
+      transform: rotate(180deg);
+    }
+
+    .nav-dropdown-menu {
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      right: 0;
+      background: var(--navy-light);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 0.4rem 0;
+      min-width: 200px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition: opacity 150ms, transform 150ms, visibility 150ms;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .nav-dropdown:hover .nav-dropdown-menu,
+    .nav-dropdown:focus-within .nav-dropdown-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .nav-dropdown-item {
+      display: block;
+      padding: 0.55rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+      transition: background 100ms, color 100ms;
+    }
+    .nav-dropdown-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .nav-dropdown-item small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.4);
+      margin-top: 0.1rem;
+    }
+
     .nav-cta {
       font-size: 0.85rem;
       font-weight: 600;
@@ -613,6 +688,7 @@
       }
 
       .nav-link { display: none; }
+      .nav-dropdown { display: none; }
 
       .hero {
         padding: 6.5rem 1.5rem 3.5rem;
@@ -681,8 +757,17 @@
       <a href="#features" class="nav-link">Features</a>
       <a href="#how-it-works" class="nav-link">How It Works</a>
       <a href="#stem" class="nav-link">STEM</a>
-      <a href="guide/evaluation.html" class="nav-link">Evaluation Guide</a>
-      <a href="guide/" class="nav-link">User Guide</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-trigger" aria-haspopup="true">
+          Docs
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+          <a href="guide/evaluation.html" class="nav-dropdown-item" role="menuitem">Evaluation Guide<small>Try the demo in 10 minutes</small></a>
+          <a href="guide/getting-started.html" class="nav-dropdown-item" role="menuitem">Getting Started<small>Pico setup, wiring, first race</small></a>
+          <a href="guide/" class="nav-dropdown-item" role="menuitem">User Guide<small>Full feature reference</small></a>
+        </div>
+      </div>
       <a href="registration.html" class="nav-cta">Sign In</a>
     </div>
   </nav>
@@ -899,6 +984,7 @@
       <a href="https://github.com/vmetcalfe/KubKars/blob/main/LICENSE">MIT licensed</a> &middot;
       <a href="https://github.com/vmetcalfe/KubKars">GitHub</a> &middot;
       <a href="guide/evaluation.html">Evaluation Guide</a> &middot;
+      <a href="guide/getting-started.html">Getting Started</a> &middot;
       <a href="guide/">User Guide</a> &middot;
       Made with care for Scouting
     </p>

@@ -27,6 +27,7 @@ const btnSave         = $('#btn-save');
 const btnRestart      = $('#btn-restart');
 const btnRefresh      = $('#btn-refresh-files');
 const btnUpload       = $('#btn-upload-file');
+const btnLoadGithub   = $('#btn-load-github');
 const uploadInput     = $('#upload-input');
 const busyOverlay     = $('#busy-overlay');
 const busyText        = $('#busy-text');
@@ -303,7 +304,7 @@ btnRestart.addEventListener('click', async () => {
   }
 });
 
-// ─── Upload file ─────────────────────────────────────────
+// ─── Upload files ────────────────────────────────────────
 btnUpload.addEventListener('click', () => {
   if (!_serial || !_serial.isConnected()) {
     appendTerminal('Not connected — cannot upload\n', 'err');
@@ -313,21 +314,70 @@ btnUpload.addEventListener('click', () => {
 });
 
 uploadInput.addEventListener('change', async () => {
-  const file = uploadInput.files[0];
-  if (!file) return;
+  const files = Array.from(uploadInput.files);
+  if (!files.length) return;
   uploadInput.value = ''; // reset for next upload
 
-  showBusy(`Uploading ${file.name}...`);
+  showBusy(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`);
   try {
-    const content = await file.text();
-    await _fileManager.writeFile(file.name, content);
-    appendTerminal(`Uploaded ${file.name} (${content.length} bytes)\n`, 'sys');
+    const entries = [];
+    for (const file of files) {
+      entries.push({ name: file.name, content: await file.text() });
+    }
+    await _fileManager.writeFiles(entries, (name, i, total) => {
+      appendTerminal(`Uploaded ${name} (${i + 1}/${total})\n`, 'sys');
+      busyText.textContent = `Uploading ${i + 2}/${total}...`;
+    });
+    appendTerminal(`Done — ${entries.length} file${entries.length > 1 ? 's' : ''} uploaded\n`, 'sys');
     await refreshFileList();
   } catch (err) {
-    appendTerminal('Error uploading ' + file.name + ': ' + err.message + '\n', 'err');
+    appendTerminal('Upload error: ' + err.message + '\n', 'err');
     hideBusy();
   }
   // refreshFileList calls hideBusy
+});
+
+// ─── Load firmware from GitHub ──────────────────────────
+const FIRMWARE_API = 'https://api.github.com/repos/vmetcalfe/KubKars/contents/firmware';
+
+btnLoadGithub.addEventListener('click', async () => {
+  if (!_serial || !_serial.isConnected()) {
+    appendTerminal('Not connected — cannot load firmware\n', 'err');
+    return;
+  }
+
+  showBusy('Fetching file list from GitHub...');
+  try {
+    // Fetch directory listing
+    const resp = await fetch(FIRMWARE_API);
+    if (!resp.ok) throw new Error(`GitHub API returned ${resp.status}`);
+    const listing = await resp.json();
+    const pyFiles = listing.filter(f => f.name.endsWith('.py') && f.type === 'file');
+    if (!pyFiles.length) throw new Error('No .py files found in firmware/');
+
+    appendTerminal(`Found ${pyFiles.length} firmware files on GitHub\n`, 'sys');
+
+    // Fetch each file's raw content
+    const entries = [];
+    for (let i = 0; i < pyFiles.length; i++) {
+      busyText.textContent = `Downloading ${pyFiles[i].name} (${i + 1}/${pyFiles.length})...`;
+      const raw = await fetch(pyFiles[i].download_url);
+      if (!raw.ok) throw new Error(`Failed to download ${pyFiles[i].name}`);
+      entries.push({ name: pyFiles[i].name, content: await raw.text() });
+    }
+
+    // Write all files to Pico
+    busyText.textContent = `Writing files to Pico...`;
+    await _fileManager.writeFiles(entries, (name, i, total) => {
+      appendTerminal(`Wrote ${name} (${i + 1}/${total})\n`, 'sys');
+      busyText.textContent = `Writing ${i + 2}/${total}...`;
+    });
+    appendTerminal(`Done — ${entries.length} firmware files loaded from GitHub\n`, 'sys');
+    await refreshFileList();
+  } catch (err) {
+    appendTerminal('Error loading from GitHub: ' + err.message + '\n', 'err');
+    hideBusy();
+  }
 });
 
 // ─── Refresh button ──────────────────────────────────────
