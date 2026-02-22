@@ -113,10 +113,10 @@ function waitForResponse(requestId, expectedType, signal, timeout = RESPONSE_TIM
 function _handleSerialData(text) {
   if (!_serialResponseResolve) return;
   for (const ch of text) {
-    if (ch === '{') {
+    if (ch === '{' || ch === '[') {
       _serialBraceDepth++;
       _serialJsonBuf += ch;
-    } else if (ch === '}') {
+    } else if (ch === '}' || ch === ']') {
       _serialBraceDepth--;
       _serialJsonBuf += ch;
       if (_serialBraceDepth === 0) {
@@ -298,6 +298,22 @@ export function disconnectSerial() {
  */
 export function isUsingSerial() {
   return _useSerial;
+}
+
+/**
+ * Send an arbitrary command over USB serial and return the parsed JSON response.
+ * Only works when connected via USB serial. Rejects if another command is pending.
+ * @param {string} cmd
+ * @returns {Promise<Object>}
+ */
+export function sendSerialCommand(cmd) {
+  if (!_useSerial || !_serialPort) {
+    return Promise.reject(new Error('Not connected via USB'));
+  }
+  if (_serialResponseResolve) {
+    return Promise.reject(new Error('Serial port busy'));
+  }
+  return _serialSendCommand(cmd);
 }
 
 /**

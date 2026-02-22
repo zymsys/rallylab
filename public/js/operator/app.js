@@ -14,7 +14,8 @@ import {
   triggerManualRace, triggerManualGate,
   connectWifi, disconnectWifi, isUsingWifi, getSavedTrackIp,
   getTrackMode, getWifiError,
-  connectSerial, disconnectSerial, isUsingSerial, isSerialSupported
+  connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
+  sendSerialCommand
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
@@ -174,6 +175,7 @@ function renderScreen(screenName, params) {
     disconnectSerial,
     isUsingSerial,
     isSerialSupported,
+    sendSerialCommand,
     configureUSBBackup,
     disableUSBBackup,
     isUSBBackupConfigured,

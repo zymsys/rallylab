@@ -812,6 +812,60 @@ tbody tr:hover {
   color: var(--color-accent);
 }
 
+/* ===== Track Badge Button ===== */
+.track-badge-btn {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: opacity var(--transition);
+}
+.track-badge-btn:hover { opacity: 0.8; }
+
+/* ===== WiFi Network List ===== */
+.wifi-network-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.wifi-network {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+}
+
+.wifi-network:last-child { border-bottom: none; }
+.wifi-network:hover { background: var(--color-surface); }
+
+.wifi-network input[type="radio"] {
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.wifi-network-ssid {
+  flex: 1;
+  font-weight: 500;
+}
+
+.wifi-network-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.wifi-result-success {
+  padding: 0.75rem;
+  background: #dcfce7;
+  border-radius: var(--radius-md);
+  color: #166534;
+  font-size: 0.875rem;
+}
+
 /* ===== Lane Table ===== */
 .lane-table .lane-number {
   font-weight: 600;

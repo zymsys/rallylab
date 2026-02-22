@@ -6,7 +6,7 @@
 
 import { computeLeaderboard } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showConnectTrackDialog } from './dialogs.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -132,53 +132,34 @@ export function renderRallyHome(container, params, ctx) {
     }
   }
 
-  // Track Connection controls
+  // Track Connection controls — single clickable badge opens Track Manager
   {
     const actionsDiv = header.querySelector('#rally-home-actions');
     const trackMode = ctx.getTrackMode();
+
+    let badgeLabel, badgeClass;
     if (trackMode === 'wifi') {
-      const savedIp = ctx.getSavedTrackIp() || '';
-      const badge = document.createElement('span');
-      badge.className = 'status-badge status-active';
-      badge.textContent = `Track: ${savedIp}`;
-      actionsDiv.appendChild(badge);
-
-      const disconnBtn = document.createElement('button');
-      disconnBtn.className = 'btn btn-sm btn-ghost';
-      disconnBtn.textContent = 'Disconnect';
-      disconnBtn.onclick = () => {
-        ctx.disconnectWifi();
-        navigate('rally-home', {}, { replace: true });
-        showToast('Track disconnected', 'info');
-      };
-      actionsDiv.appendChild(disconnBtn);
+      const ip = ctx.getSavedTrackIp() || '';
+      badgeLabel = `Track: ${ip}`;
+      badgeClass = 'status-badge status-active';
     } else if (trackMode === 'serial') {
-      const badge = document.createElement('span');
-      badge.className = 'status-badge status-active';
-      badge.textContent = 'Track: USB';
-      actionsDiv.appendChild(badge);
-
-      const disconnBtn = document.createElement('button');
-      disconnBtn.className = 'btn btn-sm btn-ghost';
-      disconnBtn.textContent = 'Disconnect';
-      disconnBtn.onclick = () => {
-        ctx.disconnectSerial();
-        navigate('rally-home', {}, { replace: true });
-        showToast('Track disconnected', 'info');
-      };
-      actionsDiv.appendChild(disconnBtn);
+      badgeLabel = 'Track: USB';
+      badgeClass = 'status-badge status-active';
     } else if (trackMode === 'fake') {
-      const badge = document.createElement('span');
-      badge.className = 'status-badge status-active';
-      badge.textContent = 'Fake Track';
-      actionsDiv.appendChild(badge);
+      badgeLabel = 'Fake Track';
+      badgeClass = 'status-badge status-active';
     } else {
-      const connectBtn = document.createElement('button');
-      connectBtn.className = 'btn btn-secondary';
-      connectBtn.textContent = 'Connect Track';
-      connectBtn.onclick = () => showConnectTrackDialog(ctx);
-      actionsDiv.appendChild(connectBtn);
+      badgeLabel = 'Connect Track';
+      badgeClass = 'status-badge status-idle';
+    }
 
+    const badge = document.createElement('button');
+    badge.className = badgeClass + ' track-badge-btn';
+    badge.textContent = badgeLabel;
+    badge.onclick = () => showTrackManagerDialog(ctx);
+    actionsDiv.appendChild(badge);
+
+    if (trackMode === 'manual') {
       const savedIp = ctx.getSavedTrackIp();
       if (savedIp) {
         const hint = document.createElement('span');
@@ -451,20 +432,18 @@ export function renderLiveConsole(container, params, ctx) {
   const lanesStr = activeLanes.join(', ');
 
   const trackMode = ctx.getTrackMode();
-  const trackBadgeLabel = trackMode === 'serial' ? 'Serial Track' : trackMode === 'wifi' ? 'WiFi Track' : trackMode === 'fake' ? 'Fake Track' : 'Manual';
+  const trackBadgeLabel = trackMode === 'serial' ? 'USB Track' : trackMode === 'wifi' ? 'WiFi Track' : trackMode === 'fake' ? 'Fake Track' : 'Manual';
   const trackBadgeClass = trackMode === 'manual' ? 'status-idle' : 'status-active';
 
   header.innerHTML = `
     <div class="console-title-row">
       <h2 class="screen-title">${esc(sec.section_name)}</h2>
-      <span class="status-badge ${trackBadgeClass}" id="console-track-badge" style="${trackMode === 'manual' ? 'cursor:pointer' : ''}">${trackBadgeLabel}</span>
+      <span class="status-badge ${trackBadgeClass} track-badge-btn" id="console-track-badge">${trackBadgeLabel}</span>
       <span class="console-state-label">${stateLabel}</span>
     </div>
     <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'} &middot; Lanes: ${lanesStr}</p>
   `;
-  if (trackMode === 'manual') {
-    header.querySelector('#console-track-badge').onclick = () => showConnectTrackDialog(ctx);
-  }
+  header.querySelector('#console-track-badge').onclick = () => showTrackManagerDialog(ctx);
   container.appendChild(header);
 
   // Resume Racing prompt
@@ -485,7 +464,7 @@ export function renderLiveConsole(container, params, ctx) {
       hint.innerHTML = 'Race loop is not running. <a href="#" id="reconnect-link">Reconnect</a> to the track, then resume.';
       hint.querySelector('#reconnect-link').onclick = (e) => {
         e.preventDefault();
-        showConnectTrackDialog(ctx);
+        showTrackManagerDialog(ctx);
       };
     }
     resumeWrap.appendChild(hint);
@@ -856,11 +835,13 @@ export function renderSectionComplete(container, params, ctx) {
     wrap.innerHTML = html;
     container.appendChild(wrap);
 
-    const legend = document.createElement('p');
-    legend.className = 'form-hint';
-    legend.style.marginTop = '0.75rem';
-    legend.textContent = '* Incomplete — car was removed before finishing all heats.';
-    container.appendChild(legend);
+    if (standings.some(s => s.incomplete)) {
+      const legend = document.createElement('p');
+      legend.className = 'form-hint';
+      legend.style.marginTop = '0.75rem';
+      legend.textContent = '* Incomplete — car was removed before finishing all heats.';
+      container.appendChild(legend);
+    }
   }
 
   const actions = document.createElement('div');

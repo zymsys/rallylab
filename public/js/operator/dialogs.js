@@ -553,7 +553,325 @@ export function showRestoreFromUSBDialog(ctx) {
   };
 }
 
-// ─── Connect Track Dialog ─────────────────────────────────────────
+// ─── Track Manager Dialog ─────────────────────────────────────────
+
+export function showTrackManagerDialog(ctx) {
+  const mode = ctx.getTrackMode();
+  const isSerial = mode === 'serial';
+  const isWifi = mode === 'wifi';
+  const isFake = mode === 'fake';
+  const isDisconnected = mode === 'manual';
+  const showUsb = ctx.isSerialSupported();
+
+  // Status line
+  let statusHtml;
+  if (isSerial) {
+    statusHtml = '<span class="status-badge status-active">Connected via USB</span>';
+  } else if (isWifi) {
+    const ip = ctx.getSavedTrackIp() || '';
+    statusHtml = `<span class="status-badge status-active">WiFi &mdash; ${esc(ip)}</span>`;
+  } else if (isFake) {
+    statusHtml = '<span class="status-badge status-active">Fake Track</span>';
+  } else {
+    statusHtml = '<span class="status-badge status-idle">Not Connected</span>';
+  }
+
+  let bodyHtml = `<div id="dlg-track-status" style="margin-bottom:1rem">${statusHtml}</div>`;
+
+  // WiFi setup section (only when USB is connected)
+  if (isSerial) {
+    bodyHtml += `
+      <div style="border-top:1px solid var(--color-border);padding-top:1rem">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.25rem;color:var(--color-text-secondary)">Pico WiFi</label>
+        <div id="dlg-wifi-status" class="form-hint" style="margin-bottom:0.75rem">Checking&hellip;</div>
+        <button class="btn btn-secondary btn-sm" data-action="scan" id="dlg-scan-btn" disabled>Scan for Networks</button>
+        <span id="dlg-scan-spinner" class="form-hint" style="display:none;margin-left:0.5rem">Scanning&hellip;</span>
+        <div id="dlg-network-list" style="display:none;margin-top:0.75rem"></div>
+        <div id="dlg-wifi-form" style="display:none;margin-top:0.75rem">
+          <div class="form-group" id="dlg-password-group">
+            <label for="dlg-wifi-password">Password</label>
+            <input id="dlg-wifi-password" class="form-input" type="password" placeholder="WiFi password">
+          </div>
+          <button class="btn btn-primary btn-sm" data-action="wifi-connect" id="dlg-wifi-connect-btn">Connect</button>
+        </div>
+        <div id="dlg-wifi-result" style="display:none;margin-top:0.75rem"></div>
+        <div id="dlg-wifi-error" class="form-error" style="margin-top:0.5rem"></div>
+      </div>`;
+  }
+
+  // Connect options (when disconnected)
+  if (isDisconnected) {
+    const savedIp = ctx.getSavedTrackIp() || '';
+    bodyHtml += `
+      <div class="form-group">
+        <label for="dlg-track-ip">WiFi IP Address</label>
+        <input id="dlg-track-ip" class="form-input" type="text"
+          placeholder="e.g. 192.168.4.1" value="${esc(savedIp)}">
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-primary" data-action="connect-wifi">Connect WiFi</button>
+        ${showUsb ? '<button class="btn btn-secondary" data-action="connect-usb">Connect USB</button>' : ''}
+      </div>
+      <div id="dlg-connect-error" class="form-error" style="margin-top:0.5rem"></div>`;
+  }
+
+  // Footer
+  let footerHtml = '';
+  if (isSerial || isWifi) {
+    footerHtml += '<button class="btn btn-secondary" data-action="disconnect">Disconnect</button>';
+  }
+  footerHtml += `<div style="flex:1"></div>`;
+  footerHtml += '<button class="btn btn-primary" data-action="done">Done</button>';
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Track Connection</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">${bodyHtml}</div>
+    <div class="dialog-footer">${footerHtml}</div>
+  `);
+
+  const d = dialogEl();
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="done"]').onclick = closeDialog;
+
+  // Disconnect
+  const disconnBtn = d.querySelector('[data-action="disconnect"]');
+  if (disconnBtn) {
+    disconnBtn.onclick = () => {
+      if (isSerial) ctx.disconnectSerial();
+      else if (isWifi) ctx.disconnectWifi();
+      closeDialog();
+      ctx.showToast('Track disconnected', 'info');
+      ctx.renderCurrentScreen();
+    };
+  }
+
+  // USB Serial → WiFi setup
+  if (isSerial) {
+    _setupWifiSection(d, ctx);
+  }
+
+  // Disconnected → connect options
+  if (isDisconnected) {
+    _setupConnectOptions(d, ctx);
+  }
+}
+
+function _setupWifiSection(d, ctx) {
+  const wifiStatusEl = d.querySelector('#dlg-wifi-status');
+  const scanBtn = d.querySelector('#dlg-scan-btn');
+  const scanSpinner = d.querySelector('#dlg-scan-spinner');
+  const networkList = d.querySelector('#dlg-network-list');
+  const wifiForm = d.querySelector('#dlg-wifi-form');
+  const passwordGroup = d.querySelector('#dlg-password-group');
+  const wifiError = d.querySelector('#dlg-wifi-error');
+  const wifiResult = d.querySelector('#dlg-wifi-result');
+  const passwordInput = d.querySelector('#dlg-wifi-password');
+  const wifiConnectBtn = d.querySelector('#dlg-wifi-connect-btn');
+
+  let selectedSsid = null;
+
+  // Check current WiFi status on the Pico
+  ctx.sendSerialCommand('wifi').then(status => {
+    if (status.connected) {
+      wifiStatusEl.innerHTML = `Connected to <strong>${esc(status.ssid)}</strong> &mdash; ${esc(status.ip)}`;
+      const switchBtn = document.createElement('button');
+      switchBtn.className = 'btn btn-primary btn-sm';
+      switchBtn.style.marginTop = '0.5rem';
+      switchBtn.style.display = 'block';
+      switchBtn.textContent = 'Switch to WiFi';
+      switchBtn.onclick = async () => {
+        try {
+          ctx.disconnectSerial();
+          await ctx.connectWifi(status.ip);
+          closeDialog();
+          ctx.showToast(`Switched to WiFi \u2014 ${status.ip}`, 'success');
+          ctx.renderCurrentScreen();
+        } catch (e) {
+          wifiError.textContent = 'Switch failed: ' + e.message;
+        }
+      };
+      wifiStatusEl.appendChild(switchBtn);
+    } else {
+      wifiStatusEl.textContent = 'Not connected';
+    }
+    scanBtn.disabled = false;
+  }).catch(() => {
+    wifiStatusEl.textContent = 'Could not query WiFi status';
+    scanBtn.disabled = false;
+  });
+
+  // Scan for networks
+  scanBtn.onclick = async () => {
+    wifiError.textContent = '';
+    scanBtn.disabled = true;
+    scanSpinner.style.display = '';
+    networkList.style.display = 'none';
+    wifiForm.style.display = 'none';
+    wifiResult.style.display = 'none';
+
+    try {
+      const networks = await ctx.sendSerialCommand('wifi_scan');
+      scanSpinner.style.display = 'none';
+      scanBtn.disabled = false;
+
+      if (!Array.isArray(networks) || networks.length === 0) {
+        wifiError.textContent = 'No networks found';
+        return;
+      }
+
+      networkList.innerHTML = '';
+      const list = document.createElement('div');
+      list.className = 'wifi-network-list';
+
+      for (const net of networks) {
+        const item = document.createElement('label');
+        item.className = 'wifi-network';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'wifi-network';
+        radio.value = net.ssid;
+        radio.onchange = () => {
+          selectedSsid = net.ssid;
+          wifiForm.style.display = '';
+          if (net.security === 'open') {
+            passwordGroup.style.display = 'none';
+          } else {
+            passwordGroup.style.display = '';
+            passwordInput.focus();
+          }
+        };
+
+        const ssidSpan = document.createElement('span');
+        ssidSpan.className = 'wifi-network-ssid';
+        ssidSpan.textContent = net.ssid;
+
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'wifi-network-meta';
+        metaSpan.textContent = `${net.rssi} dBm`;
+        if (net.security !== 'open') metaSpan.textContent += '  \uD83D\uDD12';
+
+        item.appendChild(radio);
+        item.appendChild(ssidSpan);
+        item.appendChild(metaSpan);
+        list.appendChild(item);
+      }
+
+      networkList.appendChild(list);
+      networkList.style.display = '';
+    } catch (e) {
+      scanSpinner.style.display = 'none';
+      scanBtn.disabled = false;
+      wifiError.textContent = e.message;
+    }
+  };
+
+  // Configure WiFi on Pico
+  wifiConnectBtn.onclick = async () => {
+    if (!selectedSsid) return;
+    wifiError.textContent = '';
+    wifiConnectBtn.disabled = true;
+    wifiConnectBtn.textContent = 'Connecting\u2026';
+
+    try {
+      const password = passwordInput.value;
+      const result = await ctx.sendSerialCommand(`wifi_setup ${selectedSsid} ${password}`);
+
+      if (result.connected) {
+        wifiForm.style.display = 'none';
+        networkList.style.display = 'none';
+        wifiResult.style.display = '';
+        wifiResult.innerHTML = `
+          <div class="wifi-result-success">
+            <strong>WiFi connected</strong> &mdash; ${esc(result.ip)}
+            <p class="form-hint" style="margin:0.5rem 0">
+              Disconnect USB and power the Pico separately, or switch now.
+            </p>
+            <button class="btn btn-primary btn-sm" data-action="switch-wifi">Switch to WiFi</button>
+          </div>`;
+        localStorage.setItem('rallylab_track_ip', result.ip);
+
+        wifiResult.querySelector('[data-action="switch-wifi"]').onclick = async () => {
+          try {
+            ctx.disconnectSerial();
+            await ctx.connectWifi(result.ip);
+            closeDialog();
+            ctx.showToast(`Switched to WiFi \u2014 ${result.ip}`, 'success');
+            ctx.renderCurrentScreen();
+          } catch (e) {
+            wifiError.textContent = 'Switch failed: ' + e.message;
+          }
+        };
+      } else {
+        wifiError.textContent = result.error || 'Connection failed';
+      }
+
+      wifiConnectBtn.disabled = false;
+      wifiConnectBtn.textContent = 'Connect';
+    } catch (e) {
+      wifiError.textContent = e.message;
+      wifiConnectBtn.disabled = false;
+      wifiConnectBtn.textContent = 'Connect';
+    }
+  };
+}
+
+function _setupConnectOptions(d, ctx) {
+  const connectError = d.querySelector('#dlg-connect-error');
+  const ipInput = d.querySelector('#dlg-track-ip');
+  const connectWifiBtn = d.querySelector('[data-action="connect-wifi"]');
+  const connectUsbBtn = d.querySelector('[data-action="connect-usb"]');
+
+  if (connectWifiBtn) {
+    const doConnect = async () => {
+      connectError.textContent = '';
+      const ip = ipInput.value.trim();
+      if (!ip) {
+        connectError.textContent = 'Enter an IP address';
+        return;
+      }
+      connectWifiBtn.disabled = true;
+      connectWifiBtn.textContent = 'Connecting\u2026';
+      try {
+        await ctx.connectWifi(ip);
+        closeDialog();
+        ctx.showToast(`Track connected at ${ip}`, 'success');
+        afterTrackConnect(ctx);
+      } catch (e) {
+        connectError.textContent = e.message;
+        connectWifiBtn.disabled = false;
+        connectWifiBtn.textContent = 'Connect WiFi';
+      }
+    };
+    connectWifiBtn.onclick = doConnect;
+    ipInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doConnect(); }
+    });
+  }
+
+  if (connectUsbBtn) {
+    connectUsbBtn.onclick = async () => {
+      connectError.textContent = '';
+      connectUsbBtn.disabled = true;
+      connectUsbBtn.textContent = 'Connecting\u2026';
+      try {
+        await ctx.connectSerial();
+        closeDialog();
+        ctx.showToast('Track connected via USB', 'success');
+        afterTrackConnect(ctx);
+      } catch (e) {
+        connectError.textContent = e.message;
+        connectUsbBtn.disabled = false;
+        connectUsbBtn.textContent = 'Connect USB';
+      }
+    };
+  }
+}
+
+// ─── Connect Track Dialog (legacy) ────────────────────────────────
 
 export function showConnectTrackDialog(ctx) {
   const savedIp = ctx.getSavedTrackIp() || '';
