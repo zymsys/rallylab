@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Scoring Works — RallyLab</title>
+  <meta name="description" content="How RallyLab scores pinewood derby races — average finish time, tie-breaking, manual rankings, and the leaderboard.">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1a1a2e;
+      --cream: #faf6f0;
+      --cream-dark: #f0e8dc;
+      --amber: #c77d1a;
+      --amber-light: #d4a017;
+      --green: #2d6a4f;
+      --text: #1a1a2e;
+      --text-muted: #5a5670;
+      --border: #e2ddd4;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      line-height: 1.7;
+      background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Top nav ===== */
+    .guide-topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1.5rem;
+      background: rgba(26, 26, 46, 0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .topnav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .topnav-logo {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .topnav-sep {
+      color: rgba(255, 255, 255, 0.2);
+      font-weight: 300;
+    }
+
+    .topnav-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .topnav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .topnav-link {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+      transition: color 150ms;
+    }
+    .topnav-link:hover { color: #fff; }
+
+    .topnav-cta {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--amber-light);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 150ms;
+    }
+    .topnav-cta:hover { background: #e6b422; }
+
+    /* ===== Main content ===== */
+    .guide-main {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 5rem 3rem 4rem;
+    }
+
+    .guide-hero {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .guide-hero h1 {
+      font-family: var(--font-display);
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    .guide-hero .crosslink {
+      display: inline-block;
+      margin-top: 0.75rem;
+      font-size: 0.88rem;
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .guide-hero .crosslink:hover { text-decoration: underline; }
+
+    /* ===== Article sections ===== */
+    .article-section {
+      margin-bottom: 3rem;
+      padding-top: 1rem;
+    }
+
+    .article-section h2 {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+
+    .article-section h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    .article-section p {
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .article-section ol, .article-section ul {
+      margin: 0.5rem 0 1rem 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .article-section li {
+      margin-bottom: 0.35rem;
+    }
+
+    /* Tip callouts */
+    .tip {
+      background: var(--cream);
+      border-left: 3px solid var(--amber);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.9rem;
+    }
+
+    .tip strong {
+      color: var(--amber);
+    }
+
+    /* Separator */
+    .section-sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 0 2rem;
+    }
+
+    /* ===== Code blocks ===== */
+    code {
+      font-size: 0.88em;
+      background: var(--cream);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    pre {
+      background: var(--navy);
+      color: #e8e6e3;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 0.75rem 0 1rem;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      color: inherit;
+    }
+
+    /* ===== Example box ===== */
+    .example-box {
+      background: var(--cream);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.25rem 0;
+    }
+
+    .example-box h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin: 0 0 0.5rem;
+    }
+
+    .example-box p {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .example-box p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* ===== Leaderboard example table ===== */
+    .leaderboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 0.88rem;
+    }
+
+    .leaderboard-table th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 0.75rem;
+      background: var(--cream);
+      border-bottom: 2px solid var(--border);
+    }
+
+    .leaderboard-table td {
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .leaderboard-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .leaderboard-table .muted {
+      color: var(--text-muted);
+    }
+
+    /* ===== Next steps box ===== */
+    .next-steps {
+      background: var(--cream);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin-top: 2rem;
+    }
+
+    .next-steps h2 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .next-steps ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .next-steps li {
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .next-steps a {
+      color: var(--amber);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .next-steps a:hover { text-decoration: underline; }
+
+    /* ===== Footer ===== */
+    .guide-footer {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 1.5rem 3rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .guide-footer a {
+      color: var(--amber);
+      text-decoration: none;
+    }
+    .guide-footer a:hover { text-decoration: underline; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 700px) {
+      .guide-main {
+        padding: 4.5rem 1.5rem 3rem;
+      }
+
+      .guide-footer {
+        padding: 1.5rem;
+      }
+
+      .topnav-title { display: none; }
+      .topnav-sep { display: none; }
+
+      .article-section h2 {
+        font-size: 1.2rem;
+      }
+
+      pre {
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top nav -->
+  <nav class="guide-topnav">
+    <div class="topnav-left">
+      <a href="../" class="topnav-logo">RallyLab</a>
+      <span class="topnav-sep">/</span>
+      <span class="topnav-title">Scoring</span>
+    </div>
+    <div class="topnav-links">
+      <a href="../" class="topnav-link">Home</a>
+      <a href="./" class="topnav-link">User Guide</a>
+      <a href="../registration.html" class="topnav-cta">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="guide-main">
+
+    <div class="guide-hero">
+      <h1>How Scoring Works</h1>
+      <p>RallyLab ranks participants by their average finish time across all heats. Faster average time means a higher rank. Here's the full picture.</p>
+      <a href="heat-scheduling.html" class="crosslink">Before the scoring &rarr; How Heats Are Scheduled</a>
+    </div>
+
+    <!-- ===== The Basics ===== -->
+    <section class="article-section" id="the-basics">
+      <h2>The Basics</h2>
+
+      <p>Scoring in RallyLab is straightforward: <strong>add up all of a participant's finish times and divide by the number of heats they raced</strong>. The participant with the lowest average time wins.</p>
+
+      <p>Because the <a href="heat-scheduling.html" style="color: var(--amber); text-decoration: none;">heat schedule</a> ensures every participant runs every lane, the average naturally cancels out lane advantages. A fast lane time and a slow lane time balance each other &mdash; what remains is the car's true performance.</p>
+
+      <div class="example-box">
+        <h3>Example</h3>
+        <p>Sarah races 6 heats on a 6-lane track with times: 2.15s, 2.32s, 2.28s, 2.20s, 2.41s, 2.18s</p>
+        <p>Her average: <strong>2.257 seconds</strong> &mdash; this is the single number that determines her ranking.</p>
+      </div>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== Re-runs ===== -->
+    <section class="article-section" id="reruns">
+      <h2>Re-runs and Accepted Results</h2>
+
+      <p>Sometimes a heat needs to be re-run &mdash; a car falls off the track, a lane sensor misfires, or the Operator calls a false start. When a heat is re-run, only the <strong>latest result</strong> counts. The original result is superseded and excluded from scoring.</p>
+
+      <p>This means each heat contributes exactly one result to a participant's average, regardless of how many times it was run.</p>
+
+      <div class="tip">
+        <strong>No penalty for re-runs.</strong> If heat 5 is re-run, the original times for heat 5 are completely replaced by the re-run times. There's no averaging of the two &mdash; only the final result matters.
+      </div>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== Tie-Breaking ===== -->
+    <section class="article-section" id="tie-breaking">
+      <h2>Tie-Breaking</h2>
+
+      <p>When two participants have the same average time (down to the millisecond), RallyLab uses a tiebreaker:</p>
+
+      <ol>
+        <li><strong>Average time</strong> (primary) &mdash; lower average wins</li>
+        <li><strong>Best single heat time</strong> (secondary) &mdash; the fastest individual heat wins the tie</li>
+      </ol>
+
+      <p>The best-heat tiebreaker rewards consistency <em>and</em> peak performance. Two participants with the same average could have very different spreads &mdash; the one who managed a faster single heat gets the edge. In the unlikely event that both average and best time are identical, participants are listed adjacently in car-number order.</p>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== Manual Rankings ===== -->
+    <section class="article-section" id="manual-rankings">
+      <h2>When the Timer Can't Record</h2>
+
+      <p>If the track controller can't capture times for a heat (hardware failure, a sensor that won't trigger), the Operator can enter a <strong>manual ranking</strong> instead &mdash; simply recording who finished 1st, 2nd, 3rd, and so on by visual observation.</p>
+
+      <p>RallyLab converts these manual rankings into approximate times so they can be averaged with real times from other heats. The conversion uses the section's overall average time as a baseline, with a small offset between each place (50ms). This preserves the manually-observed finishing order while producing values that blend reasonably with actual electronic times.</p>
+
+      <p>If <em>all</em> heats in a section end up with manual rankings (complete hardware failure), the final standings simply reflect the cumulative manual placements &mdash; consistent top finishers rank highest.</p>
+
+      <div class="tip">
+        <strong>Race day resilience:</strong> RallyLab is designed so that a hardware problem never stops the event. The Operator can always fall back to manual ranking and keep racing.
+      </div>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== Removed Cars ===== -->
+    <section class="article-section" id="removed-cars">
+      <h2>Removed Cars</h2>
+
+      <p>If a car breaks down or a participant leaves mid-event, the Operator removes them from the section. Their completed heats are still scored normally, but they're ranked <strong>below all participants who completed the full schedule</strong>.</p>
+
+      <p>Multiple removed participants are sorted among themselves by their partial averages. Their results appear on the leaderboard marked as incomplete, so everyone can see they didn't run the full set of heats.</p>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== The Leaderboard ===== -->
+    <section class="article-section" id="leaderboard">
+      <h2>The Leaderboard</h2>
+
+      <p>Each section has its own independent leaderboard. There are no cross-section rankings &mdash; Kub Kars and Scout Trucks are separate competitions. The leaderboard updates live after every heat.</p>
+
+      <p>Here's what a final leaderboard looks like:</p>
+
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Car</th>
+            <th>Name</th>
+            <th>Avg Time</th>
+            <th>Best Time</th>
+            <th>Heats</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>17</td>
+            <td>Sarah</td>
+            <td>2.205s</td>
+            <td>2.150s</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>42</td>
+            <td>Billy</td>
+            <td>2.340s</td>
+            <td>2.280s</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>8</td>
+            <td>Emma</td>
+            <td>2.412s</td>
+            <td>2.310s</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>23</td>
+            <td>Jake</td>
+            <td>2.498s</td>
+            <td>2.390s</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>7</td>
+            <td class="muted">Tommy *</td>
+            <td class="muted">2.450s</td>
+            <td class="muted">2.400s</td>
+            <td class="muted">5 of 12</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p><span class="muted" style="font-size: 0.85rem;">* Removed after heat 5 &mdash; partial results, ranked below completed participants.</span></p>
+
+      <p>The audience display shows updated standings after every heat so the crowd can follow the competition in real time. At the end of a section, the full final standings are displayed.</p>
+    </section>
+
+    <hr class="section-sep">
+
+    <!-- ===== What's Next ===== -->
+    <div class="next-steps">
+      <h2>Related</h2>
+      <ul>
+        <li><a href="heat-scheduling.html">How Heats Are Scheduled</a> &mdash; lane fairness, speed matching, and the scheduling algorithm</li>
+        <li><a href="track-protocol.html">Track Controller Protocol</a> &mdash; how the browser talks to the Pico W</li>
+        <li><a href="./">User Guide</a> &mdash; complete reference for every screen and feature</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <footer class="guide-footer">
+    <p>
+      <a href="../">RallyLab</a> is
+      <a href="https://github.com/vmetcalfe/KubKars/blob/main/LICENSE">MIT licensed</a> &middot;
+      <a href="https://github.com/vmetcalfe/KubKars">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>
