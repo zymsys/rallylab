@@ -558,7 +558,95 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
   };
 }
 
-// ─── 7. Add Participant ────────────────────────────────────────────
+// ─── 7. Create Rally from Existing ──────────────────────────────────
+export function showCreateFromExistingDialog(rallies, onCreated) {
+  const options = rallies.map(r =>
+    `<option value="${r.rally_id}">${esc(r.rally_name)} (${r.rally_date})</option>`
+  ).join('');
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Create from Existing Rally</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="dlg-source-rally">Source Rally</label>
+        <select id="dlg-source-rally" class="form-input">${options}</select>
+        <p class="form-hint">Sections, groups, and participants will be copied.</p>
+      </div>
+      <div class="form-group">
+        <label for="dlg-new-rally-name">New Rally Name</label>
+        <input id="dlg-new-rally-name" class="form-input" type="text" maxlength="100">
+        <div id="dlg-new-rally-name-error" class="form-error"></div>
+      </div>
+      <div class="form-group">
+        <label for="dlg-new-rally-date">Rally Date</label>
+        <input id="dlg-new-rally-date" class="form-input" type="date">
+        <div id="dlg-new-rally-date-error" class="form-error"></div>
+      </div>
+      <div id="dlg-source-summary" class="info-line" style="margin-top:0.5rem"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <button class="btn btn-primary" data-action="create">Create Rally</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  const sourceSelect = d.querySelector('#dlg-source-rally');
+  const nameInput = d.querySelector('#dlg-new-rally-name');
+  const summaryEl = d.querySelector('#dlg-source-summary');
+
+  // Pre-fill name from first source rally
+  function updateFromSource() {
+    const selected = rallies.find(r => r.rally_id === sourceSelect.value);
+    if (selected) {
+      nameInput.value = selected.rally_name;
+      const sCount = selected.sectionCount;
+      const pCount = selected.participantCount;
+      summaryEl.textContent = `${sCount} section${sCount !== 1 ? 's' : ''}, ${pCount} participant${pCount !== 1 ? 's' : ''}`;
+    }
+  }
+  updateFromSource();
+  sourceSelect.onchange = updateFromSource;
+
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  d.querySelector('[data-action="create"]').onclick = async () => {
+    const name = nameInput.value.trim();
+    const date = d.querySelector('#dlg-new-rally-date').value;
+    const nameErr = d.querySelector('#dlg-new-rally-name-error');
+    const dateErr = d.querySelector('#dlg-new-rally-date-error');
+
+    nameErr.textContent = '';
+    dateErr.textContent = '';
+
+    if (!name) { nameErr.textContent = 'Rally name is required'; return; }
+    if (!date) { dateErr.textContent = 'Rally date is required'; return; }
+
+    const btn = d.querySelector('[data-action="create"]');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    try {
+      const { cloneRallyRoster } = await import('./commands.js');
+      const sourceId = sourceSelect.value;
+      const sourceState = await loadRallyState(sourceId);
+
+      const newRallyId = await cloneRallyRoster(sourceState, name, date);
+      closeDialog();
+      showToast('Rally created from existing', 'success');
+      if (onCreated) onCreated(newRallyId);
+    } catch (e) {
+      showToast(e.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Create Rally';
+    }
+  };
+}
+
+// ─── 8. Add Participant ────────────────────────────────────────────
 export function showAddParticipantDialog(rallyId, sectionId, groupId, section, onAdded) {
   openDialog(`
     <div class="dialog-header">

@@ -8,6 +8,7 @@ import { signIn, getUser } from '../supabase.js';
 import { loadRallyState, appendEvent, exportRosterPackage, isOrganizer, getAccessibleRallyIds } from './commands.js';
 import {
   showCreateRallyDialog,
+  showCreateFromExistingDialog,
   showCreateSectionDialog,
   showCreateGroupDialog,
   showInviteRegistrarDialog,
@@ -106,7 +107,8 @@ export async function renderRallyList(container) {
     try {
       const state = await loadRallyState(id);
       const sectionCount = Object.keys(state.sections).length;
-      rallies.push({ rally_id: id, rally_name: state.rally_name, rally_date: state.rally_date, sectionCount });
+      const participantCount = Object.values(state.sections).reduce((sum, s) => sum + s.participants.length, 0);
+      rallies.push({ rally_id: id, rally_name: state.rally_name, rally_date: state.rally_date, sectionCount, participantCount });
     } catch { /* skip broken rallies */ }
   }
 
@@ -122,11 +124,21 @@ export async function renderRallyList(container) {
 
   const _isOrganizerList = await isOrganizer();
   if (_isOrganizerList) {
+    const actionsDiv = toolbar.querySelector('#rally-list-actions');
+
+    if (rallies.length > 0) {
+      const fromExistingBtn = document.createElement('button');
+      fromExistingBtn.className = 'btn btn-secondary';
+      fromExistingBtn.textContent = 'Create from Existing';
+      fromExistingBtn.onclick = () => showCreateFromExistingDialog(rallies, (newId) => navigate('rally-home', { rallyId: newId }));
+      actionsDiv.appendChild(fromExistingBtn);
+    }
+
     const createBtn = document.createElement('button');
     createBtn.className = 'btn btn-primary';
     createBtn.textContent = '+ Create Rally';
     createBtn.onclick = () => showCreateRallyDialog((newId) => navigate('rally-home', { rallyId: newId }));
-    toolbar.querySelector('#rally-list-actions').appendChild(createBtn);
+    actionsDiv.appendChild(createBtn);
   }
 
   if (rallies.length === 0) {

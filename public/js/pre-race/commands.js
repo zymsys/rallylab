@@ -171,6 +171,84 @@ export async function getAccessibleRallyIds() {
   return [...ids];
 }
 
+// ─── Clone Rally ─────────────────────────────────────────────────
+
+/**
+ * Create a new rally by cloning sections, groups, and participants from a source rally.
+ * Emits: RallyCreated, GroupCreated (each), SectionCreated (each), RosterUpdated (per section+group).
+ * Returns the new rally_id.
+ */
+export async function cloneRallyRoster(sourceState, newName, newDate) {
+  const user = getUser();
+  const newRallyId = crypto.randomUUID();
+
+  // 1. Create the new rally
+  await appendEvent({
+    type: 'RallyCreated',
+    rally_id: newRallyId,
+    rally_name: newName,
+    rally_date: newDate,
+    created_by: user.email,
+    timestamp: Date.now()
+  });
+
+  // 2. Clone groups (map old group_id → new group_id)
+  const groupIdMap = {};
+  for (const group of Object.values(sourceState.groups)) {
+    const newGroupId = crypto.randomUUID();
+    groupIdMap[group.group_id] = newGroupId;
+    await appendEvent({
+      type: 'GroupCreated',
+      rally_id: newRallyId,
+      group_id: newGroupId,
+      group_name: group.group_name,
+      created_by: user.email,
+      timestamp: Date.now()
+    });
+  }
+
+  // 3. Clone sections and their participants
+  for (const section of Object.values(sourceState.sections)) {
+    const newSectionId = crypto.randomUUID();
+    await appendEvent({
+      type: 'SectionCreated',
+      rally_id: newRallyId,
+      section_id: newSectionId,
+      section_name: section.section_name,
+      created_by: user.email,
+      timestamp: Date.now()
+    });
+
+    if (section.participants.length === 0) continue;
+
+    // Group participants by group_id for RosterUpdated events
+    const byGroup = new Map();
+    for (const p of section.participants) {
+      const gid = p.group_id || null;
+      if (!byGroup.has(gid)) byGroup.set(gid, []);
+      byGroup.get(gid).push(p);
+    }
+
+    for (const [oldGroupId, participants] of byGroup) {
+      const newGroupId = oldGroupId ? (groupIdMap[oldGroupId] || null) : null;
+      await appendEvent({
+        type: 'RosterUpdated',
+        rally_id: newRallyId,
+        section_id: newSectionId,
+        group_id: newGroupId,
+        participants: participants.map(p => ({
+          participant_id: crypto.randomUUID(),
+          name: p.name
+        })),
+        submitted_by: user.email,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  return newRallyId;
+}
+
 // ─── Roster Export ────────────────────────────────────────────────
 
 /**
