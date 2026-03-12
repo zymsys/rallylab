@@ -133,6 +133,18 @@ RallyLoaded  ◄── (loop for next section)
 - `SectionCompleted` event emitted
 - Audience Display shows final leaderboard / Section Complete screen
 
+### 3.7a SectionActive:Results → SectionComplete (early end)
+
+**Trigger:** Operator clicks "End Section Early" and confirms.
+
+**Guard:** At least one heat must have an accepted result.
+
+**Effect:**
+- `SectionCompleted` event emitted with `early_end: true`
+- Race loop aborted
+- Audience Display shows final leaderboard / Section Complete screen
+- Standings are based on heats completed so far
+
 ### 3.8 SectionActive:* → SectionActive:* (lanes changed)
 
 **Trigger:** `LanesChanged` event (Operator disables or re-enables a lane)
@@ -211,7 +223,7 @@ The Operator can trigger "Replay Last Results" to re-show results without affect
 | RallyLoaded | Select Section, browse rosters |
 | SectionActive:CheckIn | Check in cars, Start Section, Change Lanes |
 | SectionActive:Staging | (waiting for race) Manual Rank (fallback), Change Lanes |
-| SectionActive:Results | Re-Run, Correct Lanes, Replay Last Results, Manual Rank, Remove Car, Change Lanes |
+| SectionActive:Results | Re-Run, Correct Lanes, Replay Last Results, Manual Rank, Remove Car, Change Lanes, End Section Early |
 | SectionComplete | Start next Section, view final standings |
 
 ### 6.1 Admin Plane (Always Available)
@@ -231,6 +243,7 @@ While a Section is active, the Operator can browse other Sections' rosters in th
 | Re-Run | Must be in Results state for current heat |
 | Remove Car | Section must be active; car must not already be removed |
 | Change Lanes | Section must be active; new set must have at least 1 lane |
+| End Section Early | Section must be active; at least 1 heat must have an accepted result |
 
 ---
 

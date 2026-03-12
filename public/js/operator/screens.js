@@ -776,6 +776,26 @@ export function renderLiveConsole(container, params, ctx) {
     controls.appendChild(removeBtn);
   }
 
+  // End Section Early button — only when racing has started and there are results
+  if (!sec.completed && sec.started && lastResultHeat > 0) {
+    const endEarlyBtn = document.createElement('button');
+    endEarlyBtn.className = 'btn btn-danger';
+    endEarlyBtn.textContent = 'End Section Early';
+    endEarlyBtn.onclick = () => {
+      const heatsCompleted = Object.keys(sec.results).length;
+      if (confirm(
+        `End this section early?\n\n` +
+        `${heatsCompleted} of ${totalHeats} heats completed. ` +
+        `Final standings will be based on results so far. ` +
+        `All participants will be marked incomplete.\n\n` +
+        `This cannot be undone.`
+      )) {
+        ctx.endSectionEarly(sectionId);
+      }
+    };
+    controls.appendChild(endEarlyBtn);
+  }
+
   // Back to Rally Home
   const backBtn = document.createElement('button');
   backBtn.className = 'btn btn-ghost';
@@ -804,6 +824,7 @@ export function renderSectionComplete(container, params, ctx) {
   header.className = 'section-header';
   header.innerHTML = `
     <h2 class="screen-title">${esc(sec.section_name)} — Final Results</h2>
+    ${sec.early_end ? '<p class="form-hint">Section ended early — standings based on completed heats.</p>' : ''}
   `;
   container.appendChild(header);
 
@@ -839,7 +860,9 @@ export function renderSectionComplete(container, params, ctx) {
       const legend = document.createElement('p');
       legend.className = 'form-hint';
       legend.style.marginTop = '0.75rem';
-      legend.textContent = '* Incomplete — car was removed before finishing all heats.';
+      legend.textContent = sec.early_end
+        ? '* Incomplete — section ended before all heats were run.'
+        : '* Incomplete — car was removed before finishing all heats.';
       container.appendChild(legend);
     }
   }

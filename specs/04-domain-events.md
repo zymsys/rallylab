@@ -572,7 +572,7 @@ The Operator changes which lanes are available mid-section (e.g., a lane sensor 
 
 ### 3.11 SectionCompleted
 
-All heats for a Section have been run.
+All heats for a Section have been run, or the Operator ends the Section early.
 
 ```json
 {
@@ -580,6 +580,7 @@ All heats for a Section have been run.
   "rally_id": "uuid",
   "section_id": "uuid",
   "total_heats": 24,
+  "early_end": false,
   "timestamp": 1708098780000
 }
 ```
@@ -590,11 +591,13 @@ All heats for a Section have been run.
 | `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
 | `total_heats` | integer | yes | Total heats run |
+| `early_end` | boolean | no | `true` if Operator ended the Section before all heats were completed. Defaults to `false`. |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
 **Behavior:**
 - Audience Display shows final leaderboard / section complete screen
 - Operator can start next Section or end Rally
+- When `early_end` is `true`, standings are based on heats completed so far; all participants are scored normally but may be marked incomplete if they ran fewer heats than others
 - See `06-race-day-state-machine.md` for state transition
 
 ---
@@ -617,7 +620,7 @@ Certain events can only occur after others:
 - `RaceCompleted`, `RerunDeclared`, `ResultManuallyEntered` require `HeatStaged`
 - `ResultCorrected` requires `HeatStaged` for the referenced heat
 - `LanesChanged` requires `SectionStarted` (Section must be active)
-- `SectionCompleted` requires all heats to have accepted results
+- `SectionCompleted` requires all heats to have accepted results, OR `early_end: true` with at least one accepted result
 
 ### 4.2 Timestamp Semantics
 

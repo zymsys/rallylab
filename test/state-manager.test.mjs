@@ -424,6 +424,26 @@ describe('nextAvailableCarNumber', () => {
   });
 });
 
+describe('SectionCompleted', () => {
+  it('marks section completed', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      { type: 'SectionCompleted', section_id: 's1', timestamp: 1000 }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.completed, true);
+    assert.strictEqual(s.race_day.sections.s1.early_end, false);
+  });
+
+  it('stores early_end flag when section ended early', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      { type: 'SectionCompleted', section_id: 's1', early_end: true, total_heats: 5, timestamp: 1000 }
+    ]);
+    assert.strictEqual(s.race_day.sections.s1.completed, true);
+    assert.strictEqual(s.race_day.sections.s1.early_end, true);
+  });
+});
+
 describe('rebuildState', () => {
   it('replays full event stream', () => {
     const events = [

@@ -154,6 +154,7 @@ function renderScreen(screenName, params) {
     startSection,
     resumeSection,
     declareRerun,
+    endSectionEarly,
     removeCar,
     changeLanes,
     correctLanes,
@@ -646,6 +647,25 @@ async function removeCar(sectionId, carNumber, reason) {
   } else {
     showToast('Not enough cars to continue', 'warning');
   }
+}
+
+// ─── End Section Early ───────────────────────────────────────────
+
+async function endSectionEarly(sectionId) {
+  if (_raceAbort) _raceAbort.abort();
+
+  const sec = _state.race_day.sections[sectionId];
+  const heatsCompleted = Object.keys(sec.results).length;
+
+  await appendAndRebuild({
+    type: 'SectionCompleted',
+    section_id: sectionId,
+    early_end: true,
+    total_heats: heatsCompleted,
+    timestamp: Date.now()
+  });
+
+  navigate('section-complete', { sectionId });
 }
 
 // ─── Change Lanes ────────────────────────────────────────────────

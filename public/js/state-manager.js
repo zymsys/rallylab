@@ -413,7 +413,11 @@ export function applyEvent(state, event) {
           ...rd,
           sections: {
             ...rd.sections,
-            [payload.section_id]: { ...sec, completed: true }
+            [payload.section_id]: {
+              ...sec,
+              completed: true,
+              early_end: payload.early_end || false
+            }
           }
         }
       };
