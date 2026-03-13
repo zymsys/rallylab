@@ -6,7 +6,7 @@
 
 import { computeLeaderboard, computeLaneStats } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog } from './dialogs.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -790,6 +790,15 @@ export function renderLiveConsole(container, params, ctx) {
     changeLanesBtn.textContent = 'Change Lanes';
     changeLanesBtn.onclick = () => showChangeLanesDialog(sectionId, sec, ctx);
     controls.appendChild(changeLanesBtn);
+  }
+
+  // Car Stats button — available once any results exist
+  if (Object.keys(sec.results).length > 0) {
+    const statsBtn = document.createElement('button');
+    statsBtn.className = 'btn btn-secondary';
+    statsBtn.textContent = 'Car Stats';
+    statsBtn.onclick = () => showCarStatsDialog(sec);
+    controls.appendChild(statsBtn);
   }
 
   // Remove Car button

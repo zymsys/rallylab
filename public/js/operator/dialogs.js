@@ -1,7 +1,9 @@
 /**
  * operator/dialogs.js — Modal dialogs for race day operator.
- * Manual Rank, Remove Car, Load Roster.
+ * Manual Rank, Remove Car, Load Roster, Car Statistics.
  */
+
+import { computeCarStats } from '../scoring.js';
 
 const backdrop = () => document.getElementById('dialog-backdrop');
 const dialogEl = () => document.getElementById('dialog');
@@ -10,7 +12,9 @@ function closeDialog() {
   const bd = backdrop();
   bd.classList.add('hidden');
   bd.setAttribute('aria-hidden', 'true');
-  dialogEl().innerHTML = '';
+  const d = dialogEl();
+  d.innerHTML = '';
+  d.classList.remove('dialog-wide');
 }
 
 function openDialog(html) {
@@ -1197,4 +1201,79 @@ export function showLoadRosterDialog(ctx) {
       loadBtn.textContent = 'Load Roster';
     }
   };
+}
+
+// ─── Car Statistics Dialog ──────────────────────────────────────
+
+export function showCarStatsDialog(section) {
+  const stats = computeCarStats(section);
+  if (stats.length === 0) {
+    openDialog(`
+      <div class="dialog-header">
+        <h2>Car Statistics</h2>
+        <button class="dialog-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <p class="empty-state">No race results yet.</p>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" data-action="close">Close</button>
+      </div>
+    `);
+    const d = dialogEl();
+    d.querySelector('.dialog-close').onclick = closeDialog;
+    d.querySelector('[data-action="close"]').onclick = closeDialog;
+    return;
+  }
+
+  // Collect all lanes that appear in results
+  const allLanes = new Set();
+  for (const car of stats) {
+    for (const lane of Object.keys(car.lane_times)) {
+      allLanes.add(Number(lane));
+    }
+  }
+  const lanes = [...allLanes].sort((a, b) => a - b);
+
+  const fmt = (ms) => {
+    if (ms == null || !isFinite(ms)) return '—';
+    return (ms / 1000).toFixed(3) + 's';
+  };
+
+  // Build table
+  let html = '<div class="table-wrap"><table>';
+  html += '<thead><tr><th>Car #</th><th>Name</th>';
+  for (const l of lanes) html += `<th>Lane ${l}</th>`;
+  html += '<th>Avg</th><th>Best</th><th>Heats</th></tr></thead><tbody>';
+
+  for (const car of stats) {
+    html += `<tr${car.removed ? ' class="incomplete-row"' : ''}>`;
+    html += `<td>#${car.car_number}</td>`;
+    html += `<td>${esc(car.name)}</td>`;
+    for (const l of lanes) {
+      const time = car.lane_times[l];
+      html += `<td>${time !== undefined ? fmt(time) : '—'}</td>`;
+    }
+    html += `<td><strong>${fmt(car.avg_time_ms)}</strong></td>`;
+    html += `<td>${fmt(car.best_time_ms)}</td>`;
+    html += `<td>${car.heats_run}</td>`;
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Car Statistics — ${esc(section.section_name)}</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body car-stats-body">${html}</div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="close">Close</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+  d.classList.add('dialog-wide');
+  d.querySelector('.dialog-close').onclick = closeDialog;
+  d.querySelector('[data-action="close"]').onclick = closeDialog;
 }

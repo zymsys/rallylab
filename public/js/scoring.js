@@ -195,6 +195,64 @@ export function computeLaneStats(section) {
 }
 
 /**
+ * Compute per-car, per-lane time matrix from all timed results in a section.
+ * @param {Object} section - race_day section object
+ * @returns {Array<{car_number: number, name: string, lane_times: Object<number, number>, avg_time_ms: number|null, best_time_ms: number|null, heats_run: number}>}
+ *   Sorted by car_number. lane_times maps lane → time_ms (only timed results).
+ */
+export function computeCarStats(section) {
+  const cars = {};
+  const removedSet = new Set(section.removed);
+
+  for (const p of section.participants) {
+    cars[p.car_number] = {
+      car_number: p.car_number,
+      name: p.name,
+      lane_times: {},   // lane → time_ms
+      all_times: [],
+      heats_run: 0,
+      removed: removedSet.has(p.car_number)
+    };
+  }
+
+  for (const result of Object.values(section.results)) {
+    const heatLanes = (section.lane_corrections && section.lane_corrections[result.heat_number])
+      || result.lanes;
+    if (!heatLanes || heatLanes.length === 0) continue;
+
+    if (result.type === 'RaceCompleted' && result.times_ms) {
+      for (const assignment of heatLanes) {
+        const laneKey = String(assignment.lane);
+        const time = result.times_ms[laneKey];
+        if (time !== undefined && cars[assignment.car_number]) {
+          const car = cars[assignment.car_number];
+          car.lane_times[assignment.lane] = time;
+          car.all_times.push(time);
+          car.heats_run++;
+        }
+      }
+    } else if (result.type === 'ResultManuallyEntered' && result.rankings) {
+      for (const { car_number } of result.rankings) {
+        if (cars[car_number]) cars[car_number].heats_run++;
+      }
+    }
+  }
+
+  return Object.values(cars)
+    .filter(c => c.heats_run > 0)
+    .map(c => ({
+      car_number: c.car_number,
+      name: c.name,
+      lane_times: c.lane_times,
+      avg_time_ms: c.all_times.length > 0 ? Math.round(averageTime(c.all_times)) : null,
+      best_time_ms: c.all_times.length > 0 ? Math.round(Math.min(...c.all_times)) : null,
+      heats_run: c.heats_run,
+      removed: c.removed
+    }))
+    .sort((a, b) => a.car_number - b.car_number);
+}
+
+/**
  * @param {Array<number>} times
  * @returns {number}
  */
