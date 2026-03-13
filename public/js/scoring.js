@@ -168,6 +168,33 @@ export function computeLeaderboard(section) {
 }
 
 /**
+ * Compute per-lane statistics from all timed results in a section.
+ * @param {Object} section - race_day section object
+ * @returns {Array<{lane: number, avg_time_ms: number, race_count: number}>} Sorted by lane number
+ */
+export function computeLaneStats(section) {
+  const lanes = {}; // lane → { total_ms, count }
+
+  for (const result of Object.values(section.results)) {
+    if (result.type !== 'RaceCompleted' || !result.times_ms) continue;
+    for (const [laneKey, time] of Object.entries(result.times_ms)) {
+      const lane = Number(laneKey);
+      if (!lanes[lane]) lanes[lane] = { total_ms: 0, count: 0 };
+      lanes[lane].total_ms += time;
+      lanes[lane].count++;
+    }
+  }
+
+  return Object.entries(lanes)
+    .map(([lane, { total_ms, count }]) => ({
+      lane: Number(lane),
+      avg_time_ms: Math.round(total_ms / count),
+      race_count: count
+    }))
+    .sort((a, b) => a.lane - b.lane);
+}
+
+/**
  * @param {Array<number>} times
  * @returns {number}
  */

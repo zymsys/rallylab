@@ -4,7 +4,7 @@
  * Screen D: Live Console, Screen E: Section Complete.
  */
 
-import { computeLeaderboard } from '../scoring.js';
+import { computeLeaderboard, computeLaneStats } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult } from '../state-manager.js';
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
@@ -594,6 +594,31 @@ export function renderLiveConsole(container, params, ctx) {
 
   panels.appendChild(rightPanel);
   container.appendChild(panels);
+
+  // ─── Lane Statistics ──────────────────────────────────────
+  const laneStats = computeLaneStats(sec);
+  if (laneStats.length > 0) {
+    const laneSection = document.createElement('div');
+    laneSection.className = 'lane-stats';
+
+    const overallAvg = laneStats.reduce((s, l) => s + l.avg_time_ms, 0) / laneStats.length;
+
+    let lsHtml = '<h3 class="area-heading">Lane Statistics</h3><div class="table-wrap"><table><thead><tr><th>Lane</th><th>Avg Time</th><th>Races</th><th>vs Avg</th></tr></thead><tbody>';
+    for (const ls of laneStats) {
+      const diff = ls.avg_time_ms - overallAvg;
+      const diffStr = (diff >= 0 ? '+' : '') + formatTime(Math.abs(diff)).replace('s', '');
+      const diffClass = Math.abs(diff) > 20 ? ' class="lane-outlier"' : '';
+      lsHtml += `<tr>
+        <td class="lane-number">Lane ${ls.lane}</td>
+        <td>${formatTime(ls.avg_time_ms)}</td>
+        <td>${ls.race_count}</td>
+        <td${diffClass}>${diff >= 0 ? '+' : '-'}${formatTime(Math.abs(diff)).replace('s', '')}s</td>
+      </tr>`;
+    }
+    lsHtml += '</tbody></table></div>';
+    laneSection.innerHTML = lsHtml;
+    container.appendChild(laneSection);
+  }
 
   // ─── Heat History Log ───────────────────────────────────────
   // Show all past results (excluding current heat) in reverse order
