@@ -421,8 +421,10 @@ export function renderLiveConsole(container, params, ctx) {
   const header = document.createElement('div');
   header.className = 'console-header';
 
+  const awaitingRotationEarly = ctx.isAwaitingRotationDecision();
   let stateLabel;
-  if (needsResume) stateLabel = 'Paused';
+  if (awaitingRotationEarly) stateLabel = 'Rotation Complete';
+  else if (needsResume) stateLabel = 'Paused';
   else if (isStaging) stateLabel = 'Staging';
   else if (lastResultHeat > 0) stateLabel = 'Results';
   else if (sec.completed) stateLabel = 'Complete';
@@ -716,6 +718,54 @@ export function renderLiveConsole(container, params, ctx) {
 
   // Controls row (skip when showing resume prompt)
   if (needsResume) return;
+
+  // ─── Rotation Decision Prompt ────────────────────────────────
+  const awaitingRotation = ctx.isAwaitingRotationDecision();
+  if (awaitingRotation) {
+    const rotationWrap = document.createElement('div');
+    rotationWrap.className = 'rotation-decision';
+    rotationWrap.style.textAlign = 'center';
+    rotationWrap.style.padding = '2rem 0';
+
+    const heatsCompleted = Object.keys(sec.results).length;
+    const laneCount = ctx.getAvailableLanes(sectionId).length;
+    const rotationNum = Math.round(heatsCompleted / laneCount);
+
+    const msg = document.createElement('p');
+    msg.className = 'info-line';
+    msg.style.marginBottom = '1rem';
+    msg.style.fontSize = '1.1rem';
+    msg.textContent = `All ${heatsCompleted} heats complete (${rotationNum} rotation${rotationNum !== 1 ? 's' : ''}). What next?`;
+    rotationWrap.appendChild(msg);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.gap = '1rem';
+    btnRow.style.justifyContent = 'center';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-primary';
+    addBtn.textContent = 'Add Rotation';
+    addBtn.onclick = () => {
+      addBtn.disabled = true;
+      addBtn.textContent = 'Generating...';
+      ctx.addRotation(sectionId);
+    };
+    btnRow.appendChild(addBtn);
+
+    const completeBtn = document.createElement('button');
+    completeBtn.className = 'btn btn-secondary';
+    completeBtn.textContent = 'Complete Section';
+    completeBtn.onclick = () => {
+      completeBtn.disabled = true;
+      ctx.completeSection();
+    };
+    btnRow.appendChild(completeBtn);
+
+    rotationWrap.appendChild(btnRow);
+    container.appendChild(rotationWrap);
+    return; // Don't show regular controls while awaiting decision
+  }
 
   const controls = document.createElement('div');
   controls.className = 'console-controls';

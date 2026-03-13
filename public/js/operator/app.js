@@ -76,6 +76,7 @@ function getLastCompletedHeatNumber(sectionId) {
 let _state = null;
 let _liveSection = null;  // { sectionId, schedule, stagingHeat }
 let _raceAbort = null;     // AbortController for current race loop
+let _rotationResolver = null; // Resolver for rotation decision prompt
 
 // Test bridge — exposes internal state for E2E assertions
 if (typeof window !== 'undefined') {
@@ -161,6 +162,7 @@ function renderScreen(screenName, params) {
     showToast,
     getSchedule: () => _liveSection?.schedule,
     getStagingHeat: () => _liveSection?.stagingHeat || null,
+    isAwaitingRotationDecision: () => _liveSection?.awaitingRotationDecision || false,
     getAvailableLanes,
     getTrackLaneCount,
     isUsingFakeTrack,
@@ -181,6 +183,8 @@ function renderScreen(screenName, params) {
     disableUSBBackup,
     isUSBBackupConfigured,
     isUSBBackupSupported,
+    addRotation,
+    completeSection,
     renderCurrentScreen
   };
 
@@ -329,6 +333,7 @@ async function reconstructSchedule(sectionId) {
   let availableLanes = null;
   const completedCarNumbers = new Set();
   let completedResultCount = 0;
+  const accumulatedResults = {}; // heat_number → result, for deterministic reconstruction
 
   // We also need participant data — pull from state
   const sec = _state.race_day.sections[sectionId];
@@ -396,10 +401,41 @@ async function reconstructSchedule(sectionId) {
     } else if (evt.type === 'RaceCompleted' || evt.type === 'ResultManuallyEntered') {
       currentHeat = evt.heat_number;
       completedResultCount++;
+      // Track result for deterministic reconstruction of rotation schedules
+      accumulatedResults[evt.heat_number] = {
+        type: evt.type,
+        heat_number: evt.heat_number,
+        heat: evt.heat_number,
+        lanes: evt.lanes || [],
+        times_ms: evt.times_ms,
+        rankings: evt.rankings,
+        timestamp: evt.timestamp
+      };
       // Update completedCarNumbers from the result's lanes
       const lanes = evt.lanes || [];
       for (const lane of lanes) {
         completedCarNumbers.add(lane.car_number);
+      }
+    } else if (evt.type === 'RotationAdded') {
+      // Regenerate a speed-matched rotation using only results known at this point
+      if (started && schedule) {
+        const participants = sec.participants
+          .filter(p => arrived.has(p.car_number) && !removed.has(p.car_number));
+        const results = Object.values(accumulatedResults);
+        const newSchedule = generateSchedule({
+          participants,
+          available_lanes: availableLanes,
+          results
+        });
+        const lastHeatNum = schedule.heats.length > 0
+          ? Math.max(...schedule.heats.map(h => h.heat_number))
+          : 0;
+        const renumberedHeats = newSchedule.heats.map((heat, i) => ({
+          ...heat,
+          heat_number: lastHeatNum + i + 1
+        }));
+        schedule.heats.push(...renumberedHeats);
+        schedule.metadata.total_heats = schedule.heats.length;
       }
     }
   }
@@ -549,7 +585,20 @@ async function runRaceLoop(sectionId) {
       }
     }
 
-    // All heats done — emit SectionCompleted
+    // All heats done — ask operator: complete or add rotation?
+    _liveSection.awaitingRotationDecision = true;
+    renderCurrentScreen();
+
+    const decision = await waitForRotationDecision(signal);
+    _liveSection.awaitingRotationDecision = false;
+
+    if (decision === 'add-rotation') {
+      // Add rotation was handled by addRotation() which updated the schedule
+      // Continue the race loop with the new heats
+      return runRaceLoop(sectionId);
+    }
+
+    // Complete the section
     await appendAndRebuild({
       type: 'SectionCompleted',
       section_id: sectionId,
@@ -565,6 +614,86 @@ async function runRaceLoop(sectionId) {
     }
     console.error('Race loop error:', err);
     showToast('Race error: ' + err.message, 'error');
+  }
+}
+
+// ─── Rotation Decision ────────────────────────────────────────
+
+/**
+ * Wait for the operator to decide: complete section or add another rotation.
+ * Returns 'complete' or 'add-rotation'.
+ */
+function waitForRotationDecision(signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+    const onAbort = () => { _rotationResolver = null; reject(new DOMException('Aborted', 'AbortError')); };
+    signal.addEventListener('abort', onAbort, { once: true });
+    _rotationResolver = (decision) => {
+      signal.removeEventListener('abort', onAbort);
+      _rotationResolver = null;
+      resolve(decision);
+    };
+  });
+}
+
+/**
+ * Add a new rotation: generate speed-matched heats and append to schedule.
+ * Called from the UI when operator clicks "Add Rotation".
+ */
+async function addRotation(sectionId) {
+  const sec = _state.race_day.sections[sectionId];
+  const availableLanes = getAvailableLanes(sectionId);
+  const arrivedSet = new Set(sec.arrived);
+  const removedSet = new Set(sec.removed);
+  const participants = sec.participants
+    .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
+
+  // Convert state results to the format the scheduler expects
+  const results = Object.values(sec.results).map(r => ({
+    ...r,
+    heat: r.heat_number
+  }));
+
+  // Generate new speed-matched schedule
+  const newSchedule = generateSchedule({
+    participants,
+    available_lanes: availableLanes,
+    results
+  });
+
+  // Renumber new heats to continue after existing schedule
+  const lastHeatNum = _liveSection.schedule.heats.length > 0
+    ? Math.max(..._liveSection.schedule.heats.map(h => h.heat_number))
+    : 0;
+
+  const renumberedHeats = newSchedule.heats.map((heat, i) => ({
+    ...heat,
+    heat_number: lastHeatNum + i + 1
+  }));
+
+  // Append to current schedule
+  _liveSection.schedule.heats.push(...renumberedHeats);
+  _liveSection.schedule.metadata.total_heats = _liveSection.schedule.heats.length;
+
+  // Emit RotationAdded event for reconstruction
+  await appendAndRebuild({
+    type: 'RotationAdded',
+    section_id: sectionId,
+    timestamp: Date.now()
+  });
+
+  // Resolve the rotation decision
+  if (_rotationResolver) {
+    _rotationResolver('add-rotation');
+  }
+}
+
+/**
+ * Complete the section after all heats. Resolves the rotation decision prompt.
+ */
+function completeSection() {
+  if (_rotationResolver) {
+    _rotationResolver('complete');
   }
 }
 
