@@ -582,6 +582,15 @@ export function showTrackManagerDialog(ctx) {
 
   let bodyHtml = `<div id="dlg-track-status" style="margin-bottom:1rem">${statusHtml}</div>`;
 
+  // Live sensor status (USB or WiFi)
+  if (isSerial || isWifi) {
+    bodyHtml += `
+      <div style="border-top:1px solid var(--color-border);padding-top:1rem;margin-bottom:1rem">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.5rem;color:var(--color-text-secondary)">Sensor Status</label>
+        <div id="dlg-sensor-status">Loading&hellip;</div>
+      </div>`;
+  }
+
   // WiFi setup section (only when USB is connected)
   if (isSerial) {
     bodyHtml += `
@@ -666,6 +675,11 @@ export function showTrackManagerDialog(ctx) {
     };
   }
 
+  // Live sensor status polling
+  if (isSerial || isWifi) {
+    _startSensorPolling(d, ctx, isSerial);
+  }
+
   // USB Serial → WiFi setup
   if (isSerial) {
     _setupWifiSection(d, ctx);
@@ -675,6 +689,82 @@ export function showTrackManagerDialog(ctx) {
   if (isDisconnected) {
     _setupConnectOptions(d, ctx);
   }
+}
+
+function _startSensorPolling(d, ctx, isSerial) {
+  const container = d.querySelector('#dlg-sensor-status');
+  if (!container) return;
+
+  let timer = null;
+  let lastHtml = '';
+
+  function scheduleNext() {
+    if (document.body.contains(container)) {
+      timer = setTimeout(poll, 500);
+    }
+  }
+
+  async function poll() {
+    try {
+      let dbg;
+      if (isSerial) {
+        dbg = await ctx.sendSerialCommand('dbg');
+      } else {
+        const ip = ctx.getSavedTrackIp();
+        if (!ip) { scheduleNext(); return; }
+        const resp = await fetch(`http://${ip}/dbg`, { signal: AbortSignal.timeout(3000) });
+        dbg = await resp.json();
+      }
+
+      if (!dbg || !dbg.io) { scheduleNext(); return; }
+
+      const lanes = dbg.io.lanes || {};
+      const gateReady = dbg.engine?.gate_ready;
+
+      let html = '<div class="sensor-grid">';
+
+      // Gate
+      const gateLabel = gateReady ? 'Ready' : 'Open';
+      const gateCls = gateReady ? 'sensor-ready' : 'sensor-triggered';
+      html += `<div class="sensor-item ${gateCls}"><span class="sensor-dot"></span> Gate: ${esc(gateLabel)}</div>`;
+
+      // Lanes
+      const laneNums = Object.keys(lanes).map(Number).sort((a, b) => a - b);
+      for (const lane of laneNums) {
+        const info = lanes[lane];
+        const triggered = info.debounced === 0;
+        const cls = triggered ? 'sensor-triggered' : 'sensor-idle';
+        const label = triggered ? 'Triggered' : 'Clear';
+        html += `<div class="sensor-item ${cls}"><span class="sensor-dot"></span> Lane ${lane}: ${esc(label)}</div>`;
+      }
+
+      html += '</div>';
+
+      // Only update DOM if content changed (avoids flicker)
+      if (html !== lastHtml) {
+        container.innerHTML = html;
+        lastHtml = html;
+      }
+    } catch {
+      // Port busy (e.g. wait_race pending) — show hint, keep retrying
+      if (!lastHtml) {
+        container.textContent = 'Waiting for track controller\u2026';
+      }
+    }
+
+    scheduleNext();
+  }
+
+  poll();
+
+  // Clean up when dialog closes — patch closeDialog via MutationObserver
+  const observer = new MutationObserver(() => {
+    if (!d.querySelector('#dlg-sensor-status')) {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    }
+  });
+  observer.observe(d, { childList: true });
 }
 
 function _setupWifiSection(d, ctx) {
