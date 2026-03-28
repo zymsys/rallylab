@@ -122,6 +122,118 @@ Browser-based feature tests using Playwright + playwright-bdd. Run with `npx bdd
 | [lane-correction](test/e2e/features/lane-correction.feature) | 2 | Correct lane misassignment retroactively after a heat completes |
 | [lane-configuration](test/e2e/features/lane-configuration.feature) | 3 | Non-adjacent lane sets, mid-race lane changes, restaging |
 
+## Track Controller Setup (Raspberry Pi Pico W)
+
+The track controller runs MicroPython on a Raspberry Pi Pico W and communicates with RallyLab over USB serial or WiFi.
+
+### Prerequisites
+
+- Raspberry Pi Pico W (or plain Pico for USB-only)
+- [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html) CLI tool (`pip install mpremote`)
+
+### Flash MicroPython
+
+A brand new Pico doesn't have MicroPython — you need to flash it first.
+
+1. Download the MicroPython `.uf2` firmware for your board ([Pico W](https://micropython.org/download/RPI_PICO_W/), [Pico](https://micropython.org/download/RPI_PICO/)). Use v1.27 or later.
+2. Hold the **BOOTSEL** button on the Pico while plugging it into USB. The Pico mounts as a USB drive (e.g., `RPI-RP2`).
+3. Copy the `.uf2` file to the drive. The Pico reboots automatically and the drive disappears — this is expected.
+
+### Find the Serial Port
+
+Once MicroPython is flashed, the Pico appears as a serial device instead of a USB drive. List available serial ports to find it:
+
+```bash
+# macOS
+ls /dev/cu.usbmodem*
+
+# Linux
+ls /dev/ttyACM*
+
+# Windows (PowerShell)
+Get-WmiObject Win32_SerialPort | Select-Object DeviceID, Description
+```
+
+You should see one device (e.g., `/dev/cu.usbmodem1101` on macOS, `/dev/ttyACM0` on Linux, or `COM3` on Windows). If nothing appears, the Pico may still be in BOOTSEL mode (it shows up as a USB drive instead) — go back to the flash step above. If multiple devices appear, unplug the Pico, check the list again, then plug it back in to see which one is new.
+
+Use the device path in place of `<PORT>` in the commands below.
+
+### Upload the Firmware
+
+```bash
+mpremote connect <PORT> cp firmware/*.py : + reset
+```
+
+This copies all `.py` files to the Pico's flash root and resets it. The controller runs `main.py` automatically on boot.
+
+> **Note:** Don't use `cp -r firmware/ :` — that creates a `firmware/` subdirectory on the Pico instead of placing files at the root where MicroPython expects `main.py`.
+
+### Configure Pin Mapping
+
+Edit `firmware/config.py` before uploading. Three presets are provided:
+
+| Preset | Use case |
+|--------|----------|
+| **Breadboard** (default) | Development — buttons on GP5-GP13, gate on GP8 |
+| **Dedicated gate** | Real track where lanes skip DA-15 Pin 7 (recommended) |
+| **Shared Pin 7** | Real track where Lane 2 and the start gate share Pin 7 |
+
+Uncomment the appropriate `LANE_PINS` / `GATE_PIN` / `GATE_INVERT` / `SHARED_PIN7` block for your wiring. See [specs/11-track-hardware.md](specs/11-track-hardware.md) for the DA-15 connector pinout.
+
+### Verify the Connection
+
+The easiest way to verify is to open the operator page in a Chromium-based browser (Chrome, Edge), click **Connect Track**, and select the Pico's serial port. If the connection succeeds, the track mode indicator will show "Serial" and the lane count.
+
+To verify from the command line, use `pyserial` (`pip install pyserial`):
+
+```bash
+python3 -c "
+import serial, time
+s = serial.Serial('<PORT>', 115200, timeout=3)
+time.sleep(1)
+s.write(b'info\n')
+time.sleep(1)
+print(s.read(s.in_waiting).decode())
+s.close()
+"
+```
+
+You should see:
+
+```json
+{
+  "protocol": "1.0",
+  "firmware": "0.1.0",
+  "lane_count": 6
+}
+```
+
+> **Note:** Don't use `mpremote repl` for testing — it interrupts `main.py` and drops you into the MicroPython Python REPL, where track commands like `info` won't work.
+
+Use `dbg_watch` to test each sensor — press a lane button or trigger a sensor and verify the correct lane number appears.
+
+### WiFi Setup (Optional)
+
+From the serial REPL, scan for networks and connect:
+
+```
+wifi_scan
+wifi_setup <SSID> <PASSWORD>
+```
+
+Credentials are saved to flash and auto-connect on boot. The HTTP server starts automatically once connected. You can optionally set a custom hostname:
+
+```
+hostname_set my-track
+```
+
+The controller will be reachable at `my-track.local` via mDNS.
+
+### Connecting from RallyLab
+
+- **USB Serial** — In the operator interface, click "Connect Track" and select the Pico's serial port. Requires a Chromium-based browser (Web Serial API).
+- **WiFi** — The operator interface can connect via the Pico's HTTP endpoints at `http://<ip>` or `http://<hostname>.local`.
+
 ## Specifications
 
 The `specs/` folder is the authoritative source of truth for the system design:

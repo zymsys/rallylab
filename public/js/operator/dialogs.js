@@ -932,7 +932,9 @@ function _setupConnectOptions(d, ctx) {
       connectUsbBtn.disabled = true;
       connectUsbBtn.textContent = 'Connecting\u2026';
       try {
-        await ctx.connectSerial();
+        await ctx.connectSerial((status) => {
+          connectUsbBtn.textContent = status;
+        });
         closeDialog();
         ctx.showToast('Track connected via USB', 'success');
         afterTrackConnect(ctx);
@@ -1021,7 +1023,9 @@ export function showConnectTrackDialog(ctx) {
       usbBtn.disabled = true;
       usbBtn.textContent = 'Connecting...';
       try {
-        await ctx.connectSerial();
+        await ctx.connectSerial((status) => {
+          usbBtn.textContent = status;
+        });
         closeDialog();
         ctx.showToast('Track connected via USB', 'success');
         afterTrackConnect(ctx);
@@ -1276,4 +1280,165 @@ export function showCarStatsDialog(section) {
   d.classList.add('dialog-wide');
   d.querySelector('.dialog-close').onclick = closeDialog;
   d.querySelector('[data-action="close"]').onclick = closeDialog;
+}
+
+// ─── Learn Pin Mapping ────────────────────────────────────────
+
+/**
+ * Interactive wizard that discovers GPIO pin assignments by asking the user
+ * to trigger each sensor one at a time (like MIDI learn mode).
+ */
+export async function showLearnModeDialog(ctx) {
+  const lanePins = {};
+  let gatePin = null;
+  let gateInvert = false;
+  let learnCtrl = null;
+  let laneNum = 1;
+  let phase = 'init'; // init, gate-open, gate-close, lane, done
+
+  function renderContent() {
+    const d = dialogEl();
+    const body = d.querySelector('#learn-body');
+    const status = d.querySelector('#learn-status');
+    const doneBtn = d.querySelector('[data-action="save"]');
+
+    // Build learned pins summary
+    let summary = '';
+    if (gatePin !== null) {
+      summary += `<div class="learn-pin-ok">Gate: GP${gatePin}${gateInvert ? ' (inverted)' : ''}</div>`;
+    }
+    for (const [lane, gpio] of Object.entries(lanePins)) {
+      summary += `<div class="learn-pin-ok">Lane ${lane}: GP${gpio}</div>`;
+    }
+
+    let prompt = '';
+    let hint = '';
+    if (phase === 'init') {
+      prompt = 'Starting learn mode…';
+    } else if (phase === 'gate-open') {
+      prompt = 'Open the start gate';
+      hint = 'Release the gate lever, or press the gate button';
+    } else if (phase === 'gate-close') {
+      prompt = 'Now close the gate';
+      hint = 'Push the gate back down, or release the button';
+    } else if (phase === 'lane') {
+      prompt = `Trigger lane ${laneNum} sensor`;
+      hint = 'Push a car across the finish line, or press the lane button';
+    } else if (phase === 'done') {
+      prompt = 'All pins learned!';
+    }
+
+    body.innerHTML = `
+      ${summary ? '<div class="learn-summary">' + summary + '</div>' : ''}
+      <div class="learn-prompt">${esc(prompt)}</div>
+      ${hint ? '<p class="form-hint">' + esc(hint) + '</p>' : ''}
+      ${phase !== 'done' && phase !== 'init' ? '<div class="learn-waiting">Waiting for signal…</div>' : ''}
+    `;
+
+    if (doneBtn) {
+      const canSave = gatePin !== null && Object.keys(lanePins).length > 0;
+      doneBtn.disabled = !canSave;
+      doneBtn.style.display = phase === 'done' || canSave ? '' : 'none';
+    }
+  }
+
+  openDialog(`
+    <div class="dialog-header">
+      <h2>Learn Pin Mapping</h2>
+      <button class="dialog-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body" id="learn-body"></div>
+    <div class="dialog-footer">
+      <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary" data-action="save" disabled style="display:none">Save &amp; Restart</button>
+    </div>
+  `);
+
+  const d = dialogEl();
+
+  async function cleanup() {
+    if (learnCtrl) {
+      try { await learnCtrl.cancel(); } catch {}
+      learnCtrl = null;
+    }
+    closeDialog();
+  }
+
+  d.querySelector('.dialog-close').onclick = cleanup;
+  d.querySelector('[data-action="cancel"]').onclick = cleanup;
+  d.querySelector('[data-action="save"]').onclick = async () => {
+    if (!learnCtrl) return;
+    const status = d.querySelector('#learn-body');
+    if (status) status.innerHTML = '<div class="learn-prompt">Saving and restarting…</div>';
+    try {
+      await learnCtrl.finish({ gatePin, gateInvert, lanePins });
+      learnCtrl = null;
+      closeDialog();
+      ctx.showToast('Pin mapping saved — firmware restarted', 'success');
+      ctx.renderCurrentScreen();
+    } catch (e) {
+      if (status) status.innerHTML = `<div class="form-error">${esc(e.message)}</div>`;
+    }
+  };
+
+  renderContent();
+
+  // Start learn mode
+  try {
+    learnCtrl = await ctx.startLearnMode();
+  } catch (e) {
+    const body = d.querySelector('#learn-body');
+    body.innerHTML = `<div class="form-error">${esc(e.message)}</div>`;
+    return;
+  }
+
+  // ── Step 1: Gate open ──
+  phase = 'gate-open';
+  renderContent();
+  let edge;
+  try {
+    edge = await learnCtrl.waitForEdge();
+  } catch { return; } // cancelled
+  gatePin = edge.gpio;
+  // If the pin went LOW on "open", that's inverted (breadboard button style)
+  // If it went HIGH on "open", that's normal (reed switch)
+  gateInvert = (edge.value === 0);
+
+  // ── Step 2: Gate close (confirm + determine polarity) ──
+  phase = 'gate-close';
+  renderContent();
+  try {
+    edge = await learnCtrl.waitForEdge();
+  } catch { return; }
+  // Confirm it's the same pin
+  if (edge.gpio !== gatePin) {
+    // Different pin fired — use the first one as gate, exclude both
+    await learnCtrl.excludePin(edge.gpio);
+  }
+  await learnCtrl.excludePin(gatePin);
+
+  // ── Step 3+: Lanes ──
+  phase = 'lane';
+  renderContent();
+
+  while (true) {
+    try {
+      edge = await learnCtrl.waitForEdge();
+    } catch { return; }
+
+    lanePins[laneNum] = edge.gpio;
+    await learnCtrl.excludePin(edge.gpio);
+    laneNum++;
+
+    // Check if we should keep going or stop
+    if (laneNum > 7) {
+      phase = 'done';
+      renderContent();
+      break;
+    }
+
+    // Update UI — show option to finish or continue
+    renderContent();
+  }
 }

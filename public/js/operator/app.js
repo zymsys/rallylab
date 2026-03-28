@@ -15,7 +15,7 @@ import {
   connectWifi, disconnectWifi, isUsingWifi, getSavedTrackIp,
   getTrackMode, getWifiError,
   connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
-  sendSerialCommand
+  sendSerialCommand, startLearnMode
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
@@ -179,6 +179,7 @@ function renderScreen(screenName, params) {
     isUsingSerial,
     isSerialSupported,
     sendSerialCommand,
+    startLearnMode,
     configureUSBBackup,
     disableUSBBackup,
     isUSBBackupConfigured,
@@ -934,6 +935,7 @@ function renderCurrentScreen() {
   if (route && screens[route.screenName]) {
     renderScreen(route.screenName, route.params);
   }
+  updateUserInfo(); // rebuild Open menu (track mode may have changed)
 }
 
 // ─── Sync Status Indicator ────────────────────────────────────────
@@ -1000,6 +1002,7 @@ async function beginSync() {
 
 function updateUserInfo() {
   const el = document.getElementById('user-info');
+  el.innerHTML = '';
   const user = getUser();
 
   const viewWrap = document.createElement('div');
@@ -1015,22 +1018,37 @@ function updateUserInfo() {
   menu.hidden = true;
 
   const realTrack = getTrackMode() === 'wifi' || getTrackMode() === 'serial';
+  const isSerial = getTrackMode() === 'serial';
   const items = [
     { label: 'Debug View', href: 'debug.html' },
     { label: 'Registrar', href: 'registrar.html' },
     { label: 'Audience', href: 'audience.html' },
     ...(!realTrack ? [{ label: 'Fake Track', href: 'fake-track.html' }] : []),
     ...(realTrack ? [{ label: 'Pico Debug', href: 'pico-debug.html' }] : []),
-    { label: 'Event Inspector', href: 'event-inspector.html' }
+    { label: 'Event Inspector', href: 'event-inspector.html' },
+    ...(isSerial ? [{ label: 'Learn Pins', action: 'learn-pins' }] : []),
   ];
 
-  for (const { label, href } of items) {
+  for (const { label, href, action } of items) {
     const a = document.createElement('a');
     a.className = 'view-menu-item';
     a.textContent = label;
-    a.href = href;
-    a.target = '_blank';
-    a.onclick = () => { menu.hidden = true; };
+    if (href) {
+      a.href = href;
+      a.target = '_blank';
+      a.onclick = () => { menu.hidden = true; };
+    } else if (action === 'learn-pins') {
+      a.href = '#';
+      a.onclick = (e) => {
+        e.preventDefault();
+        menu.hidden = true;
+        import('./dialogs.js').then(m => m.showLearnModeDialog({
+          startLearnMode,
+          showToast,
+          renderCurrentScreen,
+        }));
+      };
+    }
     menu.appendChild(a);
   }
 

@@ -1484,3 +1484,35 @@ body.fake-track #track {
 body.fake-track[data-track-state="racing"] .ft-surface {
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
 }
+
+/* Learn pin mapping wizard */
+.learn-summary {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--color-surface, #f5f5f5);
+  border-radius: 6px;
+}
+.learn-pin-ok {
+  font-family: monospace;
+  font-size: 0.85rem;
+  padding: 0.15rem 0;
+  color: var(--color-success, #2e7d32);
+}
+.learn-pin-ok::before {
+  content: '\2713 ';
+}
+.learn-prompt {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.learn-waiting {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #888);
+  animation: learn-pulse 1.5s ease-in-out infinite;
+}
+@keyframes learn-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

@@ -338,7 +338,7 @@ uploadInput.addEventListener('change', async () => {
 });
 
 // ─── Load firmware from GitHub ──────────────────────────
-const FIRMWARE_API = 'https://api.github.com/repos/vmetcalfe/KubKars/contents/firmware';
+const FIRMWARE_API = 'https://api.github.com/repos/zymsys/rallylab/contents/firmware';
 
 btnLoadGithub.addEventListener('click', async () => {
   if (!_serial || !_serial.isConnected()) {

@@ -28,8 +28,15 @@ export function createSerialPort({ onData, onConnect, onDisconnect }) {
 
   async function connect() {
     if (_port) return;
-    _port = await navigator.serial.requestPort();
-    await _port.open({ baudRate: 115200 });
+    const port = await navigator.serial.requestPort();
+    try {
+      await port.open({ baudRate: 115200 });
+    } catch (err) {
+      // Release the port so other tools (mpremote, another tab) can use it
+      try { await port.close(); } catch {}
+      throw err;
+    }
+    _port = port;
     _writer = _port.writable.getWriter();
     onConnect();
     _readLoop();
