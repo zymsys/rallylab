@@ -4,6 +4,7 @@
  */
 
 import { showAddParticipantDialog, showCheckInConfirmDialog } from './dialogs.js';
+import { getActiveStart, getCompletedStarts } from '../state-manager.js';
 
 // ─── Screen: Section List ────────────────────────────────────────
 
@@ -49,13 +50,16 @@ export function renderSectionList(container, params, ctx) {
     const arrivedCount = sec.arrived.length;
     const totalCount = sec.participants.length;
 
+    const activeStart = getActiveStart(sec);
+    const completedCount = getCompletedStarts(sec).length;
+
     let statusLabel, statusClass;
-    if (sec.completed) {
-      statusLabel = 'Complete';
-      statusClass = 'status-badge status-complete';
-    } else if (sec.started) {
+    if (activeStart) {
       statusLabel = 'In Progress';
       statusClass = 'status-badge status-active';
+    } else if (completedCount > 0) {
+      statusLabel = 'Complete';
+      statusClass = 'status-badge status-complete';
     } else {
       statusLabel = 'Not Started';
       statusClass = 'status-badge status-idle';
@@ -93,7 +97,8 @@ export function renderSectionCheckIn(container, params, ctx) {
   }
 
   const arrivedSet = new Set(sec.arrived);
-  const removedSet = new Set(sec.removed);
+  const activeStart = getActiveStart(sec);
+  const allComplete = !activeStart && getCompletedStarts(sec).length > 0 && getCompletedStarts(sec).length === Object.keys(sec.starts).length;
   const arrivedCount = sec.arrived.length;
   const totalCount = sec.participants.length;
 
@@ -110,14 +115,7 @@ export function renderSectionCheckIn(container, params, ctx) {
   container.appendChild(header);
 
   // Status badge
-  if (sec.completed) {
-    const notice = document.createElement('p');
-    notice.className = 'info-line';
-    notice.style.color = 'var(--color-success)';
-    notice.style.marginBottom = '1rem';
-    notice.textContent = 'Section complete. Check-in is closed.';
-    container.appendChild(notice);
-  } else if (sec.started) {
+  if (activeStart) {
     const notice = document.createElement('p');
     notice.className = 'info-line';
     notice.style.color = 'var(--color-warning)';
@@ -132,8 +130,8 @@ export function renderSectionCheckIn(container, params, ctx) {
   counter.textContent = `${arrivedCount} of ${totalCount} checked in`;
   container.appendChild(counter);
 
-  // Add Participant button (not available if section is complete)
-  if (!sec.completed) {
+  // Add Participant button (always available — check-in is section-level)
+  {
     const addBtn = document.createElement('button');
     addBtn.className = 'btn btn-secondary';
     addBtn.style.marginBottom = '1rem';
@@ -160,9 +158,7 @@ export function renderSectionCheckIn(container, params, ctx) {
   const tbody = wrap.querySelector('#reg-checkin-body');
   for (const p of sorted) {
     const isArrived = arrivedSet.has(p.car_number);
-    const isRemoved = removedSet.has(p.car_number);
     const tr = document.createElement('tr');
-    if (isRemoved) tr.style.opacity = '0.5';
 
     tr.innerHTML = `
       <td><strong>#${p.car_number}</strong></td>
@@ -171,11 +167,9 @@ export function renderSectionCheckIn(container, params, ctx) {
     `;
 
     const actionsCell = tr.querySelector('.table-actions');
-    if (isRemoved) {
-      actionsCell.innerHTML = '<span class="status-badge status-removed">Removed</span>';
-    } else if (isArrived) {
+    if (isArrived) {
       actionsCell.innerHTML = '<span class="status-badge status-arrived">Arrived</span>';
-    } else if (!sec.completed) {
+    } else {
       const btn = document.createElement('button');
       btn.className = 'btn btn-sm btn-primary';
       btn.textContent = 'Check In';

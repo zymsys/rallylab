@@ -177,13 +177,8 @@ describe('SectionCreated', () => {
     assert.strictEqual(rd.section_name, 'Kub Kars');
     assert.deepStrictEqual(rd.participants, []);
     assert.deepStrictEqual(rd.arrived, []);
-    assert.deepStrictEqual(rd.removed, []);
-    assert.strictEqual(rd.available_lanes, null);
-    assert.strictEqual(rd.started, false);
-    assert.strictEqual(rd.completed, false);
-    assert.deepStrictEqual(rd.results, {});
-    assert.deepStrictEqual(rd.reruns, {});
-    assert.deepStrictEqual(rd.lane_corrections, {});
+    assert.deepStrictEqual(rd.starts, {});
+    assert.strictEqual(rd.next_start_number, 1);
   });
 });
 
@@ -428,19 +423,21 @@ describe('SectionCompleted', () => {
   it('marks section completed', () => {
     const s = buildState([
       { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      { type: 'SectionStarted', section_id: 's1' },
       { type: 'SectionCompleted', section_id: 's1', timestamp: 1000 }
     ]);
-    assert.strictEqual(s.race_day.sections.s1.completed, true);
-    assert.strictEqual(s.race_day.sections.s1.early_end, false);
+    assert.strictEqual(s.race_day.sections.s1.starts[1].completed, true);
+    assert.strictEqual(s.race_day.sections.s1.starts[1].early_end, false);
   });
 
   it('stores early_end flag when section ended early', () => {
     const s = buildState([
       { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+      { type: 'SectionStarted', section_id: 's1' },
       { type: 'SectionCompleted', section_id: 's1', early_end: true, total_heats: 5, timestamp: 1000 }
     ]);
-    assert.strictEqual(s.race_day.sections.s1.completed, true);
-    assert.strictEqual(s.race_day.sections.s1.early_end, true);
+    assert.strictEqual(s.race_day.sections.s1.starts[1].completed, true);
+    assert.strictEqual(s.race_day.sections.s1.starts[1].early_end, true);
   });
 });
 

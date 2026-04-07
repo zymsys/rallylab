@@ -5,7 +5,7 @@
  */
 
 import { computeLeaderboard, computeLaneStats } from '../scoring.js';
-import { deriveRaceDayPhase, getAcceptedResult } from '../state-manager.js';
+import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart } from '../state-manager.js';
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog } from './dialogs.js';
 import { showDemoDataDialog } from './demo-data.js';
 
@@ -198,17 +198,25 @@ export function renderRallyHome(container, params, ctx) {
   const tbody = wrap.querySelector('#sections-body');
   for (const sec of sections) {
     const tr = document.createElement('tr');
-    const phase = deriveRaceDayPhase(state, sec.section_id);
     const arrivedCount = sec.arrived.length;
     const totalCount = sec.participants.length;
 
+    const activeStart = getActiveStart(sec);
+    const latestStart = getLatestStart(sec);
+    const completedStarts = getCompletedStarts(sec);
+    const hasActiveStart = !!activeStart;
+
     let statusLabel, statusClass;
-    if (sec.completed) {
-      statusLabel = 'Complete';
-      statusClass = 'status-badge status-complete';
-    } else if (sec.started) {
-      statusLabel = 'In Progress';
+    if (hasActiveStart) {
+      statusLabel = completedStarts.length > 0
+        ? `Rally ${activeStart.start_number} In Progress`
+        : 'In Progress';
       statusClass = 'status-badge status-active';
+    } else if (completedStarts.length > 0) {
+      statusLabel = completedStarts.length > 1
+        ? `${completedStarts.length} Rallies Complete`
+        : 'Complete';
+      statusClass = 'status-badge status-complete';
     } else {
       statusLabel = 'Not Started';
       statusClass = 'status-badge status-idle';
@@ -224,17 +232,15 @@ export function renderRallyHome(container, params, ctx) {
 
     const actionsCell = tr.querySelector('.table-actions');
 
-    // Check In button (always available if not complete)
-    if (!sec.completed) {
-      const checkInBtn = document.createElement('button');
-      checkInBtn.className = 'btn btn-sm btn-secondary';
-      checkInBtn.textContent = 'Check In';
-      checkInBtn.onclick = () => navigate('check-in', { sectionId: sec.section_id });
-      actionsCell.appendChild(checkInBtn);
-    }
+    // Check In button (always available)
+    const checkInBtn = document.createElement('button');
+    checkInBtn.className = 'btn btn-sm btn-secondary';
+    checkInBtn.textContent = 'Check In';
+    checkInBtn.onclick = () => navigate('check-in', { sectionId: sec.section_id });
+    actionsCell.appendChild(checkInBtn);
 
-    // Start Section (if not started, >= 2 arrived)
-    if (!sec.started && arrivedCount >= 2) {
+    // Start Section (available when no active start and >= 2 arrived)
+    if (!hasActiveStart && arrivedCount >= 2) {
       const startBtn = document.createElement('button');
       startBtn.className = 'btn btn-sm btn-primary';
       startBtn.textContent = 'Start Section';
@@ -242,8 +248,8 @@ export function renderRallyHome(container, params, ctx) {
       actionsCell.appendChild(startBtn);
     }
 
-    // Live Console (if in progress)
-    if (sec.started && !sec.completed) {
+    // Live Console (if a start is in progress)
+    if (hasActiveStart) {
       const liveBtn = document.createElement('button');
       liveBtn.className = 'btn btn-sm btn-primary';
       liveBtn.textContent = 'Live Console';
@@ -251,12 +257,16 @@ export function renderRallyHome(container, params, ctx) {
       actionsCell.appendChild(liveBtn);
     }
 
-    // View Results (if complete)
-    if (sec.completed) {
+    // View Results (if any start is complete)
+    if (completedStarts.length > 0) {
       const resultBtn = document.createElement('button');
       resultBtn.className = 'btn btn-sm btn-secondary';
       resultBtn.textContent = 'Results';
-      resultBtn.onclick = () => navigate('section-complete', { sectionId: sec.section_id });
+      resultBtn.onclick = () => {
+        // If only one completed start, go directly; otherwise show latest
+        const sn = completedStarts[completedStarts.length - 1].start_number;
+        navigate('section-complete', { sectionId: sec.section_id, startNumber: sn });
+      };
       actionsCell.appendChild(resultBtn);
     }
 
@@ -277,7 +287,7 @@ export function renderCheckIn(container, params, ctx) {
   }
 
   const arrivedSet = new Set(sec.arrived);
-  const removedSet = new Set(sec.removed);
+  const activeStart = getActiveStart(sec);
   const arrivedCount = sec.arrived.length;
   const totalCount = sec.participants.length;
 
@@ -299,15 +309,15 @@ export function renderCheckIn(container, params, ctx) {
   counter.textContent = `${arrivedCount} of ${totalCount} checked in`;
   container.appendChild(counter);
 
-  // Start button
-  if (!sec.started && arrivedCount >= 2) {
+  // Start button (available when no active start and >= 2 arrived)
+  if (!activeStart && arrivedCount >= 2) {
     const startBtn = document.createElement('button');
     startBtn.className = 'btn btn-primary';
     startBtn.style.marginBottom = '1rem';
     startBtn.textContent = 'Start This Section';
     startBtn.onclick = () => showStartSectionDialog(sectionId, ctx);
     container.appendChild(startBtn);
-  } else if (!sec.started) {
+  } else if (!activeStart && arrivedCount < 2) {
     const hint = document.createElement('p');
     hint.className = 'form-hint';
     hint.style.marginBottom = '1rem';
@@ -315,12 +325,12 @@ export function renderCheckIn(container, params, ctx) {
     container.appendChild(hint);
   }
 
-  if (sec.started) {
+  if (activeStart) {
     const notice = document.createElement('p');
     notice.className = 'info-line';
     notice.style.color = 'var(--color-warning)';
     notice.style.marginBottom = '1rem';
-    notice.textContent = 'Section already started. Late arrivals will trigger schedule regeneration.';
+    notice.textContent = 'Section in progress. Late arrivals will trigger schedule regeneration.';
     container.appendChild(notice);
   }
 
@@ -342,7 +352,7 @@ export function renderCheckIn(container, params, ctx) {
   const tbody = wrap.querySelector('#checkin-body');
   for (const p of sorted) {
     const isArrived = arrivedSet.has(p.car_number);
-    const isRemoved = removedSet.has(p.car_number);
+    const isRemoved = activeStart ? activeStart.removed.includes(p.car_number) : false;
     const tr = document.createElement('tr');
     if (isRemoved) tr.style.opacity = '0.5';
 
@@ -373,7 +383,7 @@ export function renderCheckIn(container, params, ctx) {
           car_number: p.car_number,
           timestamp: Date.now()
         });
-        if (sec.started) {
+        if (activeStart) {
           // Late arrival — re-import handleLateArrival
           const { handleLateArrival } = await import('./app.js');
           handleLateArrival(sectionId);
@@ -406,14 +416,20 @@ export function renderLiveConsole(container, params, ctx) {
   const stagingHeat = ctx.getStagingHeat();
   const isStaging = stagingHeat != null;
 
+  // Get the active or latest start for this section
+  const startNumber = ctx.getStartNumber();
+  const activeStart = getActiveStart(sec);
+  const currentStart = startNumber ? getStart(sec, startNumber) : (activeStart || getLatestStart(sec));
+  const startResults = currentStart ? currentStart.results : {};
+
   // Derive current heat number from staging heat or last result
-  const resultHeatNumbers = Object.keys(sec.results).map(Number);
+  const resultHeatNumbers = Object.keys(startResults).map(Number);
   const lastResultHeat = resultHeatNumbers.length > 0 ? Math.max(...resultHeatNumbers) : 0;
   const currentHeat = isStaging ? stagingHeat.heat_number : lastResultHeat;
 
   // If section is started but no schedule in memory for THIS section → show resume UI
   const isLiveForThisSection = ctx.liveSection?.sectionId === sectionId;
-  const needsResume = sec.started && !sec.completed && (!schedule || !isLiveForThisSection);
+  const needsResume = activeStart && !activeStart.completed && (!schedule || !isLiveForThisSection);
 
   container.innerHTML = '';
 
@@ -427,7 +443,7 @@ export function renderLiveConsole(container, params, ctx) {
   else if (needsResume) stateLabel = 'Paused';
   else if (isStaging) stateLabel = 'Staging';
   else if (lastResultHeat > 0) stateLabel = 'Results';
-  else if (sec.completed) stateLabel = 'Complete';
+  else if (currentStart?.completed) stateLabel = 'Complete';
   else stateLabel = 'Ready';
 
   const activeLanes = ctx.getAvailableLanes(sectionId);
@@ -437,9 +453,13 @@ export function renderLiveConsole(container, params, ctx) {
   const trackBadgeLabel = trackMode === 'serial' ? 'USB Track' : trackMode === 'wifi' ? 'WiFi Track' : trackMode === 'fake' ? 'Fake Track' : 'Manual';
   const trackBadgeClass = trackMode === 'manual' ? 'status-idle' : 'status-active';
 
+  const sectionTitle = currentStart && sec.next_start_number > 2
+    ? `${sec.section_name} — Rally ${currentStart.start_number}`
+    : sec.section_name;
+
   header.innerHTML = `
     <div class="console-title-row">
-      <h2 class="screen-title">${esc(sec.section_name)}</h2>
+      <h2 class="screen-title">${esc(sectionTitle)}</h2>
       <span class="status-badge ${trackBadgeClass} track-badge-btn" id="console-track-badge">${trackBadgeLabel}</span>
       <span class="console-state-label">${stateLabel}</span>
     </div>
@@ -506,7 +526,7 @@ export function renderLiveConsole(container, params, ctx) {
   leftPanel.className = 'console-panel';
 
   if (currentHeat > 0) {
-    const result = getAcceptedResult(sec, currentHeat);
+    const result = currentStart ? currentStart.results[currentHeat] || null : null;
     // Lane data: from staging heat (if staging) or from result (if showing results)
     const currentLanes = isStaging ? stagingHeat.lanes : (result?.lanes || []);
 
@@ -568,7 +588,8 @@ export function renderLiveConsole(container, params, ctx) {
   rightPanel.className = 'console-panel';
   rightPanel.innerHTML = '<h3 class="area-heading">Standings</h3>';
 
-  const standings = computeLeaderboard(sec);
+  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, results: {}, removed: [], lane_corrections: {}, reruns: {} };
+  const standings = computeLeaderboard(flatSec);
   const standingsHaveGroups = standings.some(s => s.group_id);
   if (standings.length > 0) {
     const sTable = document.createElement('div');
@@ -598,7 +619,7 @@ export function renderLiveConsole(container, params, ctx) {
   container.appendChild(panels);
 
   // ─── Lane Statistics ──────────────────────────────────────
-  const laneStats = computeLaneStats(sec);
+  const laneStats = computeLaneStats(flatSec);
   if (laneStats.length > 0) {
     const laneSection = document.createElement('div');
     laneSection.className = 'lane-stats';
@@ -624,7 +645,7 @@ export function renderLiveConsole(container, params, ctx) {
 
   // ─── Heat History Log ───────────────────────────────────────
   // Show all past results (excluding current heat) in reverse order
-  const pastResults = Object.values(sec.results)
+  const pastResults = Object.values(startResults)
     .filter(r => r.heat_number !== currentHeat)
     .sort((a, b) => b.heat_number - a.heat_number);
 
@@ -643,10 +664,12 @@ export function renderLiveConsole(container, params, ctx) {
 
     for (const result of pastResults) {
       const hn = result.heat_number;
-      const rerunCount = sec.reruns[hn] || 0;
+      const startReruns = currentStart ? currentStart.reruns : {};
+      const startLaneCorrections = currentStart ? currentStart.lane_corrections : {};
+      const rerunCount = startReruns[hn] || 0;
       const sourceType = result.type === 'RaceCompleted' ? 'Timed' : 'Manual';
       // Effective lanes: lane_corrections override result.lanes
-      const effectiveLanes = sec.lane_corrections[hn] || result.lanes || [];
+      const effectiveLanes = startLaneCorrections[hn] || result.lanes || [];
       // Get catch_up flag from schedule if available
       const scheduleHeat = schedule?.heats.find(h => h.heat_number === hn);
       const isCatchUp = scheduleHeat?.catch_up || false;
@@ -727,7 +750,7 @@ export function renderLiveConsole(container, params, ctx) {
     rotationWrap.style.textAlign = 'center';
     rotationWrap.style.padding = '2rem 0';
 
-    const heatsCompleted = Object.keys(sec.results).length;
+    const heatsCompleted = Object.keys(startResults).length;
     const laneCount = ctx.getAvailableLanes(sectionId).length;
     const rotationNum = Math.round(heatsCompleted / laneCount);
 
@@ -815,8 +838,9 @@ export function renderLiveConsole(container, params, ctx) {
 
   // Correct Lanes button
   if (currentHeat > 0 && isResults) {
-    const lastResult = sec.results[currentHeat];
-    const effectiveLanes = sec.lane_corrections[currentHeat] || lastResult?.lanes || [];
+    const lastResult = startResults[currentHeat];
+    const startLaneCorr = currentStart ? currentStart.lane_corrections : {};
+    const effectiveLanes = startLaneCorr[currentHeat] || lastResult?.lanes || [];
     const correctBtn = document.createElement('button');
     correctBtn.className = 'btn btn-secondary';
     correctBtn.textContent = 'Correct Lanes';
@@ -834,7 +858,7 @@ export function renderLiveConsole(container, params, ctx) {
   }
 
   // Change Lanes button
-  if (!sec.completed) {
+  if (currentStart && !currentStart.completed) {
     const changeLanesBtn = document.createElement('button');
     changeLanesBtn.className = 'btn btn-secondary';
     changeLanesBtn.textContent = 'Change Lanes';
@@ -843,30 +867,30 @@ export function renderLiveConsole(container, params, ctx) {
   }
 
   // Car Stats button — available once any results exist
-  if (Object.keys(sec.results).length > 0) {
+  if (Object.keys(startResults).length > 0) {
     const statsBtn = document.createElement('button');
     statsBtn.className = 'btn btn-secondary';
     statsBtn.textContent = 'Car Stats';
-    statsBtn.onclick = () => showCarStatsDialog(sec);
+    statsBtn.onclick = () => showCarStatsDialog(flatSec);
     controls.appendChild(statsBtn);
   }
 
   // Remove Car button
-  if (!sec.completed) {
+  if (currentStart && !currentStart.completed) {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-danger';
     removeBtn.textContent = 'Remove Car';
-    removeBtn.onclick = () => showRemoveCarDialog(sectionId, sec, ctx);
+    removeBtn.onclick = () => showRemoveCarDialog(sectionId, flatSec, ctx);
     controls.appendChild(removeBtn);
   }
 
   // End Section Early button — only when racing has started and there are results
-  if (!sec.completed && sec.started && lastResultHeat > 0) {
+  if (currentStart && !currentStart.completed && currentStart.started && lastResultHeat > 0) {
     const endEarlyBtn = document.createElement('button');
     endEarlyBtn.className = 'btn btn-danger';
     endEarlyBtn.textContent = 'End Section Early';
     endEarlyBtn.onclick = () => {
-      const heatsCompleted = Object.keys(sec.results).length;
+      const heatsCompleted = Object.keys(startResults).length;
       if (confirm(
         `End this section early?\n\n` +
         `${heatsCompleted} of ${totalHeats} heats completed. ` +
@@ -904,15 +928,46 @@ export function renderSectionComplete(container, params, ctx) {
 
   container.innerHTML = '';
 
+  const completedStarts = getCompletedStarts(sec);
+  let selectedStartNumber = params.startNumber ? Number(params.startNumber) : null;
+  if (!selectedStartNumber && completedStarts.length > 0) {
+    selectedStartNumber = completedStarts[completedStarts.length - 1].start_number;
+  }
+  const currentStart = selectedStartNumber ? getStart(sec, selectedStartNumber) : null;
+
+  // Section title — include rally number when multiple starts exist
+  const titleSuffix = completedStarts.length > 1 && currentStart
+    ? ` — Rally ${currentStart.start_number}`
+    : '';
+
   const header = document.createElement('div');
   header.className = 'section-header';
   header.innerHTML = `
-    <h2 class="screen-title">${esc(sec.section_name)} — Final Results</h2>
-    ${sec.early_end ? '<p class="form-hint">Section ended early — standings based on completed heats.</p>' : ''}
+    <h2 class="screen-title">${esc(sec.section_name)}${titleSuffix} — Final Results</h2>
+    ${currentStart?.early_end ? '<p class="form-hint">Section ended early — standings based on completed heats.</p>' : ''}
   `;
   container.appendChild(header);
 
-  const standings = computeLeaderboard(sec);
+  // Start picker when multiple completed starts exist
+  if (completedStarts.length > 1) {
+    const pickerWrap = document.createElement('div');
+    pickerWrap.style.marginBottom = '1rem';
+    const rallyName = state.rally_name || 'Rally';
+    for (const s of completedStarts) {
+      const btn = document.createElement('button');
+      btn.className = s.start_number === selectedStartNumber
+        ? 'btn btn-sm btn-primary'
+        : 'btn btn-sm btn-secondary';
+      btn.textContent = `${rallyName} ${s.start_number}`;
+      btn.style.marginRight = '0.5rem';
+      btn.onclick = () => navigate('section-complete', { sectionId, startNumber: s.start_number }, { replace: true });
+      pickerWrap.appendChild(btn);
+    }
+    container.appendChild(pickerWrap);
+  }
+
+  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, results: {}, removed: [], lane_corrections: {}, reruns: {} };
+  const standings = computeLeaderboard(flatSec);
   const resultsHaveGroups = standings.some(s => s.group_id);
 
   if (standings.length > 0) {
@@ -944,7 +999,7 @@ export function renderSectionComplete(container, params, ctx) {
       const legend = document.createElement('p');
       legend.className = 'form-hint';
       legend.style.marginTop = '0.75rem';
-      legend.textContent = sec.early_end
+      legend.textContent = currentStart?.early_end
         ? '* Incomplete — section ended before all heats were run.'
         : '* Incomplete — car was removed before finishing all heats.';
       container.appendChild(legend);
@@ -993,7 +1048,10 @@ export function renderSectionComplete(container, params, ctx) {
 
   showBtn.onclick = async () => {
     const m = await import('../broadcast.js');
-    m.sendSectionComplete(sec.section_name, standings);
+    const displayName = completedStarts.length > 1 && currentStart
+      ? `${sec.section_name} — ${state.rally_name || 'Rally'} ${currentStart.start_number}`
+      : sec.section_name;
+    m.sendSectionComplete(displayName, standings);
     ctx.showToast('Section results sent to audience display', 'success');
 
     // Swap to reveal controls

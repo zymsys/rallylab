@@ -57,13 +57,8 @@ export function applyEvent(state, event) {
               section_name: payload.section_name,
               participants: [],
               arrived: [],
-              removed: [],
-              available_lanes: null,
-              started: false,
-              completed: false,
-              results: {},
-              reruns: {},
-              lane_corrections: {}
+              starts: {},
+              next_start_number: 1
             }
           }
         }
@@ -269,6 +264,7 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || sec.next_start_number;
       return {
         ...state,
         race_day: {
@@ -278,8 +274,21 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              started: true,
-              available_lanes: payload.available_lanes || sec.available_lanes
+              next_start_number: sn + 1,
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  start_number: sn,
+                  started: true,
+                  completed: false,
+                  early_end: false,
+                  available_lanes: payload.available_lanes || null,
+                  removed: [],
+                  results: {},
+                  reruns: {},
+                  lane_corrections: {}
+                }
+              }
             }
           }
         }
@@ -290,6 +299,9 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
       return {
         ...state,
         race_day: {
@@ -298,7 +310,10 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              available_lanes: payload.available_lanes
+              starts: {
+                ...sec.starts,
+                [sn]: { ...start, available_lanes: payload.available_lanes }
+              }
             }
           }
         }
@@ -309,6 +324,9 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
       return {
         ...state,
         race_day: {
@@ -317,14 +335,20 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              results: {
-                ...sec.results,
-                [payload.heat_number]: {
-                  type: 'RaceCompleted',
-                  heat_number: payload.heat_number,
-                  lanes: payload.lanes || [],
-                  times_ms: payload.times_ms,
-                  timestamp: payload.timestamp
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  results: {
+                    ...start.results,
+                    [payload.heat_number]: {
+                      type: 'RaceCompleted',
+                      heat_number: payload.heat_number,
+                      lanes: payload.lanes || [],
+                      times_ms: payload.times_ms,
+                      timestamp: payload.timestamp
+                    }
+                  }
                 }
               }
             }
@@ -337,6 +361,9 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
       return {
         ...state,
         race_day: {
@@ -345,14 +372,20 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              results: {
-                ...sec.results,
-                [payload.heat_number]: {
-                  type: 'ResultManuallyEntered',
-                  heat_number: payload.heat_number,
-                  lanes: payload.lanes || [],
-                  rankings: payload.rankings,
-                  timestamp: payload.timestamp
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  results: {
+                    ...start.results,
+                    [payload.heat_number]: {
+                      type: 'ResultManuallyEntered',
+                      heat_number: payload.heat_number,
+                      lanes: payload.lanes || [],
+                      rankings: payload.rankings,
+                      timestamp: payload.timestamp
+                    }
+                  }
                 }
               }
             }
@@ -365,8 +398,11 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
-      const currentReruns = sec.reruns[payload.heat_number] || 0;
-      const { [payload.heat_number]: _, ...remainingResults } = sec.results;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
+      const currentReruns = start.reruns[payload.heat_number] || 0;
+      const { [payload.heat_number]: _, ...remainingResults } = start.results;
       return {
         ...state,
         race_day: {
@@ -375,8 +411,14 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              reruns: { ...sec.reruns, [payload.heat_number]: currentReruns + 1 },
-              results: remainingResults
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  reruns: { ...start.reruns, [payload.heat_number]: currentReruns + 1 },
+                  results: remainingResults
+                }
+              }
             }
           }
         }
@@ -387,7 +429,10 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
-      if (sec.removed.includes(payload.car_number)) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
+      if (start.removed.includes(payload.car_number)) return state;
       return {
         ...state,
         race_day: {
@@ -396,7 +441,13 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              removed: [...sec.removed, payload.car_number]
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  removed: [...start.removed, payload.car_number]
+                }
+              }
             }
           }
         }
@@ -407,6 +458,9 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
       return {
         ...state,
         race_day: {
@@ -415,8 +469,14 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              completed: true,
-              early_end: payload.early_end || false
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  completed: true,
+                  early_end: payload.early_end || false
+                }
+              }
             }
           }
         }
@@ -427,6 +487,9 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
+      const sn = payload.start_number || activeStartNumber(sec);
+      const start = sec.starts[sn];
+      if (!start) return state;
       return {
         ...state,
         race_day: {
@@ -435,9 +498,15 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              lane_corrections: {
-                ...sec.lane_corrections,
-                [payload.heat_number]: payload.corrected_lanes
+              starts: {
+                ...sec.starts,
+                [sn]: {
+                  ...start,
+                  lane_corrections: {
+                    ...start.lane_corrections,
+                    [payload.heat_number]: payload.corrected_lanes
+                  }
+                }
               }
             }
           }
@@ -483,31 +552,112 @@ export function nextAvailableCarNumber(section) {
 }
 
 /**
+ * Find the start_number of the active (started but not completed) start,
+ * or fall back to the highest start_number. Used internally when events
+ * don't carry an explicit start_number (backward compat).
+ */
+function activeStartNumber(sec) {
+  const starts = Object.values(sec.starts || {});
+  const active = starts.find(s => s.started && !s.completed);
+  if (active) return active.start_number;
+  if (starts.length > 0) return Math.max(...starts.map(s => s.start_number));
+  return 1;
+}
+
+/**
+ * Get a specific start object by start_number.
+ * @param {Object} section - race_day section object
+ * @param {number} startNumber
+ * @returns {Object|null}
+ */
+export function getStart(section, startNumber) {
+  return section.starts[startNumber] || null;
+}
+
+/**
+ * Get the active (started, not completed) start, or null.
+ * @param {Object} section - race_day section object
+ * @returns {Object|null}
+ */
+export function getActiveStart(section) {
+  return Object.values(section.starts || {}).find(s => s.started && !s.completed) || null;
+}
+
+/**
+ * Get the latest (highest-numbered) start, or null.
+ * @param {Object} section - race_day section object
+ * @returns {Object|null}
+ */
+export function getLatestStart(section) {
+  const starts = Object.values(section.starts || {});
+  if (starts.length === 0) return null;
+  return starts.reduce((a, b) => a.start_number > b.start_number ? a : b);
+}
+
+/**
+ * Get all completed starts for a section.
+ * @param {Object} section - race_day section object
+ * @returns {Array<Object>}
+ */
+export function getCompletedStarts(section) {
+  return Object.values(section.starts || {}).filter(s => s.completed).sort((a, b) => a.start_number - b.start_number);
+}
+
+/**
+ * Build a "flat" section-like object from a section + start, suitable for
+ * passing to scoring functions that expect the old flat shape.
+ * @param {Object} section - race_day section object
+ * @param {Object} start - a start object from section.starts
+ * @returns {Object}
+ */
+export function flattenStart(section, start) {
+  return {
+    participants: section.participants,
+    results: start.results,
+    removed: start.removed,
+    lane_corrections: start.lane_corrections,
+    reruns: start.reruns
+  };
+}
+
+/**
  * Derive the current race day phase for a section.
  * @param {Object} state - Full application state
  * @param {string} sectionId
+ * @param {number} [startNumber] - specific start to check; defaults to latest
  * @returns {'idle'|'rally-loaded'|'check-in'|'racing'|'section-complete'}
  */
-export function deriveRaceDayPhase(state, sectionId) {
+export function deriveRaceDayPhase(state, sectionId, startNumber) {
   const rd = state.race_day;
   if (!rd.loaded) return 'idle';
 
   const sec = rd.sections[sectionId];
   if (!sec) return 'rally-loaded';
 
-  if (sec.completed) return 'section-complete';
+  const starts = Object.values(sec.starts || {});
+  if (starts.length === 0) return 'check-in';
 
-  if (!sec.started) return 'check-in';
+  const start = startNumber
+    ? sec.starts[startNumber]
+    : getLatestStart(sec);
 
-  return 'racing';
+  if (!start) return 'check-in';
+  if (start.completed) return 'section-complete';
+  if (start.started) return 'racing';
+  return 'check-in';
 }
 
 /**
- * Get the accepted (latest) result for a heat.
+ * Get the accepted (latest) result for a heat within a start.
  * @param {Object} section - race_day section object
  * @param {number} heatNumber
+ * @param {number} [startNumber] - defaults to active start
  * @returns {Object|null}
  */
-export function getAcceptedResult(section, heatNumber) {
-  return section.results[heatNumber] || null;
+export function getAcceptedResult(section, heatNumber, startNumber) {
+  const start = startNumber
+    ? section.starts[startNumber]
+    : (getActiveStart(section) || getLatestStart(section));
+  if (!start) return null;
+  return start.results[heatNumber] || null;
 }
