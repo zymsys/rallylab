@@ -33,6 +33,8 @@ const APP_SHELL = [
   'js/operator/screens.js',
   'js/operator/dialogs.js',
   'js/operator/demo-data.js',
+  'js/operator/report.js',
+  'js/operator/export-xlsx.js',
   'js/registrar/app.js',
   'js/registrar/screens.js',
   'js/registrar/dialogs.js',
@@ -43,7 +45,9 @@ const APP_SHELL = [
 
 // CDN dependencies to cache
 const CDN_DEPS = [
-  'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js'
+  'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js'
 ];
 
 self.addEventListener('install', event => {

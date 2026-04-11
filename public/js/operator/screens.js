@@ -6,7 +6,9 @@
 
 import { computeLeaderboard, computeLaneStats } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart } from '../state-manager.js';
-import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog } from './dialogs.js';
+import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog, showRallyReportDialog, showSectionReportDialog, showGroupReportsDialog } from './dialogs.js';
+import { generateHeatReport } from './report.js';
+import { exportSectionXlsx } from './export-xlsx.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -271,6 +273,34 @@ export function renderRallyHome(container, params, ctx) {
     }
 
     tbody.appendChild(tr);
+  }
+
+  // Report buttons — show when any section has completed starts
+  const anyComplete = sections.some(s => getCompletedStarts(s).length > 0);
+  if (anyComplete) {
+    const reportWrap = document.createElement('div');
+    reportWrap.style.marginTop = '1.5rem';
+    reportWrap.style.display = 'flex';
+    reportWrap.style.gap = '0.5rem';
+    reportWrap.style.flexWrap = 'wrap';
+
+    const reportBtn = document.createElement('button');
+    reportBtn.className = 'btn btn-secondary';
+    reportBtn.textContent = 'Rally Report (PDF)';
+    reportBtn.onclick = () => showRallyReportDialog(ctx);
+    reportWrap.appendChild(reportBtn);
+
+    // Group Reports — only if any participants have group_id
+    const hasGroups = sections.some(s => s.participants.some(p => p.group_id));
+    if (hasGroups) {
+      const groupBtn = document.createElement('button');
+      groupBtn.className = 'btn btn-secondary';
+      groupBtn.textContent = 'Group Reports (PDF)';
+      groupBtn.onclick = () => showGroupReportsDialog(ctx);
+      reportWrap.appendChild(groupBtn);
+    }
+
+    container.appendChild(reportWrap);
   }
 }
 
@@ -815,6 +845,12 @@ export function renderLiveConsole(container, params, ctx) {
         }
       }
 
+      const heatPdfBtn = document.createElement('button');
+      heatPdfBtn.className = 'btn btn-sm btn-secondary';
+      heatPdfBtn.textContent = 'PDF';
+      heatPdfBtn.onclick = () => generateHeatReport(state, sec, currentStart, hn);
+      btnRow.appendChild(heatPdfBtn);
+
       body.appendChild(btnRow);
 
       details.appendChild(body);
@@ -1124,11 +1160,17 @@ export function renderSectionComplete(container, params, ctx) {
   actions.appendChild(homeBtn);
 
   if (standings.length > 0) {
-    const exportBtn = document.createElement('button');
-    exportBtn.className = 'btn btn-secondary';
-    exportBtn.textContent = 'Export CSV';
-    exportBtn.onclick = () => exportResultsCSV(sec.section_name, standings, state.groups);
-    actions.appendChild(exportBtn);
+    const xlsxBtn = document.createElement('button');
+    xlsxBtn.className = 'btn btn-secondary';
+    xlsxBtn.textContent = 'Export Excel';
+    xlsxBtn.onclick = () => exportSectionXlsx(state, sec, currentStart);
+    actions.appendChild(xlsxBtn);
+
+    const pdfBtn = document.createElement('button');
+    pdfBtn.className = 'btn btn-secondary';
+    pdfBtn.textContent = 'Export PDF';
+    pdfBtn.onclick = () => showSectionReportDialog(sec, ctx);
+    actions.appendChild(pdfBtn);
   }
 
   // Reveal flow state
@@ -1222,38 +1264,3 @@ function formatTime(ms) {
   return (ms / 1000).toFixed(3) + 's';
 }
 
-/**
- * Export section results as a CSV download.
- * @param {string} sectionName
- * @param {Array} standings - from computeLeaderboard()
- */
-function exportResultsCSV(sectionName, standings, groups) {
-  const hasGroups = standings.some(s => s.group_id);
-  const header = hasGroups
-    ? 'Rank,Car #,Name,Group,Avg Time (s),Best Time (s),Heats Run,Complete'
-    : 'Rank,Car #,Name,Avg Time (s),Best Time (s),Heats Run,Complete';
-  const rows = standings.map(s => {
-    const avg = s.avg_time_ms != null ? (s.avg_time_ms / 1000).toFixed(3) : '';
-    const best = s.best_time_ms != null ? (s.best_time_ms / 1000).toFixed(3) : '';
-    const name = s.name.includes(',') ? `"${s.name}"` : s.name;
-    let gName = '';
-    if (hasGroups && s.group_id && groups[s.group_id]) {
-      gName = groups[s.group_id].group_name || '';
-      if (gName.includes(',')) gName = `"${gName}"`;
-    }
-    return hasGroups
-      ? `${s.rank},${s.car_number},${name},${gName},${avg},${best},${s.heats_run},${s.incomplete ? 'No' : 'Yes'}`
-      : `${s.rank},${s.car_number},${name},${avg},${best},${s.heats_run},${s.incomplete ? 'No' : 'Yes'}`;
-  });
-
-  const csv = [header, ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${sectionName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-results.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}

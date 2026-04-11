@@ -1,9 +1,11 @@
 /**
  * operator/dialogs.js — Modal dialogs for race day operator.
- * Manual Rank, Remove Car, Load Roster, Car Statistics.
+ * Manual Rank, Remove Car, Load Roster, Car Statistics, Reports.
  */
 
 import { computeCarStats } from '../scoring.js';
+import { getCompletedStarts, getStart } from '../state-manager.js';
+import { generateRallyReport, generateSectionReport, generateHeatReport, generateGroupReport } from './report.js';
 
 const backdrop = () => document.getElementById('dialog-backdrop');
 const dialogEl = () => document.getElementById('dialog');
@@ -1531,4 +1533,267 @@ export async function showLearnModeDialog(ctx) {
     // Update UI — show option to finish or continue
     renderContent();
   }
+}
+
+// ─── Rally Report Dialog ────────────────────────────────────────
+
+/**
+ * Show a dialog to generate a rally report (all sections).
+ * If any section has multiple starts, offer selection.
+ */
+export function showRallyReportDialog(ctx) {
+  const { state } = ctx;
+  const rd = state.race_day;
+  const sections = Object.values(rd.sections);
+
+  // Collect sections with completed starts
+  const sectionsWithResults = [];
+  let anyMultiStart = false;
+  for (const sec of sections) {
+    const completed = getCompletedStarts(sec);
+    if (completed.length > 0) {
+      sectionsWithResults.push({ section: sec, completedStarts: completed });
+      if (completed.length > 1) anyMultiStart = true;
+    }
+  }
+
+  if (sectionsWithResults.length === 0) {
+    ctx.showToast('No completed sections to report.', 'info');
+    return;
+  }
+
+  // If no multi-start sections, generate immediately
+  if (!anyMultiStart) {
+    generateRallyReport(state);
+    closeDialog();
+    return;
+  }
+
+  // Build dialog with start selection
+  let html = `
+    <h3 class="dialog-title">Rally Report</h3>
+    <p class="form-hint">Some sections have been run multiple times. Select which runs to include.</p>
+    <form id="rally-report-form">
+  `;
+
+  for (const { section, completedStarts } of sectionsWithResults) {
+    if (completedStarts.length === 1) {
+      html += `
+        <div class="form-group" style="margin-bottom:0.5rem">
+          <label><strong>${esc(section.section_name)}</strong> — 1 run</label>
+          <input type="hidden" name="sec_${section.section_id}" value="all">
+        </div>
+      `;
+    } else {
+      html += `
+        <fieldset class="form-group" style="margin-bottom:0.75rem;border:none;padding:0">
+          <legend><strong>${esc(section.section_name)}</strong> — ${completedStarts.length} runs</legend>
+          <label style="display:block;margin:0.25rem 0">
+            <input type="radio" name="sec_${section.section_id}" value="all" checked> All runs
+          </label>
+      `;
+      for (const s of completedStarts) {
+        html += `
+          <label style="display:block;margin:0.25rem 0">
+            <input type="radio" name="sec_${section.section_id}" value="${s.start_number}"> Rally ${s.start_number} only
+          </label>
+        `;
+      }
+      html += '</fieldset>';
+    }
+  }
+
+  html += `
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" id="report-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Generate Report</button>
+    </div>
+    </form>
+  `;
+
+  openDialog(html);
+
+  dialogEl().querySelector('#report-cancel').onclick = closeDialog;
+  dialogEl().querySelector('#rally-report-form').onsubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const sectionStarts = [];
+
+    for (const { section, completedStarts } of sectionsWithResults) {
+      const val = form.elements[`sec_${section.section_id}`]?.value;
+      if (val === 'all') {
+        sectionStarts.push({
+          sectionId: section.section_id,
+          startNumbers: completedStarts.map(s => s.start_number),
+        });
+      } else {
+        sectionStarts.push({
+          sectionId: section.section_id,
+          startNumbers: [Number(val)],
+        });
+      }
+    }
+
+    generateRallyReport(state, { sectionStarts });
+    closeDialog();
+  };
+}
+
+// ─── Section Report Dialog ──────────────────────────────────────
+
+/**
+ * Show a dialog to generate a section report.
+ * If the section has multiple starts, offer selection.
+ */
+export function showSectionReportDialog(section, ctx) {
+  const { state } = ctx;
+  const completedStarts = getCompletedStarts(section);
+
+  if (completedStarts.length === 0) {
+    ctx.showToast('No completed runs to report.', 'info');
+    return;
+  }
+
+  // Single start — generate immediately
+  if (completedStarts.length === 1) {
+    generateSectionReport(state, section, [completedStarts[0].start_number]);
+    return;
+  }
+
+  // Multi-start — show picker
+  let html = `
+    <h3 class="dialog-title">${esc(section.section_name)} — Section Report</h3>
+    <p class="form-hint">This section has been run ${completedStarts.length} times. Select which runs to include.</p>
+    <form id="section-report-form">
+      <label style="display:block;margin:0.5rem 0">
+        <input type="radio" name="start_choice" value="all" checked> All runs
+      </label>
+  `;
+
+  for (const s of completedStarts) {
+    html += `
+      <label style="display:block;margin:0.5rem 0">
+        <input type="radio" name="start_choice" value="${s.start_number}"> Rally ${s.start_number} only
+      </label>
+    `;
+  }
+
+  html += `
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" id="sec-report-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Generate Report</button>
+    </div>
+    </form>
+  `;
+
+  openDialog(html);
+
+  dialogEl().querySelector('#sec-report-cancel').onclick = closeDialog;
+  dialogEl().querySelector('#section-report-form').onsubmit = (e) => {
+    e.preventDefault();
+    const val = e.target.elements.start_choice.value;
+    const startNumbers = val === 'all'
+      ? completedStarts.map(s => s.start_number)
+      : [Number(val)];
+    generateSectionReport(state, section, startNumbers);
+    closeDialog();
+  };
+}
+
+// ─── Group Reports Dialog ───────────────────────────────────────
+
+/**
+ * Show a dialog listing all groups that have participants with results.
+ * The user picks a group (or "All Groups") and gets a PDF per group.
+ */
+export function showGroupReportsDialog(ctx) {
+  const { state } = ctx;
+  const rd = state.race_day;
+  const sections = Object.values(rd.sections);
+
+  // Find groups that have participants in completed sections
+  const groupsWithResults = new Set();
+  for (const sec of sections) {
+    const completed = getCompletedStarts(sec);
+    if (completed.length === 0) continue;
+    for (const p of sec.participants) {
+      if (p.group_id) groupsWithResults.add(p.group_id);
+    }
+  }
+
+  if (groupsWithResults.size === 0) {
+    ctx.showToast('No groups with completed results to report.', 'info');
+    return;
+  }
+
+  const groups = [...groupsWithResults]
+    .map(id => state.groups[id])
+    .filter(Boolean)
+    .sort((a, b) => a.group_name.localeCompare(b.group_name));
+
+  // Check for multi-start sections
+  let anyMultiStart = false;
+  for (const sec of sections) {
+    if (getCompletedStarts(sec).length > 1) { anyMultiStart = true; break; }
+  }
+
+  let html = `
+    <h3 class="dialog-title">Group Reports</h3>
+    <p class="form-hint">Generate a PDF report for a group's scouter, showing where their participants placed and their heat-by-heat times.</p>
+    <form id="group-report-form">
+      <div class="form-group">
+        <label class="form-label">Group</label>
+        <select class="form-input" name="group_choice">
+          <option value="all">All Groups (one PDF each)</option>
+  `;
+  for (const g of groups) {
+    html += `<option value="${g.group_id}">${esc(g.group_name)}</option>`;
+  }
+  html += '</select></div>';
+
+  if (anyMultiStart) {
+    html += `
+      <div class="form-group">
+        <label class="form-label">Runs to include</label>
+        <select class="form-input" name="start_choice">
+          <option value="all">All runs</option>
+    `;
+    // Collect all distinct start numbers across sections
+    const allStartNums = new Set();
+    for (const sec of sections) {
+      for (const s of getCompletedStarts(sec)) allStartNums.add(s.start_number);
+    }
+    for (const sn of [...allStartNums].sort((a, b) => a - b)) {
+      html += `<option value="${sn}">Rally ${sn} only</option>`;
+    }
+    html += '</select></div>';
+  }
+
+  html += `
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" id="grp-report-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Generate</button>
+    </div>
+    </form>
+  `;
+
+  openDialog(html);
+
+  dialogEl().querySelector('#grp-report-cancel').onclick = closeDialog;
+  dialogEl().querySelector('#group-report-form').onsubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const groupChoice = form.elements.group_choice.value;
+    const startChoice = form.elements.start_choice?.value || 'all';
+    const startNumbers = startChoice === 'all' ? null : [Number(startChoice)];
+
+    const targetGroups = groupChoice === 'all'
+      ? groups
+      : groups.filter(g => g.group_id === groupChoice);
+
+    for (const g of targetGroups) {
+      generateGroupReport(state, g.group_id, startNumbers);
+    }
+    closeDialog();
+  };
 }
