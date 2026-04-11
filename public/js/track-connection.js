@@ -60,7 +60,10 @@ function ensureChannel() {
     const msg = e.data;
     if (msg.type === 'TRACK_HELLO') {
       _useFakeTrack = true;
-      _notifyMode();
+      // Only broadcast mode change if no real track is connected —
+      // otherwise the repeated TRACK_HELLO (every 2s) causes the
+      // debug view to flip between USB/fake layouts.
+      if (!_useSerial && !_useWifi) _notifyMode();
     }
     if (_messageHandler) {
       _messageHandler(msg);
@@ -736,15 +739,6 @@ export function disconnect() {
 export async function waitForRace(lanes, signal) {
   ensureChannel();
 
-  if (_useFakeTrack) {
-    const rid = String(++_requestId);
-    _trackChannel.postMessage({ type: 'STAGE_RACE', requestId: rid, lanes });
-    const resp = await waitForResponse(rid, 'RACE_COMPLETE', signal, 0);
-    if (resp && resp.times_ms) {
-      return resp.times_ms;
-    }
-  }
-
   // USB Serial: send command and wait for response
   if (_useSerial) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -792,6 +786,16 @@ export async function waitForRace(lanes, signal) {
     }
   }
 
+  // Fake track (BroadcastChannel)
+  if (_useFakeTrack) {
+    const rid = String(++_requestId);
+    _trackChannel.postMessage({ type: 'STAGE_RACE', requestId: rid, lanes });
+    const resp = await waitForResponse(rid, 'RACE_COMPLETE', signal, 0);
+    if (resp && resp.times_ms) {
+      return resp.times_ms;
+    }
+  }
+
   // Manual fallback: block until operator triggers
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -823,13 +827,6 @@ export async function waitForRace(lanes, signal) {
  */
 export async function waitForGate(signal) {
   ensureChannel();
-
-  if (_useFakeTrack) {
-    const rid = String(++_requestId);
-    _trackChannel.postMessage({ type: 'WAIT_GATE', requestId: rid });
-    const resp = await waitForResponse(rid, 'GATE_READY', signal, 0);
-    if (resp) return;
-  }
 
   // USB Serial: send command and wait for response
   if (_useSerial) {
@@ -866,6 +863,14 @@ export async function waitForGate(signal) {
       _wifiError = e.message;
       throw e;
     }
+  }
+
+  // Fake track (BroadcastChannel)
+  if (_useFakeTrack) {
+    const rid = String(++_requestId);
+    _trackChannel.postMessage({ type: 'WAIT_GATE', requestId: rid });
+    const resp = await waitForResponse(rid, 'GATE_READY', signal, 0);
+    if (resp) return;
   }
 
   // Manual fallback: block until operator triggers
