@@ -76,7 +76,7 @@ function getLastCompletedHeatNumber(sectionId, startNumber) {
     ? getStart(sec, startNumber)
     : (getActiveStart(sec) || getLatestStart(sec));
   if (!start) return 0;
-  const completedNums = Object.keys(start.results).map(Number);
+  const completedNums = Object.keys(start.results || {}).map(Number);
   return completedNums.length > 0 ? Math.max(...completedNums) : 0;
 }
 
@@ -565,7 +565,7 @@ async function runRaceLoop(sectionId) {
     const sec = () => _state.race_day.sections[sectionId];
     const startResults = () => {
       const start = getStart(sec(), startNumber);
-      return start ? start.results : {};
+      return start ? (start.results || {}) : {};
     };
 
     // Find next heat to run (first heat without a result)
@@ -691,7 +691,7 @@ async function addRotation(sectionId) {
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
   // Convert state results to the format the scheduler expects
-  const results = Object.values(start.results).map(r => ({
+  const results = Object.values(start.results || {}).map(r => ({
     ...r,
     heat: r.heat_number
   }));
@@ -836,7 +836,7 @@ async function endSectionEarly(sectionId) {
   const startNumber = _liveSection?.startNumber;
   const sec = _state.race_day.sections[sectionId];
   const start = getStart(sec, startNumber) || getActiveStart(sec);
-  const heatsCompleted = start ? Object.keys(start.results).length : 0;
+  const heatsCompleted = start ? Object.keys(start.results || {}).length : 0;
 
   await appendAndRebuild({
     type: 'SectionCompleted',
@@ -929,7 +929,7 @@ export function handleLateArrival(sectionId) {
 
   // Detect new participants who missed completed heats and need catch-up runs
   const completedCarNumbers = new Set();
-  const startResults = start ? start.results : {};
+  const startResults = start ? (start.results || {}) : {};
   for (const result of Object.values(startResults)) {
     if (result.lanes) {
       for (const lane of result.lanes) {
@@ -1129,7 +1129,6 @@ function updateUserInfo() {
 
   const signOutBtn = document.createElement('button');
   signOutBtn.className = 'btn btn-sm btn-ghost';
-  signOutBtn.style.color = 'rgba(255,255,255,0.7)';
   signOutBtn.textContent = 'Sign Out';
   signOutBtn.onclick = async () => {
     stopSync();

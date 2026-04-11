@@ -12,7 +12,7 @@
  * @returns {Array<Object>} Accepted results
  */
 export function getAcceptedResults(section) {
-  return Object.values(section.results);
+  return Object.values(section.results || {});
 }
 
 /**
@@ -175,7 +175,7 @@ export function computeLeaderboard(section) {
 export function computeLaneStats(section) {
   const lanes = {}; // lane → { total_ms, count }
 
-  for (const result of Object.values(section.results)) {
+  for (const result of Object.values(section.results || {})) {
     if (result.type !== 'RaceCompleted' || !result.times_ms) continue;
     for (const [laneKey, time] of Object.entries(result.times_ms)) {
       const lane = Number(laneKey);
@@ -215,7 +215,7 @@ export function computeCarStats(section) {
     };
   }
 
-  for (const result of Object.values(section.results)) {
+  for (const result of Object.values(section.results || {})) {
     const heatLanes = (section.lane_corrections && section.lane_corrections[result.heat_number])
       || result.lanes;
     if (!heatLanes || heatLanes.length === 0) continue;

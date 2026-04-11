@@ -420,7 +420,7 @@ export function renderLiveConsole(container, params, ctx) {
   const startNumber = ctx.getStartNumber();
   const activeStart = getActiveStart(sec);
   const currentStart = startNumber ? getStart(sec, startNumber) : (activeStart || getLatestStart(sec));
-  const startResults = currentStart ? currentStart.results : {};
+  const startResults = currentStart ? (currentStart.results || {}) : {};
 
   // Derive current heat number from staging heat or last result
   const resultHeatNumbers = Object.keys(startResults).map(Number);

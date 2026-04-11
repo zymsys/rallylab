@@ -88,6 +88,15 @@ body {
   opacity: 0.8;
 }
 
+#site-header .btn-ghost,
+#site-header .btn-ghost:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.85);
+  background: transparent;
+}
+#site-header .btn-ghost:hover:not(:disabled) {
+  color: #fff;
+}
+
 /* ===== View Menu ===== */
 .view-menu { position: relative; }
 .view-menu-dropdown {
@@ -106,9 +115,9 @@ body {
 .view-menu-item {
   display: block;
   padding: 0.5rem 0.75rem;
-  color: inherit;
+  color: #fff;
   text-decoration: none;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 .view-menu-item:hover {
   background: rgba(255,255,255,0.08);
@@ -975,6 +984,7 @@ body.audience #app {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
+  align-items: start;
 }
 
 .audience-staging-single {
@@ -983,23 +993,40 @@ body.audience #app {
   margin: 0 auto;
 }
 
+/* Now Staging — inverted card: black text on white */
+.audience-staging-col:first-child {
+  background: #f0f0f5;
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
 .audience-staging-label {
   text-align: center;
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.5rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #60a5fa;
+  color: #1a1a2e;
   margin-bottom: 1.5rem;
 }
 
+.audience-staging-col:first-child .audience-lane-table td {
+  color: #1a1a2e;
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.audience-staging-col:first-child .audience-lane-number {
+  color: #2563eb;
+}
+
+/* Up Next — stays light on dark, full contrast */
 .audience-upnext-label {
   text-align: center;
   font-size: 1.25rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #8080a0;
+  color: #a0a0b8;
   margin-bottom: 1.5rem;
 }
 
