@@ -7,15 +7,22 @@ const CHANNEL_NAME = 'rallylab-race';
 // ─── Operator Side ──────────────────────────────────────────────
 
 let _operatorChannel = null;
+let _lastMessage = null;
 
 function getOperatorChannel() {
   if (!_operatorChannel) {
     _operatorChannel = new BroadcastChannel(CHANNEL_NAME);
+    _operatorChannel.onmessage = (e) => {
+      if (e.data?.type === 'REQUEST_STATE' && _lastMessage) {
+        _operatorChannel.postMessage(_lastMessage);
+      }
+    };
   }
   return _operatorChannel;
 }
 
 function send(message) {
+  _lastMessage = message;
   getOperatorChannel().postMessage(message);
 }
 
@@ -59,11 +66,11 @@ export function sendSectionComplete(sectionName, standings) {
 }
 
 export function sendRevealNext() {
-  send({ type: 'REVEAL_NEXT' });
+  getOperatorChannel().postMessage({ type: 'REVEAL_NEXT' });
 }
 
 export function sendRevealAll() {
-  send({ type: 'REVEAL_ALL' });
+  getOperatorChannel().postMessage({ type: 'REVEAL_ALL' });
 }
 
 // ─── Audience Side ──────────────────────────────────────────────
@@ -74,6 +81,12 @@ export function onMessage(callback) {
   if (_audienceChannel) _audienceChannel.close();
   _audienceChannel = new BroadcastChannel(CHANNEL_NAME);
   _audienceChannel.onmessage = (e) => callback(e.data);
+}
+
+export function requestState() {
+  if (_audienceChannel) {
+    _audienceChannel.postMessage({ type: 'REQUEST_STATE' });
+  }
 }
 
 // ─── Inter-Tab Sync (operator ↔ registrar) ──────────────────────
@@ -99,7 +112,7 @@ export function onSyncMessage(callback) {
 // ─── Cleanup ────────────────────────────────────────────────────
 
 export function close() {
-  if (_operatorChannel) { _operatorChannel.close(); _operatorChannel = null; }
+  if (_operatorChannel) { _operatorChannel.close(); _operatorChannel = null; _lastMessage = null; }
   if (_audienceChannel) { _audienceChannel.close(); _audienceChannel = null; }
   if (_syncChannel) { _syncChannel.close(); _syncChannel = null; }
 }

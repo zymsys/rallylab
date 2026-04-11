@@ -3,7 +3,7 @@
  * Stateless: renders whatever the operator sends.
  */
 
-import { onMessage } from '../broadcast.js';
+import { onMessage, requestState } from '../broadcast.js';
 import {
   renderWelcome, renderStaging, renderResults,
   renderLeaderboard, renderSectionComplete,
@@ -39,3 +39,6 @@ onMessage((msg) => {
       break;
   }
 });
+
+// Ask the operator for its current display state (handles late join / refresh)
+requestState();
