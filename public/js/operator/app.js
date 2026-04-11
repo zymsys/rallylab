@@ -87,6 +87,22 @@ let _liveSection = null;  // { sectionId, schedule, stagingHeat }
 let _raceAbort = null;     // AbortController for current race loop
 let _rotationResolver = null; // Resolver for rotation decision prompt
 
+// ─── Track Phase ─────────────────────────────────────────────────
+// Tracks what the race loop is currently waiting on, so the operator
+// can see at a glance what the system expects to happen next.
+
+const TRACK_PHASE_LOG_MAX = 20;
+let _trackPhase = 'idle';      // current phase label
+let _trackPhaseLog = [];       // [{ phase, detail, time }] most recent last
+
+function setTrackPhase(phase, detail) {
+  _trackPhase = phase;
+  _trackPhaseLog.push({ phase, detail: detail || null, time: Date.now() });
+  if (_trackPhaseLog.length > TRACK_PHASE_LOG_MAX) {
+    _trackPhaseLog = _trackPhaseLog.slice(-TRACK_PHASE_LOG_MAX);
+  }
+}
+
 // Test bridge — exposes internal state for E2E assertions
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, '__rallylab', {
@@ -197,7 +213,9 @@ function renderScreen(screenName, params) {
     isUSBBackupSupported,
     addRotation,
     completeSection,
-    renderCurrentScreen
+    renderCurrentScreen,
+    getTrackPhase: () => _trackPhase,
+    getTrackPhaseLog: () => _trackPhaseLog
   };
 
   const result = renderFn(container, params, ctx);
@@ -512,6 +530,7 @@ async function startSection(sectionId, availableLanes) {
   const schedule = generateSchedule({ participants, available_lanes: availableLanes });
 
   _liveSection = { sectionId, startNumber, schedule };
+  setTrackPhase('idle', 'Section started');
 
   // Ensure background sync is running (may already be started at init)
   beginSync();
@@ -544,6 +563,7 @@ async function resumeSection(sectionId) {
   }
 
   _liveSection = { sectionId, startNumber, schedule, stagingHeat: null };
+  setTrackPhase('idle', 'Resuming');
 
   // Re-render so the resume button is replaced with heat controls
   renderCurrentScreen();
@@ -587,6 +607,7 @@ async function runRaceLoop(sectionId) {
 
       // Set transient staging state (not persisted)
       _liveSection.stagingHeat = heat;
+      setTrackPhase('staging', `Heat ${heat.heat_number}`);
 
       // Render staging + broadcast
       renderCurrentScreen();
@@ -595,6 +616,8 @@ async function runRaceLoop(sectionId) {
         nextHeat ? { heat_number: nextHeat.heat_number, lanes: nextHeat.lanes } : null);
 
       // Wait for race (fake track: blocks on gate click; manual: blocks on button)
+      setTrackPhase('waiting-for-race', `Heat ${heat.heat_number}`);
+      renderCurrentScreen();
       const times_ms = await waitForRace(heat.lanes, signal);
 
       // Emit RaceCompleted with lane assignments
@@ -610,6 +633,7 @@ async function runRaceLoop(sectionId) {
 
       // Clear staging state after result is recorded
       _liveSection.stagingHeat = null;
+      setTrackPhase('result', `Heat ${heat.heat_number}`);
 
       // Render results + broadcast
       renderCurrentScreen();
@@ -621,11 +645,14 @@ async function runRaceLoop(sectionId) {
 
       // If more heats, wait for gate (fake track: blocks on reset; manual: blocks on button)
       if (heatIdx < schedule.heats.length) {
+        setTrackPhase('waiting-for-gate', `Heat ${heat.heat_number}`);
+        renderCurrentScreen();
         await waitForGate(signal);
       }
     }
 
     // All heats done — ask operator: complete or add rotation?
+    setTrackPhase('rotation-decision', 'All heats complete');
     _liveSection.awaitingRotationDecision = true;
     renderCurrentScreen();
 
@@ -639,6 +666,7 @@ async function runRaceLoop(sectionId) {
     }
 
     // Complete the section
+    setTrackPhase('idle', 'Section completed');
     await appendAndRebuild({
       type: 'SectionCompleted',
       section_id: sectionId,
@@ -651,6 +679,7 @@ async function runRaceLoop(sectionId) {
   } catch (err) {
     if (err.name === 'AbortError') {
       // Race loop cancelled (rerun, manual intervention)
+      setTrackPhase('idle', 'Race loop cancelled');
       return;
     }
     console.error('Race loop error:', err);

@@ -453,6 +453,23 @@ export function renderLiveConsole(container, params, ctx) {
   const trackBadgeLabel = trackMode === 'serial' ? 'USB Track' : trackMode === 'wifi' ? 'WiFi Track' : trackMode === 'fake' ? 'Fake Track' : 'Manual';
   const trackBadgeClass = trackMode === 'manual' ? 'status-idle' : 'status-active';
 
+  // Track phase — what the race loop is blocking on right now
+  const trackPhase = ctx.getTrackPhase();
+  const phaseLabels = {
+    'idle':              'Idle',
+    'staging':           'Cars staging',
+    'waiting-for-race':  'Waiting for race',
+    'result':            'Result recorded',
+    'waiting-for-gate':  'Waiting for gate',
+    'rotation-decision': 'Rotation complete',
+  };
+  const phaseLabel = phaseLabels[trackPhase] || trackPhase;
+  const phaseClass = trackPhase === 'waiting-for-race' ? 'phase-waiting'
+    : trackPhase === 'waiting-for-gate' ? 'phase-waiting'
+    : trackPhase === 'result' ? 'phase-result'
+    : trackPhase === 'staging' ? 'phase-staging'
+    : 'phase-idle';
+
   const sectionTitle = currentStart && sec.next_start_number > 2
     ? `${sec.section_name} — Rally ${currentStart.start_number}`
     : sec.section_name;
@@ -462,10 +479,40 @@ export function renderLiveConsole(container, params, ctx) {
       <h2 class="screen-title">${esc(sectionTitle)}</h2>
       <span class="status-badge ${trackBadgeClass} track-badge-btn" id="console-track-badge">${trackBadgeLabel}</span>
       <span class="console-state-label">${stateLabel}</span>
+      <span class="track-phase-badge ${phaseClass}" id="track-phase-toggle">${phaseLabel}</span>
     </div>
     <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'} &middot; Lanes: ${lanesStr}</p>
   `;
   header.querySelector('#console-track-badge').onclick = () => showTrackManagerDialog(ctx);
+
+  // Track phase log (collapsible)
+  const phaseLog = ctx.getTrackPhaseLog();
+  if (phaseLog.length > 0) {
+    const logWrap = document.createElement('div');
+    logWrap.className = 'track-phase-log';
+    logWrap.hidden = true;
+    logWrap.id = 'track-phase-log';
+
+    const list = document.createElement('ol');
+    list.className = 'track-phase-log-list';
+    const entries = phaseLog.slice().reverse();
+    for (const entry of entries) {
+      const li = document.createElement('li');
+      const d = new Date(entry.time);
+      const ts = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const label = phaseLabels[entry.phase] || entry.phase;
+      li.innerHTML = `<span class="phase-log-time">${ts}</span> <span class="phase-log-label">${esc(label)}</span>${entry.detail ? ` <span class="phase-log-detail">${esc(entry.detail)}</span>` : ''}`;
+      list.appendChild(li);
+    }
+    logWrap.appendChild(list);
+    header.appendChild(logWrap);
+
+    header.querySelector('#track-phase-toggle').onclick = () => {
+      logWrap.hidden = !logWrap.hidden;
+    };
+    header.querySelector('#track-phase-toggle').style.cursor = 'pointer';
+  }
+
   container.appendChild(header);
 
   // Resume Racing prompt
@@ -644,9 +691,13 @@ export function renderLiveConsole(container, params, ctx) {
   }
 
   // ─── Heat History Log ───────────────────────────────────────
-  // Show all past results (excluding current heat) in reverse order
+  // Show all past results (excluding current heat) in reverse order.
+  // When awaiting rotation decision, include all heats — the current heat's
+  // controls are hidden by the rotation prompt, so the history is the only
+  // place to access re-run / correct-lanes for the last heat.
+  const excludeHeat = awaitingRotationEarly ? null : currentHeat;
   const pastResults = Object.values(startResults)
-    .filter(r => r.heat_number !== currentHeat)
+    .filter(r => r.heat_number !== excludeHeat)
     .sort((a, b) => b.heat_number - a.heat_number);
 
   if (pastResults.length > 0) {
