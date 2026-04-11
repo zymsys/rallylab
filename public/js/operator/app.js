@@ -165,6 +165,7 @@ function renderScreen(screenName, params) {
     startSection,
     resumeSection,
     declareRerun,
+    declareDnfRerun,
     endSectionEarly,
     removeCar,
     changeLanes,
@@ -784,6 +785,64 @@ async function declareRerun(sectionId, heatNumber) {
 
   // Restart race loop from the rerun heat
   runRaceLoop(sectionId);
+}
+
+// ─── DNF Re-Run ─────────────────────────────────────────────────
+
+async function declareDnfRerun(sectionId, heatNumber) {
+  if (_raceAbort) _raceAbort.abort();
+
+  const sec = _state.race_day.sections[sectionId];
+  const start = getStart(sec, _liveSection.startNumber) || getActiveStart(sec);
+  if (!start) return;
+
+  const result = start.results[heatNumber];
+  if (!result || result.type !== 'RaceCompleted') return;
+
+  const dnfLanes = (result.lanes || []).filter(l => result.times_ms[String(l.lane)] == null);
+  if (dnfLanes.length === 0) return;
+
+  // Stage re-run with only DNF lanes
+  _liveSection.stagingHeat = { heat_number: heatNumber, lanes: dnfLanes };
+  renderCurrentScreen();
+  sendStaging(sec.section_name, heatNumber, dnfLanes, null);
+
+  _raceAbort = new AbortController();
+  const signal = _raceAbort.signal;
+
+  try {
+    const times_ms = await waitForRace(dnfLanes, signal);
+
+    // Emit RaceCompleted — state manager merges with existing result
+    await appendAndRebuild({
+      type: 'RaceCompleted',
+      section_id: sectionId,
+      start_number: _liveSection.startNumber,
+      heat_number: heatNumber,
+      lanes: dnfLanes,
+      times_ms,
+      timestamp: Date.now()
+    });
+
+    _liveSection.stagingHeat = null;
+    renderCurrentScreen();
+
+    // Broadcast merged results
+    const heat = _liveSection.schedule.heats.find(h => h.heat_number === heatNumber);
+    const resultData = buildResultsForBroadcast(
+      _state.race_day.sections[sectionId],
+      heat || { heat_number: heatNumber },
+      _liveSection.startNumber
+    );
+    sendResults(sec.section_name, heatNumber, resultData);
+
+    // Resume race loop from next heat
+    runRaceLoop(sectionId);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    console.error('DNF re-run error:', err);
+    showToast('DNF re-run error: ' + err.message, 'error');
+  }
 }
 
 // ─── Remove Car ──────────────────────────────────────────────────

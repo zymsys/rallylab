@@ -552,7 +552,7 @@ export function renderLiveConsole(container, params, ctx) {
         let timeStr = '';
         if (result && result.type === 'RaceCompleted' && result.times_ms) {
           const t = result.times_ms[String(lane.lane)];
-          timeStr = `<td>${t != null ? formatTime(t) : '—'}</td>`;
+          timeStr = `<td>${t != null ? formatTime(t) : 'DNF'}</td>`;
         }
         tableHtml += `
           <tr>
@@ -714,7 +714,7 @@ export function renderLiveConsole(container, params, ctx) {
         }
         if (result.type === 'RaceCompleted') {
           const t = result.times_ms[String(lane.lane)];
-          tHtml += `<td>${t != null ? formatTime(t) : '—'}</td>`;
+          tHtml += `<td>${t != null ? formatTime(t) : 'DNF'}</td>`;
         }
         if (result.type === 'ResultManuallyEntered') {
           const r = result.rankings.find(r => r.car_number === lane.car_number);
@@ -725,12 +725,46 @@ export function renderLiveConsole(container, params, ctx) {
       tHtml += '</tbody></table></div>';
       body.innerHTML = tHtml;
 
+      const btnRow = document.createElement('div');
+      btnRow.style.marginTop = '0.5rem';
+      btnRow.style.display = 'flex';
+      btnRow.style.gap = '0.5rem';
+      btnRow.style.flexWrap = 'wrap';
+
       const correctBtn = document.createElement('button');
       correctBtn.className = 'btn btn-sm btn-secondary';
-      correctBtn.style.marginTop = '0.5rem';
       correctBtn.textContent = 'Correct Lanes';
       correctBtn.onclick = () => showCorrectLanesDialog(sectionId, hn, effectiveLanes, ctx);
-      body.appendChild(correctBtn);
+      btnRow.appendChild(correctBtn);
+
+      const rerunHistBtn = document.createElement('button');
+      rerunHistBtn.className = 'btn btn-sm btn-secondary';
+      rerunHistBtn.textContent = 'Re-Run Heat';
+      rerunHistBtn.onclick = () => {
+        if (confirm(`Declare a re-run for Heat ${hn}? All results for this heat will be discarded.`)) {
+          ctx.declareRerun(sectionId, hn);
+        }
+      };
+      btnRow.appendChild(rerunHistBtn);
+
+      if (result.type === 'RaceCompleted' && result.times_ms) {
+        const histDnfLanes = effectiveLanes.filter(l => result.times_ms[String(l.lane)] == null);
+        if (histDnfLanes.length > 0) {
+          const histDnfNames = histDnfLanes.map(l => l.name).join(', ');
+          const dnfHistBtn = document.createElement('button');
+          dnfHistBtn.className = 'btn btn-sm btn-primary';
+          dnfHistBtn.textContent = 'Re-Run DNF';
+          dnfHistBtn.title = histDnfNames;
+          dnfHistBtn.onclick = () => {
+            if (confirm(`Re-run DNF car(s): ${histDnfNames}?\nOther results will be kept.`)) {
+              ctx.declareDnfRerun(sectionId, hn);
+            }
+          };
+          btnRow.appendChild(dnfHistBtn);
+        }
+      }
+
+      body.appendChild(btnRow);
 
       details.appendChild(body);
       historySection.appendChild(details);
@@ -834,6 +868,27 @@ export function renderLiveConsole(container, params, ctx) {
       }
     };
     controls.appendChild(rerunBtn);
+  }
+
+  // Re-Run DNF button — only when result has lanes with missing times
+  if (currentHeat > 0 && isResults) {
+    const lastResult = startResults[currentHeat];
+    if (lastResult?.type === 'RaceCompleted' && lastResult.times_ms) {
+      const dnfLanes = (lastResult.lanes || []).filter(l => lastResult.times_ms[String(l.lane)] == null);
+      if (dnfLanes.length > 0) {
+        const dnfNames = dnfLanes.map(l => l.name).join(', ');
+        const dnfBtn = document.createElement('button');
+        dnfBtn.className = 'btn btn-primary';
+        dnfBtn.textContent = 'Re-Run DNF';
+        dnfBtn.title = dnfNames;
+        dnfBtn.onclick = () => {
+          if (confirm(`Re-run DNF car(s): ${dnfNames}?\nOther results will be kept.`)) {
+            ctx.declareDnfRerun(sectionId, currentHeat);
+          }
+        };
+        controls.appendChild(dnfBtn);
+      }
+    }
   }
 
   // Correct Lanes button

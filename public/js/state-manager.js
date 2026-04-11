@@ -327,6 +327,15 @@ export function applyEvent(state, event) {
       const sn = payload.start_number || activeStartNumber(sec);
       const start = sec.starts[sn];
       if (!start) return state;
+      // If a result already exists for this heat (DNF re-run), merge times
+      const existing = start.results[payload.heat_number];
+      const isPartialMerge = existing && existing.type === 'RaceCompleted';
+      const mergedTimes = isPartialMerge
+        ? { ...existing.times_ms, ...payload.times_ms }
+        : payload.times_ms;
+      const mergedLanes = isPartialMerge
+        ? existing.lanes
+        : (payload.lanes || []);
       return {
         ...state,
         race_day: {
@@ -344,8 +353,8 @@ export function applyEvent(state, event) {
                     [payload.heat_number]: {
                       type: 'RaceCompleted',
                       heat_number: payload.heat_number,
-                      lanes: payload.lanes || [],
-                      times_ms: payload.times_ms,
+                      lanes: mergedLanes,
+                      times_ms: mergedTimes,
                       timestamp: payload.timestamp
                     }
                   }

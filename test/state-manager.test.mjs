@@ -441,6 +441,89 @@ describe('SectionCompleted', () => {
   });
 });
 
+describe('RaceCompleted', () => {
+  const setup = () => [
+    { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+    { type: 'SectionStarted', section_id: 's1' }
+  ];
+
+  it('stores partial times (DNF lane missing)', () => {
+    const s = buildState([
+      ...setup(),
+      {
+        type: 'RaceCompleted', section_id: 's1', heat_number: 1,
+        lanes: [
+          { lane: 1, car_number: 101, name: 'Alice' },
+          { lane: 2, car_number: 102, name: 'Bob' }
+        ],
+        times_ms: { '1': 2500 },  // lane 2 DNF
+        timestamp: 1000
+      }
+    ]);
+    const result = s.race_day.sections.s1.starts[1].results[1];
+    assert.strictEqual(result.times_ms['1'], 2500);
+    assert.strictEqual(result.times_ms['2'], undefined);
+    assert.strictEqual(result.lanes.length, 2);
+  });
+
+  it('merges times on second RaceCompleted for same heat (DNF re-run)', () => {
+    const s = buildState([
+      ...setup(),
+      {
+        type: 'RaceCompleted', section_id: 's1', heat_number: 1,
+        lanes: [
+          { lane: 1, car_number: 101, name: 'Alice' },
+          { lane: 2, car_number: 102, name: 'Bob' }
+        ],
+        times_ms: { '1': 2500 },  // lane 2 DNF
+        timestamp: 1000
+      },
+      {
+        type: 'RaceCompleted', section_id: 's1', heat_number: 1,
+        lanes: [{ lane: 2, car_number: 102, name: 'Bob' }],
+        times_ms: { '2': 2800 },  // DNF re-run
+        timestamp: 2000
+      }
+    ]);
+    const result = s.race_day.sections.s1.starts[1].results[1];
+    assert.strictEqual(result.times_ms['1'], 2500);  // original preserved
+    assert.strictEqual(result.times_ms['2'], 2800);  // re-run filled in
+    assert.strictEqual(result.lanes.length, 2);       // full lane list kept
+    assert.strictEqual(result.timestamp, 2000);       // updated timestamp
+  });
+
+  it('replaces after RerunDeclared (full re-run, no merge)', () => {
+    const s = buildState([
+      ...setup(),
+      {
+        type: 'RaceCompleted', section_id: 's1', heat_number: 1,
+        lanes: [
+          { lane: 1, car_number: 101, name: 'Alice' },
+          { lane: 2, car_number: 102, name: 'Bob' }
+        ],
+        times_ms: { '1': 2500, '2': 2800 },
+        timestamp: 1000
+      },
+      {
+        type: 'RerunDeclared', section_id: 's1', heat_number: 1,
+        timestamp: 1500
+      },
+      {
+        type: 'RaceCompleted', section_id: 's1', heat_number: 1,
+        lanes: [
+          { lane: 1, car_number: 101, name: 'Alice' },
+          { lane: 2, car_number: 102, name: 'Bob' }
+        ],
+        times_ms: { '1': 2400, '2': 2700 },
+        timestamp: 2000
+      }
+    ]);
+    const result = s.race_day.sections.s1.starts[1].results[1];
+    assert.strictEqual(result.times_ms['1'], 2400);  // new time, not merged
+    assert.strictEqual(result.times_ms['2'], 2700);
+  });
+});
+
 describe('rebuildState', () => {
   it('replays full event stream', () => {
     const events = [

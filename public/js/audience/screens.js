@@ -93,7 +93,7 @@ export function renderResults(container, sectionName, heatNumber, results) {
         <td class="audience-place">${place}</td>
         <td class="audience-car-number">#${r.car_number}</td>
         <td class="audience-name">${esc(r.name)}</td>
-        <td class="audience-time">${r.time_ms ? formatTime(r.time_ms) : '—'}</td>
+        <td class="audience-time">${r.time_ms ? formatTime(r.time_ms) : 'DNF'}</td>
       </tr>`;
   }
 
