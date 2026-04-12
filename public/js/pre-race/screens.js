@@ -14,7 +14,8 @@ import {
   showInviteRegistrarDialog,
   showInviteOperatorDialog,
   showUploadRosterDialog,
-  showAddParticipantDialog
+  showAddParticipantDialog,
+  showBulkImportDialog
 } from './dialogs.js';
 import { showToast, navigate } from './app.js';
 import { loadDemoData } from './demo-data.js';
@@ -222,6 +223,16 @@ export async function renderRallyHome(container, params) {
       }
     };
     actions.appendChild(exportBtn);
+  }
+
+  if (_isOrganizer) {
+    const importBtn = document.createElement('button');
+    importBtn.className = 'btn btn-secondary';
+    importBtn.textContent = 'Import Roster';
+    importBtn.onclick = () => {
+      showBulkImportDialog(rallyId, state, () => renderRallyHome(container, params));
+    };
+    actions.appendChild(importBtn);
   }
 
   if (_isOrganizer) {

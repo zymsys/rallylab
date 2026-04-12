@@ -4,7 +4,7 @@
 
 import { appendEvent, loadRallyState } from './commands.js';
 import { getUser } from '../supabase.js';
-import { parseRosterFile } from './roster-import.js';
+import { parseRosterFile, parseBulkRosterFile } from './roster-import.js';
 import { showToast } from './app.js';
 
 const backdrop = () => document.getElementById('dialog-backdrop');
@@ -701,6 +701,301 @@ export function showAddParticipantDialog(rallyId, sectionId, groupId, section, o
       btn.textContent = 'Add Participant';
     }
   };
+}
+
+// ─── 9. Bulk Import Roster ────────────────────────────────────────
+
+export function showBulkImportDialog(rallyId, state, onComplete) {
+  let parsedRows = [];
+
+  function renderUploadPhase() {
+    openDialog(`
+      <div class="dialog-header">
+        <h2>Bulk Import Roster</h2>
+        <button class="dialog-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <div class="upload-area" id="dlg-upload-area">
+          <input type="file" id="dlg-file-input" accept=".csv,.xlsx,.xls">
+          <p>Drop a file here or <strong>click to browse</strong></p>
+          <p class="form-hint" style="margin-top:0.5rem">CSV or Excel (.xlsx, .xls)</p>
+        </div>
+        <p class="form-hint" style="margin-top:0.75rem">
+          Include <strong>Section</strong> and <strong>Name</strong> columns.
+          A <strong>Group</strong> column is optional.
+        </p>
+        <div id="dlg-bulk-error" class="form-error" style="margin-top:0.5rem"></div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" data-action="cancel">Cancel</button>
+        <button class="btn btn-primary" data-action="next" disabled>Next</button>
+      </div>
+    `);
+
+    const d = dialogEl();
+    const area = d.querySelector('#dlg-upload-area');
+    const fileInput = d.querySelector('#dlg-file-input');
+    const errorEl = d.querySelector('#dlg-bulk-error');
+    const nextBtn = d.querySelector('[data-action="next"]');
+
+    d.querySelector('.dialog-close').onclick = closeDialog;
+    d.querySelector('[data-action="cancel"]').onclick = closeDialog;
+
+    area.onclick = () => fileInput.click();
+    area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', (e) => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    async function handleFile(file) {
+      errorEl.textContent = '';
+      nextBtn.disabled = true;
+      parsedRows = [];
+
+      try {
+        parsedRows = await parseBulkRosterFile(file);
+        if (parsedRows.length === 0) {
+          errorEl.textContent = 'No participant rows found with a Section value.';
+          return;
+        }
+      } catch (e) {
+        errorEl.textContent = e.message;
+        return;
+      }
+
+      area.innerHTML = `<p><strong>${file.name}</strong> — ${parsedRows.length} participants found</p>`;
+      nextBtn.disabled = false;
+    }
+
+    nextBtn.onclick = () => renderPreviewPhase();
+  }
+
+  function renderPreviewPhase() {
+    // Build section → group → names structure (preserving file order)
+    const sectionOrder = [];
+    const sectionMap = new Map(); // sectionName → Map(groupName|null → [name])
+
+    for (const row of parsedRows) {
+      if (!sectionMap.has(row.section)) {
+        sectionOrder.push(row.section);
+        sectionMap.set(row.section, new Map());
+      }
+      const groups = sectionMap.get(row.section);
+      const key = row.group; // null for ungrouped
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row.name);
+    }
+
+    // Build lookup maps for existing sections/groups
+    const existingSections = new Map(
+      Object.values(state.sections).map(s => [s.section_name.toLowerCase().trim(), s])
+    );
+    const existingGroups = new Map(
+      Object.values(state.groups).map(g => [g.group_name.toLowerCase().trim(), g])
+    );
+
+    const hasGroups = parsedRows.some(r => r.group !== null);
+    const uniqueGroups = hasGroups
+      ? [...new Set(parsedRows.filter(r => r.group).map(r => r.group))]
+      : [];
+
+    // Check if any existing section has participants that would be replaced
+    const sectionsWithExisting = sectionOrder.filter(name => {
+      const existing = existingSections.get(name.toLowerCase().trim());
+      return existing && existing.participants.length > 0;
+    });
+    const needsReimportConfirm = sectionsWithExisting.length > 0;
+
+    // Summary line
+    const totalParticipants = parsedRows.length;
+    let summaryParts = [`${totalParticipants} participant${totalParticipants !== 1 ? 's' : ''}`];
+    summaryParts.push(`${sectionOrder.length} section${sectionOrder.length !== 1 ? 's' : ''}`);
+    if (hasGroups) summaryParts.push(`${uniqueGroups.length} group${uniqueGroups.length !== 1 ? 's' : ''}`);
+    const summary = summaryParts.join(' across ');
+
+    // Build section preview HTML
+    let sectionsHtml = '';
+    for (const sectionName of sectionOrder) {
+      const isNew = !existingSections.has(sectionName.toLowerCase().trim());
+      const badge = isNew
+        ? '<span class="status-badge status-active">NEW</span>'
+        : '<span class="status-badge status-idle">EXISTS</span>';
+
+      const groups = sectionMap.get(sectionName);
+
+      let bodyHtml = '';
+      if (hasGroups) {
+        let rowsHtml = '';
+        for (const [groupName, names] of groups) {
+          if (groupName === null) {
+            rowsHtml += `<tr><td><em>Ungrouped</em></td><td>${names.length}</td><td></td></tr>`;
+          } else {
+            const gNew = !existingGroups.has(groupName.toLowerCase().trim());
+            const gBadge = gNew
+              ? '<span class="status-badge status-active">NEW</span>'
+              : '<span class="status-badge status-idle">EXISTS</span>';
+            rowsHtml += `<tr><td>${esc(groupName)}</td><td>${names.length}</td><td>${gBadge}</td></tr>`;
+          }
+        }
+        bodyHtml = `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Group</th><th>Participants</th><th>Status</th></tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>`;
+      } else {
+        const count = [...groups.values()].reduce((sum, arr) => sum + arr.length, 0);
+        bodyHtml = `<p class="form-hint" style="margin-left:0.5rem">${count} participants</p>`;
+      }
+
+      sectionsHtml += `
+        <div style="margin-bottom:1rem">
+          <div class="toolbar" style="margin-bottom:0.25rem">
+            <h3 class="area-heading">${esc(sectionName)}</h3>
+            ${badge}
+          </div>
+          ${bodyHtml}
+        </div>`;
+    }
+
+    // Reimport warning
+    let reimportHtml = '';
+    if (needsReimportConfirm) {
+      const names = sectionsWithExisting.map(n => `"${esc(n)}"`).join(', ');
+      reimportHtml = `
+        <div class="reimport-warning" style="margin-top:0.75rem">
+          <p class="form-hint" style="color:var(--color-warning)">
+            Existing participants in ${names} will be replaced and car numbers reassigned.
+          </p>
+          <label class="checkbox-item" style="margin-top:0.5rem">
+            <input type="checkbox" id="dlg-bulk-reimport-confirm">
+            I confirm that car numbers have not yet been distributed
+          </label>
+        </div>`;
+    }
+
+    openDialog(`
+      <div class="dialog-header">
+        <h2>Bulk Import Roster</h2>
+        <button class="dialog-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <p class="info-line" style="margin-bottom:1rem">${summary}</p>
+        ${sectionsHtml}
+        ${reimportHtml}
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" data-action="back">Back</button>
+        <button class="btn btn-primary" data-action="confirm" ${needsReimportConfirm ? 'disabled' : ''}>Confirm Import</button>
+      </div>
+    `);
+
+    const d = dialogEl();
+    d.querySelector('.dialog-close').onclick = closeDialog;
+    d.querySelector('[data-action="back"]').onclick = () => renderUploadPhase();
+
+    const confirmBtn = d.querySelector('[data-action="confirm"]');
+    const reimportCheckbox = d.querySelector('#dlg-bulk-reimport-confirm');
+
+    if (reimportCheckbox) {
+      reimportCheckbox.addEventListener('change', () => {
+        confirmBtn.disabled = !reimportCheckbox.checked;
+      });
+    }
+
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Importing...';
+
+      try {
+        const user = getUser();
+        const now = Date.now();
+
+        // Resolve section names → IDs (create new ones as needed)
+        const sectionIdMap = new Map(); // sectionName (lower) → section_id
+        for (const sectionName of sectionOrder) {
+          const key = sectionName.toLowerCase().trim();
+          const existing = existingSections.get(key);
+          if (existing) {
+            sectionIdMap.set(key, existing.section_id);
+          } else {
+            const section_id = crypto.randomUUID();
+            await appendEvent({
+              type: 'SectionCreated',
+              rally_id: rallyId,
+              section_id,
+              section_name: sectionName,
+              created_by: user.email,
+              timestamp: now
+            });
+            sectionIdMap.set(key, section_id);
+          }
+        }
+
+        // Resolve group names → IDs (create new ones as needed)
+        const groupIdMap = new Map(); // groupName (lower) → group_id
+        for (const groupName of uniqueGroups) {
+          const key = groupName.toLowerCase().trim();
+          const existing = existingGroups.get(key);
+          if (existing) {
+            groupIdMap.set(key, existing.group_id);
+          } else {
+            const group_id = crypto.randomUUID();
+            await appendEvent({
+              type: 'GroupCreated',
+              rally_id: rallyId,
+              group_id,
+              group_name: groupName,
+              created_by: user.email,
+              timestamp: now
+            });
+            groupIdMap.set(key, group_id);
+          }
+        }
+
+        // Emit RosterUpdated per section+group combo
+        for (const sectionName of sectionOrder) {
+          const sectionId = sectionIdMap.get(sectionName.toLowerCase().trim());
+          const groups = sectionMap.get(sectionName);
+
+          for (const [groupName, names] of groups) {
+            const groupId = groupName ? groupIdMap.get(groupName.toLowerCase().trim()) : null;
+            const participants = names.map(name => ({
+              participant_id: crypto.randomUUID(),
+              name
+            }));
+
+            await appendEvent({
+              type: 'RosterUpdated',
+              rally_id: rallyId,
+              section_id: sectionId,
+              group_id: groupId,
+              participants,
+              submitted_by: user.email,
+              timestamp: now
+            });
+          }
+        }
+
+        closeDialog();
+        showToast(`Imported ${totalParticipants} participants into ${sectionOrder.length} sections`, 'success');
+        if (onComplete) onComplete();
+      } catch (e) {
+        showToast(e.message, 'error');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Import';
+      }
+    };
+  }
+
+  renderUploadPhase();
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
