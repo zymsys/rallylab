@@ -30,37 +30,43 @@ The Create Rally dialog lets you set the rally name and date. After creation, yo
 
 ![Create Rally Dialog](images/pre-race-dlg-create-rally.png)
 
-## 2.6 Adding Sections
+## 2.6 Create from Existing Rally
+
+If you're running a similar event again, use "Create from Existing" to clone an existing rally's sections, groups, and full participant roster into a new rally. Select the source rally, give the new one a name and date, and all participants are copied with fresh car numbers.
+
+![Create from Existing Dialog](images/pre-race-dlg-create-from-existing.png)
+
+## 2.7 Adding Sections
 
 Add sections to organize your rally by age group or category. Common sections are Beaver Buggies, Kub Kars, and Scout Trucks.
 
 ![Add Section Dialog](images/pre-race-dlg-add-section.png)
 
-## 2.7 Adding Groups
+## 2.8 Adding Groups
 
 Groups represent Scout troops or packs (e.g., "1st Newmarket", "2nd Aurora"). Groups help organize participants and can be assigned to registrars for distributed check-in.
 
 ![Add Group Dialog](images/pre-race-dlg-add-group.png)
 
-## 2.8 Uploading a Roster
+## 2.9 Uploading a Roster
 
 Upload participants from a CSV or Excel spreadsheet. The system automatically detects column mappings for participant names and group assignments.
 
 ![Upload Roster Dialog](images/pre-race-dlg-upload-roster.png)
 
-## 2.9 Adding a Participant
+## 2.10 Adding a Participant
 
 Add individual participants manually. A car number is automatically assigned based on the next available number in the section.
 
 ![Add Participant Dialog](images/pre-race-dlg-add-participant.png)
 
-## 2.10 Inviting a Registrar
+## 2.11 Inviting a Registrar
 
 Invite a registrar by email to help manage check-in on race day. You can assign them to specific groups and sections, controlling what they can see and manage.
 
 ![Invite Registrar Dialog](images/pre-race-dlg-invite-registrar.png)
 
-## 2.11 Inviting an Operator
+## 2.12 Inviting an Operator
 
 Invite an additional operator by email to help run the race day console. Operators have full control over the race flow.
 

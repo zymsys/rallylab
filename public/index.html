@@ -361,9 +361,9 @@
 
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 1.25rem;
-      max-width: 960px;
+      max-width: 1100px;
       margin: 0 auto;
     }
 
@@ -680,6 +680,8 @@
     .features-grid .reveal:nth-child(4) { transition-delay: 0.24s; }
     .features-grid .reveal:nth-child(5) { transition-delay: 0.32s; }
     .features-grid .reveal:nth-child(6) { transition-delay: 0.4s; }
+    .features-grid .reveal:nth-child(7) { transition-delay: 0.48s; }
+    .features-grid .reveal:nth-child(8) { transition-delay: 0.56s; }
 
     /* ===== Responsive ===== */
     @media (max-width: 768px) {
@@ -741,7 +743,7 @@
       .step:not(:last-child)::after { display: none; }
     }
 
-    @media (min-width: 769px) and (max-width: 960px) {
+    @media (min-width: 769px) and (max-width: 1100px) {
       .features-grid {
         grid-template-columns: repeat(2, 1fr);
       }
@@ -814,7 +816,7 @@
       <div class="section-label">Features</div>
       <h2 class="section-title">Built for the chaos of race day</h2>
       <p class="section-desc">
-        Everything you need from the first sign-up to the final medal ceremony.
+        Everything you need from the first sign-up to the final medal ceremony &mdash; and the reports to hand out after.
       </p>
     </div>
     <div class="features-grid">
@@ -856,7 +858,7 @@
           <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
         </div>
         <h3>Handle the Unexpected</h3>
-        <p>Late arrivals, broken cars, dodgy lane sensors &mdash; RallyLab adapts. Re-run heats, swap lanes, add catch-up races.</p>
+        <p>Late arrivals, broken cars, DNFs &mdash; RallyLab adapts. Re-run individual lanes, end early, add extra rotations, or swap lanes mid-race.</p>
       </div>
 
       <div class="feature-card reveal">
@@ -864,7 +866,23 @@
           <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M12 5V3M10 1h4"/></svg>
         </div>
         <h3>Track Integration</h3>
-        <p>Connect a Raspberry Pi Pico W for automatic gate detection and finish timing. Or enter results by hand.</p>
+        <p>Connect a Raspberry Pi Pico W for automatic timing. Live sensor diagnostics, auto pin mapping, and WiFi or USB &mdash; or enter results by hand.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <h3>Reports &amp; Export</h3>
+        <p>Generate PDF reports for the whole rally, individual sections, or scout groups. Export detailed Excel workbooks with standings, heat results, and statistics.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 1 0 0 4h4v-4z"/></svg>
+        </div>
+        <h3>Car &amp; Lane Analytics</h3>
+        <p>Per-car statistics across every lane, lane deviation diagnostics to spot track issues, and live leaderboards updated after every heat.</p>
       </div>
 
     </div>

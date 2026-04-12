@@ -649,6 +649,9 @@ export function showTrackManagerDialog(ctx) {
   if (isSerial || isWifi) {
     footerHtml += '<button class="btn btn-secondary" data-action="disconnect">Disconnect</button>';
   }
+  if (isSerial) {
+    footerHtml += '<button class="btn btn-secondary" data-action="learn-pins">Learn Pins</button>';
+  }
   footerHtml += `<div style="flex:1"></div>`;
   footerHtml += '<button class="btn btn-primary" data-action="done">Done</button>';
 
@@ -661,9 +664,25 @@ export function showTrackManagerDialog(ctx) {
     <div class="dialog-footer">${footerHtml}</div>
   `);
 
+  // If the race loop is waiting on the serial port, pause it so dbg polling can run
+  const phase = ctx.getTrackPhase();
+  const needsPause = isSerial && (phase === 'waiting-for-race' || phase === 'waiting-for-gate');
+  if (needsPause) {
+    ctx.pauseRaceLoop();
+  }
+
   const d = dialogEl();
-  d.querySelector('.dialog-close').onclick = closeDialog;
-  d.querySelector('[data-action="done"]').onclick = closeDialog;
+
+  // When dialog closes, resume the race loop if we paused it
+  const closeAndResume = () => {
+    closeDialog();
+    if (needsPause && ctx.liveSection) {
+      ctx.resumeSection(ctx.liveSection.sectionId);
+    }
+  };
+
+  d.querySelector('.dialog-close').onclick = closeAndResume;
+  d.querySelector('[data-action="done"]').onclick = closeAndResume;
 
   // Disconnect
   const disconnBtn = d.querySelector('[data-action="disconnect"]');
@@ -674,6 +693,15 @@ export function showTrackManagerDialog(ctx) {
       closeDialog();
       ctx.showToast('Track disconnected', 'info');
       ctx.renderCurrentScreen();
+    };
+  }
+
+  // Learn Pins button
+  const learnBtn = d.querySelector('[data-action="learn-pins"]');
+  if (learnBtn) {
+    learnBtn.onclick = () => {
+      closeDialog();
+      showLearnModeDialog(ctx);
     };
   }
 

@@ -400,6 +400,7 @@
           <li><a href="#rally-home" class="toc-section-link">Rally Home</a></li>
           <li><a href="#section-detail" class="toc-section-link">Section Detail</a></li>
           <li><a href="#creating-rally" class="toc-section-link">Creating a Rally</a></li>
+          <li><a href="#create-from-existing" class="toc-section-link">Create from Existing</a></li>
           <li><a href="#adding-sections" class="toc-section-link">Adding Sections</a></li>
           <li><a href="#adding-groups" class="toc-section-link">Adding Groups</a></li>
           <li><a href="#uploading-roster" class="toc-section-link">Uploading a Roster</a></li>
@@ -423,6 +424,12 @@
           <li><a href="#remove-car" class="toc-section-link">Remove Car</a></li>
           <li><a href="#change-lanes" class="toc-section-link">Change Lanes</a></li>
           <li><a href="#section-complete" class="toc-section-link">Section Complete</a></li>
+          <li><a href="#car-statistics" class="toc-section-link">Car Statistics</a></li>
+          <li><a href="#lane-diagnostics" class="toc-section-link">Lane Diagnostics</a></li>
+          <li><a href="#multiple-rotations" class="toc-section-link">Multiple Rotations</a></li>
+          <li><a href="#end-section-early" class="toc-section-link">End Section Early</a></li>
+          <li><a href="#reports" class="toc-section-link">Reports</a></li>
+          <li><a href="#learn-pins" class="toc-section-link">Learn Pin Mapping</a></li>
         </ul>
       </div>
 
@@ -550,38 +557,44 @@
           <img src="images/pre-race-dlg-create-rally.png" alt="Create Rally Dialog" class="guide-img" loading="lazy">
         </div>
 
+        <div class="guide-section" id="create-from-existing">
+          <h3>2.6 Create from Existing Rally</h3>
+          <p>If you're running a similar event again, use &ldquo;Create from Existing&rdquo; to clone an existing rally's sections, groups, and full participant roster into a new rally. Select the source rally, give the new one a name and date, and all participants are copied with fresh car numbers.</p>
+          <img src="images/pre-race-dlg-create-from-existing.png" alt="Create from Existing Dialog" class="guide-img" loading="lazy">
+        </div>
+
         <div class="guide-section" id="adding-sections">
-          <h3>2.6 Adding Sections</h3>
+          <h3>2.7 Adding Sections</h3>
           <p>Add sections to organize your rally by age group or category. Common sections are Beaver Buggies, Kub Kars, and Scout Trucks.</p>
           <img src="images/pre-race-dlg-add-section.png" alt="Add Section Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="adding-groups">
-          <h3>2.7 Adding Groups</h3>
+          <h3>2.8 Adding Groups</h3>
           <p>Groups represent Scout troops or packs (e.g., "1st Newmarket", "2nd Aurora"). Groups help organize participants and can be assigned to registrars for distributed check-in.</p>
           <img src="images/pre-race-dlg-add-group.png" alt="Add Group Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="uploading-roster">
-          <h3>2.8 Uploading a Roster</h3>
+          <h3>2.9 Uploading a Roster</h3>
           <p>Upload participants from a CSV or Excel spreadsheet. The system automatically detects column mappings for participant names and group assignments.</p>
           <img src="images/pre-race-dlg-upload-roster.png" alt="Upload Roster Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="adding-participant">
-          <h3>2.9 Adding a Participant</h3>
+          <h3>2.10 Adding a Participant</h3>
           <p>Add individual participants manually. A car number is automatically assigned based on the next available number in the section.</p>
           <img src="images/pre-race-dlg-add-participant.png" alt="Add Participant Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="inviting-registrar">
-          <h3>2.10 Inviting a Registrar</h3>
+          <h3>2.11 Inviting a Registrar</h3>
           <p>Invite a registrar by email to help manage check-in on race day. You can assign them to specific groups and sections, controlling what they can see and manage.</p>
           <img src="images/pre-race-dlg-invite-registrar.png" alt="Invite Registrar Dialog" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="inviting-operator">
-          <h3>2.11 Inviting an Operator</h3>
+          <h3>2.12 Inviting an Operator</h3>
           <p>Invite an additional operator by email to help run the race day console. Operators have full control over the race flow.</p>
           <img src="images/pre-race-dlg-invite-operator.png" alt="Invite Operator Dialog" class="guide-img" loading="lazy">
         </div>
@@ -617,6 +630,8 @@
             <li><strong>Manual</strong> &mdash; No track controller. The operator clicks &ldquo;Run Heat&rdquo; and &ldquo;Next Heat&rdquo; buttons to advance through the race, and uses Manual Rank to enter results by hand.</li>
           </ul>
           <p>When a track is connected (WiFi, USB, or Fake), gate release and finish times are detected automatically. The connection status is shown as a badge on both the Rally Home and Live Console screens.</p>
+          <p>When connected via USB or WiFi, the Track Manager also shows a <strong>Sensor Status</strong> panel with live readings from the gate switch and each lane sensor. This helps diagnose hardware issues &mdash; you can see whether the gate registers as open or closed, and whether individual lane sensors are triggering correctly.</p>
+          <img src="images/operator-sensor-status.png" alt="Sensor Status" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="check-in">
@@ -634,12 +649,16 @@
         <div class="guide-section" id="console-staging">
           <h3>3.6 Live Console &mdash; Staging</h3>
           <p>During staging, the live console shows the current heat assignment with lane numbers, car numbers, and participant names. With a connected track, the system automatically detects the start gate release. In manual mode, click &ldquo;Run Heat&rdquo; to advance.</p>
+          <p>The header shows the connection mode (USB Track, WiFi Track, Fake Track, or Manual) and a <strong>track phase badge</strong> indicating the current state &mdash; Staging, Waiting for gate, Waiting for race, or Result. Click the phase badge to expand a timestamped log of phase transitions, which is useful for diagnosing timing issues.</p>
           <img src="images/operator-live-console-staging.png" alt="Live Console — Staging" class="guide-img" loading="lazy">
         </div>
 
         <div class="guide-section" id="console-results">
           <h3>3.7 Live Console &mdash; Results</h3>
-          <p>After a heat completes, the results panel shows finish times for each lane. The standings panel on the right updates with cumulative average times. Click "Next Heat" to advance to the next heat, or "Re-Run" if there was an issue.</p>
+          <p>After a heat completes, the results panel shows finish times for each lane. If a car did not finish, its time shows as <strong>DNF</strong> (Did Not Finish). The standings panel on the right updates with cumulative average times. Click &ldquo;Next Heat&rdquo; to advance to the next heat, or &ldquo;Re-Run&rdquo; if there was an issue.</p>
+          <p>If a heat has DNF results, a <strong>Re-Run DNF</strong> button appears, allowing you to re-run only the cars that didn't finish while keeping the successful results. This is also available in the heat history for past heats.</p>
+          <img src="images/operator-dnf-result.png" alt="DNF Result" class="guide-img" loading="lazy">
+          <img src="images/operator-dnf-rerun.png" alt="Re-Run DNF in Heat History" class="guide-img" loading="lazy">
           <img src="images/operator-live-console-results.png" alt="Live Console — Results" class="guide-img" loading="lazy">
         </div>
 
@@ -663,8 +682,71 @@
 
         <div class="guide-section" id="section-complete">
           <h3>3.11 Section Complete / Final Results</h3>
-          <p>When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count. Results can be exported to CSV or sent to the audience display for a dramatic progressive reveal.</p>
+          <p>When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count.</p>
+          <p>From this screen you can:</p>
+          <ul>
+            <li><strong>Export Excel</strong> &mdash; Download a multi-sheet workbook with standings, heat-by-heat results, car statistics, and lane statistics</li>
+            <li><strong>Export PDF</strong> &mdash; Generate a detailed PDF report with standings, per-heat results, and car/lane statistics</li>
+            <li><strong>Show on Audience Display</strong> &mdash; Send results to the audience display for a dramatic progressive reveal, starting from last place and building up to first</li>
+          </ul>
+          <p>If a section has been run multiple times (multiple rotations that were completed separately), a <strong>start picker</strong> appears at the top to switch between results for each run.</p>
           <img src="images/operator-section-complete.png" alt="Section Complete" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="car-statistics">
+          <h3>3.12 Car Statistics</h3>
+          <p>Click <strong>Car Stats</strong> (available in the Live Console after at least one heat has results) to open a detailed per-car breakdown. The table shows each car's time on every lane, plus their average, best time, and total heats run. This helps identify cars that are consistently fast or slow on specific lanes.</p>
+          <img src="images/operator-dlg-car-stats.png" alt="Car Statistics Dialog" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="lane-diagnostics">
+          <h3>3.13 Lane Diagnostics</h3>
+          <p>The <strong>Lane Statistics</strong> panel appears automatically below the standings in the Live Console after results are recorded. It shows the average time, race count, and deviation from the overall average for each lane. Lanes with a deviation greater than 20ms are highlighted as outliers &mdash; this can indicate a lane that is consistently faster or slower, which may point to a track alignment issue.</p>
+        </div>
+
+        <div class="guide-section" id="multiple-rotations">
+          <h3>3.14 Multiple Rotations</h3>
+          <p>After all heats in a rotation are complete, a <strong>rotation decision</strong> prompt appears with two options:</p>
+          <ul>
+            <li><strong>Add Rotation</strong> &mdash; Schedule another full rotation of heats for the same participants. Useful when time allows for more racing to improve scoring accuracy.</li>
+            <li><strong>Complete Section</strong> &mdash; Finalize the section with the current results.</li>
+          </ul>
+          <img src="images/operator-rotation-decision.png" alt="Rotation Decision" class="guide-img" loading="lazy">
+        </div>
+
+        <div class="guide-section" id="end-section-early">
+          <h3>3.15 End Section Early</h3>
+          <p>If you're running short on time, click <strong>End Section Early</strong> (the red button in the Live Console) to stop racing and finalize standings based on heats completed so far. Cars that ran fewer heats than others are marked as incomplete in the final results. This button only appears after at least one heat has been completed.</p>
+        </div>
+
+        <div class="guide-section" id="reports">
+          <h3>3.16 Reports</h3>
+          <p>The operator can generate PDF reports from several places:</p>
+          <ul>
+            <li><strong>Rally Report</strong> (from Rally Home) &mdash; A multi-page PDF covering all sections, with standings, lane statistics, and summary stats for the entire event.</li>
+            <li><strong>Group Reports</strong> (from Rally Home) &mdash; Per-group PDFs showing where each group's participants placed and their heat-by-heat times. Useful for handing to scout leaders.</li>
+            <li><strong>Section Report</strong> (from Section Complete) &mdash; A detailed single-section PDF with standings, lane statistics, heat-by-heat results, and a car statistics matrix.</li>
+            <li><strong>Heat Report</strong> (from Heat History) &mdash; A quick single-page snapshot of one heat's results and current leaderboard.</li>
+          </ul>
+          <p>All reports are generated client-side using jsPDF &mdash; no server needed.</p>
+        </div>
+
+        <div class="guide-section" id="learn-pins">
+          <h3>3.17 Learn Pin Mapping</h3>
+          <p>When connecting a new Pico W track controller for the first time, use <strong>Learn Pins</strong> to teach RallyLab which GPIO pins are wired to the gate switch and each lane sensor. Open the Track Manager (click the track badge), then click <strong>Learn Pins</strong> in the footer.</p>
+          <p>The wizard walks you through each sensor one at a time:</p>
+          <ol>
+            <li><strong>Open the start gate</strong> &mdash; release the gate lever or press the gate button. The Pico detects which pin changed and records it.</li>
+          </ol>
+          <img src="images/operator-learn-pins-gate.png" alt="Learn Pins — Gate" class="guide-img" loading="lazy">
+          <ol start="2">
+            <li><strong>Trigger each lane sensor</strong> &mdash; push a car across each finish line in order. Each detected pin is added to the mapping.</li>
+          </ol>
+          <img src="images/operator-learn-pins-lane.png" alt="Learn Pins — Lane" class="guide-img" loading="lazy">
+          <ol start="3">
+            <li><strong>Save &amp; Restart</strong> &mdash; once all lanes are mapped, click Save to write the pin configuration to the Pico and restart the firmware.</li>
+          </ol>
+          <img src="images/operator-learn-pins-done.png" alt="Learn Pins — Complete" class="guide-img" loading="lazy">
         </div>
       </section>
 

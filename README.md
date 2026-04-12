@@ -2,6 +2,8 @@
 
 A pinewood derby race management system for Scouting. Event-sourced, offline-first, and runs entirely in the browser.
 
+**[rallylab.vicmetcalfe.com](https://rallylab.vicmetcalfe.com/)** — project site, user guide, and documentation.
+
 ## What It Does
 
 RallyLab handles the full lifecycle of a pinewood derby event:
@@ -23,11 +25,14 @@ RallyLab handles the full lifecycle of a pinewood derby event:
 
 | Page | Purpose |
 |------|---------|
-| `index.html` | Login and pre-race management (organizer) |
+| `index.html` | Landing page |
+| `registration.html` | Login and pre-race management (organizer) |
 | `operator.html` | Race day operations (operator) |
 | `registrar.html` | Race day check-in (registrar) |
 | `audience.html` | Live leaderboard display |
-| `fake-track.html` | Track simulator for development/demo |
+| `pico-debug.html` | Pico W serial terminal and file editor |
+| `event-inspector.html` | Domain event stream viewer |
+| `debug.html` | Multi-frame debug view with fake track |
 
 ### Module Structure
 
@@ -170,7 +175,9 @@ This copies all `.py` files to the Pico's flash root and resets it. The controll
 
 ### Configure Pin Mapping
 
-Edit `firmware/config.py` before uploading. Three presets are provided:
+The easiest way to configure pin mapping is **Learn Pins** in the operator UI: connect via USB, open the Track Manager, click **Learn Pins**, and trigger each sensor when prompted. The wizard writes the configuration directly to the Pico.
+
+Alternatively, edit `firmware/config.py` before uploading. Three presets are provided:
 
 | Preset | Use case |
 |--------|----------|

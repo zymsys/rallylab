@@ -17,7 +17,7 @@ import {
   connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
   sendSerialCommand, startLearnMode
 } from '../track-connection.js';
-import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage } from '../broadcast.js';
+import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
 import { startSync, stopSync, onSyncStatus, restoreFromSupabase } from '../sync-worker.js';
 import {
@@ -165,11 +165,19 @@ function renderScreen(screenName, params) {
   updateBreadcrumbs(screenName, params);
   updateLiveBar(screenName, params);
 
-  // Broadcast welcome to audience when rally data is available
+  // Broadcast state to audience display
   if (screenName === 'rally-home' && _state?.rally_name) {
     sendWelcome(_state.rally_name);
     // Restore any race-day events from cloud (runs in background)
     tryRestore(_state.rally_id);
+  } else if (screenName === 'live-console' && _liveSection?.stagingHeat) {
+    const sec = _state.race_day.sections[_liveSection.sectionId];
+    const heat = _liveSection.stagingHeat;
+    const schedule = _liveSection.schedule;
+    const heatIdx = schedule.heats.findIndex(h => h.heat_number === heat.heat_number);
+    const nextHeat = heatIdx >= 0 && heatIdx + 1 < schedule.heats.length ? schedule.heats[heatIdx + 1] : null;
+    sendStaging(sec.section_name, heat.heat_number, heat.lanes,
+      nextHeat ? { heat_number: nextHeat.heat_number, lanes: nextHeat.lanes } : null);
   }
 
   const ctx = {
@@ -215,7 +223,8 @@ function renderScreen(screenName, params) {
     completeSection,
     renderCurrentScreen,
     getTrackPhase: () => _trackPhase,
-    getTrackPhaseLog: () => _trackPhaseLog
+    getTrackPhaseLog: () => _trackPhaseLog,
+    pauseRaceLoop: () => { if (_raceAbort) _raceAbort.abort(); }
   };
 
   const result = renderFn(container, params, ctx);
@@ -1174,29 +1183,15 @@ function updateUserInfo() {
     ...(!realTrack ? [{ label: 'Fake Track', href: 'fake-track.html' }] : []),
     ...(realTrack ? [{ label: 'Pico Debug', href: 'pico-debug.html' }] : []),
     { label: 'Event Inspector', href: 'event-inspector.html' },
-    ...(isSerial ? [{ label: 'Learn Pins', action: 'learn-pins' }] : []),
   ];
 
-  for (const { label, href, action } of items) {
+  for (const { label, href } of items) {
     const a = document.createElement('a');
     a.className = 'view-menu-item';
     a.textContent = label;
-    if (href) {
-      a.href = href;
-      a.target = '_blank';
-      a.onclick = () => { menu.hidden = true; };
-    } else if (action === 'learn-pins') {
-      a.href = '#';
-      a.onclick = (e) => {
-        e.preventDefault();
-        menu.hidden = true;
-        import('./dialogs.js').then(m => m.showLearnModeDialog({
-          startLearnMode,
-          showToast,
-          renderCurrentScreen,
-        }));
-      };
-    }
+    a.href = href;
+    a.target = '_blank';
+    a.onclick = () => { menu.hidden = true; };
     menu.appendChild(a);
   }
 
@@ -1229,6 +1224,7 @@ function updateUserInfo() {
 // ─── Init ────────────────────────────────────────────────────────
 
 async function init() {
+  initOperatorChannel();
   await initAuth();
   updateUserInfo();
   initSyncIndicator();

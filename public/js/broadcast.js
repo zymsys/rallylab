@@ -26,6 +26,11 @@ function send(message) {
   getOperatorChannel().postMessage(message);
 }
 
+/** Eagerly create the operator channel so REQUEST_STATE is handled immediately. */
+export function initOperatorChannel() {
+  getOperatorChannel();
+}
+
 export function sendWelcome(rallyName) {
   send({ type: 'SHOW_WELCOME', rally_name: rallyName });
 }

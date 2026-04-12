@@ -11,8 +11,10 @@ import {
 } from './screens.js';
 
 const app = () => document.getElementById('app');
+let _hasReceived = false;
 
 onMessage((msg) => {
+  _hasReceived = true;
   const container = app();
 
   switch (msg.type) {
@@ -40,5 +42,8 @@ onMessage((msg) => {
   }
 });
 
-// Ask the operator for its current display state (handles late join / refresh)
+// Ask the operator for its current display state (handles late join / refresh).
+// Retry a few times in case the operator channel isn't ready yet.
 requestState();
+setTimeout(() => { if (!_hasReceived) requestState(); }, 1000);
+setTimeout(() => { if (!_hasReceived) requestState(); }, 3000);

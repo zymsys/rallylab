@@ -90,7 +90,17 @@ async function capturePreRace(browser) {
   await sleep(500);
   await capture(page, 'pre-race-rally-list');
 
-  // 3. Open Create Rally dialog (from rally list)
+  // 3. Open Create from Existing dialog (from rally list)
+  const createFromExistingBtn = page.locator('#rally-list-actions .btn-secondary', { hasText: 'Create from Existing' });
+  if (await createFromExistingBtn.count() > 0) {
+    await createFromExistingBtn.click();
+    await page.waitForSelector('#dlg-source-rally');
+    await capture(page, 'pre-race-dlg-create-from-existing');
+    await page.click('.dialog-close');
+    await sleep(200);
+  }
+
+  // 4. Open Create Rally dialog (from rally list)
   await page.click('#rally-list-actions .btn-primary');
   await page.waitForSelector('#dlg-rally-name');
   await capture(page, 'pre-race-dlg-create-rally');
@@ -279,13 +289,18 @@ async function captureOperator(browser) {
   }
 
   // 8. Open Remove Car dialog
-  const removeBtn = page.locator('text=Remove Car');
+  const removeBtn = page.locator('.console-controls .btn-danger', { hasText: 'Remove Car' });
   if (await removeBtn.count() > 0) {
     await removeBtn.click();
-    await page.waitForSelector('#dlg-remove-car');
-    await capture(page, 'operator-dlg-remove-car');
-    await page.click('.dialog-close');
-    await sleep(200);
+    try {
+      await page.waitForSelector('#dlg-remove-car', { timeout: 3000 });
+      await capture(page, 'operator-dlg-remove-car');
+      await page.click('.dialog-close');
+      await sleep(200);
+    } catch {
+      log('  (Remove Car dialog did not open — skipping)');
+      await clearToasts(page);
+    }
   }
 
   // 9. Open Change Lanes dialog
@@ -307,13 +322,35 @@ async function captureOperator(browser) {
     await capture(page, 'operator-live-console-results');
   }
 
-  // 11. Run through remaining heats to reach section complete
+  // 11. Open Car Stats dialog (available after results)
+  const carStatsBtn = page.locator('.console-controls .btn-secondary', { hasText: 'Car Stats' });
+  if (await carStatsBtn.count() > 0) {
+    await carStatsBtn.click();
+    await page.waitForSelector('.car-stats-body', { timeout: 5000 });
+    await sleep(300);
+    await capture(page, 'operator-dlg-car-stats');
+    await page.click('.dialog-close');
+    await sleep(200);
+  }
+
+  // 12. Run through remaining heats to reach section complete
   let safetyCounter = 0;
   while (safetyCounter < 50) {
     safetyCounter++;
 
     const isComplete = await page.evaluate(() => location.hash.includes('section-complete'));
     if (isComplete) break;
+
+    // Handle rotation decision prompt (appears after all heats in a rotation)
+    const rotationDecision = page.locator('.rotation-decision');
+    if (await rotationDecision.count() > 0) {
+      await rotationDecision.scrollIntoViewIfNeeded();
+      await sleep(200);
+      await capture(page, 'operator-rotation-decision');
+      await page.locator('.rotation-decision .btn-secondary', { hasText: 'Complete Section' }).click();
+      await sleep(500);
+      continue;
+    }
 
     const nextBtn = page.locator('.console-controls .btn-primary', { hasText: 'Next Heat' });
     if (await nextBtn.count() > 0) {
@@ -322,6 +359,7 @@ async function captureOperator(browser) {
       await page.waitForFunction(() => {
         const runBtn = document.querySelector('.console-controls .btn-primary');
         return (runBtn && runBtn.textContent.includes('Run Heat')) ||
+               document.querySelector('.rotation-decision') ||
                location.hash.includes('section-complete');
       }, { timeout: 10000 });
       continue;
@@ -334,6 +372,7 @@ async function captureOperator(browser) {
       await page.waitForFunction(() => {
         const nextBtn = document.querySelector('.console-controls .btn-primary');
         return (nextBtn && nextBtn.textContent.includes('Next Heat')) ||
+               document.querySelector('.rotation-decision') ||
                location.hash.includes('section-complete');
       }, { timeout: 10000 });
       continue;

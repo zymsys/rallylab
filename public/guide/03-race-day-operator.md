@@ -23,6 +23,10 @@ Click the track badge on the Rally Home or Live Console screen to open the Track
 
 When a track is connected (WiFi, USB, or Fake), gate release and finish times are detected automatically. The connection status is shown as a badge on both the Rally Home and Live Console screens.
 
+When connected via USB or WiFi, the Track Manager also shows a **Sensor Status** panel with live readings from the gate switch and each lane sensor. This helps diagnose hardware issues — you can see whether the gate registers as open or closed, and whether individual lane sensors are triggering correctly.
+
+![Sensor Status](images/operator-sensor-status.png)
+
 ## 3.4 Check-In
 
 The check-in screen shows all participants in a section with checkboxes to mark their arrival. Once at least 2 participants are checked in, the "Start This Section" button becomes available.
@@ -39,11 +43,19 @@ The Start Section dialog lets you choose which lanes to use. Uncheck any lanes t
 
 During staging, the live console shows the current heat assignment with lane numbers, car numbers, and participant names. With a connected track, the system automatically detects the start gate release. In manual mode, click "Run Heat" to advance.
 
+The header shows the connection mode (USB Track, WiFi Track, Fake Track, or Manual) and a **track phase badge** indicating the current state — Staging, Waiting for gate, Waiting for race, or Result. Click the phase badge to expand a timestamped log of phase transitions, which is useful for diagnosing timing issues.
+
 ![Live Console — Staging](images/operator-live-console-staging.png)
 
 ## 3.7 Live Console — Results
 
-After a heat completes, the results panel shows finish times for each lane. The standings panel on the right updates with cumulative average times. Click "Next Heat" to advance to the next heat, or "Re-Run" if there was an issue.
+After a heat completes, the results panel shows finish times for each lane. If a car did not finish, its time shows as **DNF** (Did Not Finish). The standings panel on the right updates with cumulative average times. Click "Next Heat" to advance to the next heat, or "Re-Run" if there was an issue.
+
+If a heat has DNF results, a **Re-Run DNF** button appears, allowing you to re-run only the cars that didn't finish while keeping the successful results. This is also available in the heat history for past heats.
+
+![DNF Result](images/operator-dnf-result.png)
+
+![Re-Run DNF in Heat History](images/operator-dnf-rerun.png)
 
 ![Live Console — Results](images/operator-live-console-results.png)
 
@@ -67,6 +79,66 @@ Change which lanes are active mid-race (e.g., if a lane sensor breaks). The sche
 
 ## 3.11 Section Complete / Final Results
 
-When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count. Results can be exported to CSV or sent to the audience display for a dramatic progressive reveal.
+When all heats are finished, the section complete screen shows final standings with rank, average time, best time, and heat count.
+
+From this screen you can:
+
+- **Export Excel** — Download a multi-sheet workbook with standings, heat-by-heat results, car statistics, and lane statistics
+- **Export PDF** — Generate a detailed PDF report with standings, per-heat results, and car/lane statistics
+- **Show on Audience Display** — Send results to the audience display for a dramatic progressive reveal, starting from last place and building up to first
+
+If a section has been run multiple times (multiple rotations that were completed separately), a **start picker** appears at the top to switch between results for each run.
 
 ![Section Complete](images/operator-section-complete.png)
+
+## 3.12 Car Statistics
+
+Click **Car Stats** (available in the Live Console after at least one heat has results) to open a detailed per-car breakdown. The table shows each car's time on every lane, plus their average, best time, and total heats run. This helps identify cars that are consistently fast or slow on specific lanes.
+
+![Car Statistics Dialog](images/operator-dlg-car-stats.png)
+
+## 3.13 Lane Diagnostics
+
+The **Lane Statistics** panel appears automatically below the standings in the Live Console after results are recorded. It shows the average time, race count, and deviation from the overall average for each lane. Lanes with a deviation greater than 20ms are highlighted as outliers — this can indicate a lane that is consistently faster or slower, which may point to a track alignment issue.
+
+## 3.14 Multiple Rotations
+
+After all heats in a rotation are complete, a **rotation decision** prompt appears with two options:
+
+- **Add Rotation** — Schedule another full rotation of heats for the same participants. Useful when time allows for more racing to improve scoring accuracy.
+- **Complete Section** — Finalize the section with the current results.
+
+![Rotation Decision](images/operator-rotation-decision.png)
+
+## 3.15 End Section Early
+
+If you're running short on time, click **End Section Early** (the red button in the Live Console) to stop racing and finalize standings based on heats completed so far. Cars that ran fewer heats than others are marked as incomplete in the final results. This button only appears after at least one heat has been completed.
+
+## 3.16 Reports
+
+The operator can generate PDF reports from several places:
+
+- **Rally Report** (from Rally Home) — A multi-page PDF covering all sections, with standings, lane statistics, and summary stats for the entire event.
+- **Group Reports** (from Rally Home) — Per-group PDFs showing where each group's participants placed and their heat-by-heat times. Useful for handing to scout leaders.
+- **Section Report** (from Section Complete) — A detailed single-section PDF with standings, lane statistics, heat-by-heat results, and a car statistics matrix.
+- **Heat Report** (from Heat History) — A quick single-page snapshot of one heat's results and current leaderboard.
+
+All reports are generated client-side using jsPDF — no server needed.
+
+## 3.17 Learn Pin Mapping
+
+When connecting a new Pico W track controller for the first time, use **Learn Pins** to teach RallyLab which GPIO pins are wired to the gate switch and each lane sensor. Open the Track Manager (click the track badge), then click **Learn Pins** in the footer.
+
+The wizard walks you through each sensor one at a time:
+
+1. **Open the start gate** — release the gate lever or press the gate button. The Pico detects which pin changed and records it.
+
+![Learn Pins — Gate](images/operator-learn-pins-gate.png)
+
+2. **Trigger each lane sensor** — push a car across each finish line in order. Each detected pin is added to the mapping.
+
+![Learn Pins — Lane](images/operator-learn-pins-lane.png)
+
+3. **Save & Restart** — once all lanes are mapped, click Save to write the pin configuration to the Pico and restart the firmware.
+
+![Learn Pins — Complete](images/operator-learn-pins-done.png)
