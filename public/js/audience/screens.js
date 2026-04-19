@@ -29,6 +29,9 @@ export function renderWelcome(container, rallyName) {
 
 export function renderStaging(container, sectionName, heatNumber, lanes, nextHeat) {
   const sortedLanes = [...lanes].sort((a, b) => a.lane - b.lane);
+  const showGroupCurrent = sortedLanes.some(l => l.group_name);
+  const nextLanesSorted = nextHeat ? [...nextHeat.lanes].sort((a, b) => a.lane - b.lane) : [];
+  const showGroupNext = nextLanesSorted.some(l => l.group_name);
 
   let currentRows = '';
   for (const lane of sortedLanes) {
@@ -37,19 +40,20 @@ export function renderStaging(container, sectionName, heatNumber, lanes, nextHea
         <td class="audience-lane-number">Lane ${lane.lane}</td>
         <td class="audience-car-number">#${lane.car_number}</td>
         <td class="audience-name">${esc(lane.name)}</td>
+        ${showGroupCurrent ? `<td class="audience-group">${esc(lane.group_name || '')}</td>` : ''}
       </tr>`;
   }
 
   let nextHtml = '';
   if (nextHeat) {
-    const nextLanes = [...nextHeat.lanes].sort((a, b) => a.lane - b.lane);
     let nextRows = '';
-    for (const lane of nextLanes) {
+    for (const lane of nextLanesSorted) {
       nextRows += `
         <tr>
           <td class="audience-lane-number">Lane ${lane.lane}</td>
           <td class="audience-car-number">#${lane.car_number}</td>
           <td class="audience-name">${esc(lane.name)}</td>
+          ${showGroupNext ? `<td class="audience-group">${esc(lane.group_name || '')}</td>` : ''}
         </tr>`;
     }
     nextHtml = `
@@ -83,6 +87,7 @@ export function renderStaging(container, sectionName, heatNumber, lanes, nextHea
 // ─── Results ─────────────────────────────────────────────────────
 
 export function renderResults(container, sectionName, heatNumber, results) {
+  const showGroup = results.some(r => r.group_name);
   let tableRows = '';
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
@@ -93,6 +98,7 @@ export function renderResults(container, sectionName, heatNumber, results) {
         <td class="audience-place">${place}</td>
         <td class="audience-car-number">#${r.car_number}</td>
         <td class="audience-name">${esc(r.name)}</td>
+        ${showGroup ? `<td class="audience-group">${esc(r.group_name || '')}</td>` : ''}
         <td class="audience-time">${r.time_ms ? formatTime(r.time_ms) : 'DNF'}</td>
       </tr>`;
   }
@@ -108,6 +114,7 @@ export function renderResults(container, sectionName, heatNumber, results) {
           <th class="audience-th-place"></th>
           <th class="audience-th-car">Car</th>
           <th>Name</th>
+          ${showGroup ? '<th>Group</th>' : ''}
           <th class="audience-th-time">Time</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
@@ -119,8 +126,9 @@ export function renderResults(container, sectionName, heatNumber, results) {
 // ─── Leaderboard ─────────────────────────────────────────────────
 
 export function renderLeaderboard(container, sectionName, standings) {
-  let tableRows = '';
   const top = standings.slice(0, 10);
+  const showGroup = top.some(s => s.group_name);
+  let tableRows = '';
   for (const s of top) {
     const medalClass = s.rank <= 3 ? ` audience-place-${s.rank}` : '';
     tableRows += `
@@ -128,6 +136,7 @@ export function renderLeaderboard(container, sectionName, standings) {
         <td class="audience-place">${s.rank}</td>
         <td class="audience-car-number">#${s.car_number}</td>
         <td class="audience-name">${esc(s.name)}</td>
+        ${showGroup ? `<td class="audience-group">${esc(s.group_name || '')}</td>` : ''}
         <td class="audience-time">${s.avg_time_ms != null ? formatTime(s.avg_time_ms) : '—'}</td>
       </tr>`;
   }
@@ -143,6 +152,7 @@ export function renderLeaderboard(container, sectionName, standings) {
           <th class="audience-th-place"></th>
           <th class="audience-th-car">Car</th>
           <th>Name</th>
+          ${showGroup ? '<th>Group</th>' : ''}
           <th class="audience-th-time">Avg Time</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
@@ -154,6 +164,7 @@ export function renderLeaderboard(container, sectionName, standings) {
 // ─── Section Complete ────────────────────────────────────────────
 
 export function renderSectionComplete(container, sectionName, standings) {
+  const showGroup = standings.some(s => s.group_name);
   let tableRows = '';
   for (const s of standings) {
     const medalClass = s.rank <= 3 ? ` audience-place-${s.rank}` : '';
@@ -162,6 +173,7 @@ export function renderSectionComplete(container, sectionName, standings) {
         <td class="audience-place">${s.rank}</td>
         <td class="audience-car-number">#${s.car_number}</td>
         <td class="audience-name">${esc(s.name)}</td>
+        ${showGroup ? `<td class="audience-group">${esc(s.group_name || '')}</td>` : ''}
         <td class="audience-time">${s.avg_time_ms != null ? formatTime(s.avg_time_ms) : '—'}</td>
         <td>${s.heats_run}${s.incomplete ? ' *' : ''}</td>
       </tr>`;
@@ -178,6 +190,7 @@ export function renderSectionComplete(container, sectionName, standings) {
           <th class="audience-th-place"></th>
           <th class="audience-th-car">Car</th>
           <th>Name</th>
+          ${showGroup ? '<th>Group</th>' : ''}
           <th class="audience-th-time">Avg Time</th>
           <th>Heats</th>
         </tr></thead>

@@ -63,6 +63,20 @@ function getTrackLaneCount() {
   return trackInfo().lane_count;
 }
 
+// ─── Audience Broadcast Helpers ──────────────────────────────────
+
+/** Attach group_name to each row (lane/result/standing) for audience display. */
+export function withGroupNames(section, rows) {
+  if (!rows) return rows;
+  return rows.map(row => {
+    if (row.group_name !== undefined) return row;
+    const p = section.participants.find(pp => pp.car_number === row.car_number);
+    const gid = row.group_id || p?.group_id;
+    const name = gid ? (_state?.groups?.[gid]?.group_name || '') : '';
+    return { ...row, group_name: name };
+  });
+}
+
 /**
  * Get the current heat number for a section by finding the first
  * schedule heat without a result. Returns 0 if no schedule or no heats.
@@ -176,8 +190,8 @@ function renderScreen(screenName, params) {
     const schedule = _liveSection.schedule;
     const heatIdx = schedule.heats.findIndex(h => h.heat_number === heat.heat_number);
     const nextHeat = heatIdx >= 0 && heatIdx + 1 < schedule.heats.length ? schedule.heats[heatIdx + 1] : null;
-    sendStaging(sec.section_name, heat.heat_number, heat.lanes,
-      nextHeat ? { heat_number: nextHeat.heat_number, lanes: nextHeat.lanes } : null);
+    sendStaging(sec.section_name, heat.heat_number, withGroupNames(sec, heat.lanes),
+      nextHeat ? { heat_number: nextHeat.heat_number, lanes: withGroupNames(sec, nextHeat.lanes) } : null);
   }
 
   const ctx = {
@@ -621,8 +635,8 @@ async function runRaceLoop(sectionId) {
       // Render staging + broadcast
       renderCurrentScreen();
       const nextHeat = heatIdx + 1 < schedule.heats.length ? schedule.heats[heatIdx + 1] : null;
-      sendStaging(sec().section_name, heat.heat_number, heat.lanes,
-        nextHeat ? { heat_number: nextHeat.heat_number, lanes: nextHeat.lanes } : null);
+      sendStaging(sec().section_name, heat.heat_number, withGroupNames(sec(), heat.lanes),
+        nextHeat ? { heat_number: nextHeat.heat_number, lanes: withGroupNames(sec(), nextHeat.lanes) } : null);
 
       // Wait for race (fake track: blocks on gate click; manual: blocks on button)
       setTrackPhase('waiting-for-race', `Heat ${heat.heat_number}`);
@@ -648,7 +662,7 @@ async function runRaceLoop(sectionId) {
       renderCurrentScreen();
 
       const resultData = buildResultsForBroadcast(sec(), heat, _liveSection.startNumber);
-      sendResults(sec().section_name, heat.heat_number, resultData);
+      sendResults(sec().section_name, heat.heat_number, withGroupNames(sec(), resultData));
 
       heatIdx++;
 
@@ -843,7 +857,7 @@ async function declareDnfRerun(sectionId, heatNumber) {
   // Stage re-run with only DNF lanes
   _liveSection.stagingHeat = { heat_number: heatNumber, lanes: dnfLanes };
   renderCurrentScreen();
-  sendStaging(sec.section_name, heatNumber, dnfLanes, null);
+  sendStaging(sec.section_name, heatNumber, withGroupNames(sec, dnfLanes), null);
 
   _raceAbort = new AbortController();
   const signal = _raceAbort.signal;
@@ -872,7 +886,7 @@ async function declareDnfRerun(sectionId, heatNumber) {
       heat || { heat_number: heatNumber },
       _liveSection.startNumber
     );
-    sendResults(sec.section_name, heatNumber, resultData);
+    sendResults(sec.section_name, heatNumber, withGroupNames(sec, resultData));
 
     // Resume race loop from next heat
     runRaceLoop(sectionId);

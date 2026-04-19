@@ -480,6 +480,85 @@ export function generateSectionReport(state, section, startNumbers) {
   downloadPdf(doc, `${safeFilename(section.section_name)}${startLabel}-report.pdf`);
 }
 
+// ─── Entrants List ──────────────────────────────────────────────
+
+/**
+ * Generate a printable entrants list across all sections.
+ * Each section on its own page with a check-in checkbox column.
+ * @param {Object} state - full app state
+ * @param {string[]} [sectionIds] - optional filter; defaults to all sections
+ */
+export function generateEntrantsReport(state, sectionIds) {
+  const doc = makePdf('portrait');
+  const pw = doc.internal.pageSize.getWidth();
+  const rd = state.race_day;
+  const allSections = Object.values(rd.sections);
+  const sections = sectionIds
+    ? allSections.filter(s => sectionIds.includes(s.section_id))
+    : allSections;
+
+  if (sections.length === 0) return;
+
+  let isFirst = true;
+  let totalParticipants = 0;
+
+  for (const sec of sections) {
+    if (sec.participants.length === 0) continue;
+    totalParticipants += sec.participants.length;
+
+    if (!isFirst) doc.addPage();
+    isFirst = false;
+
+    // Section title
+    doc.setFontSize(20);
+    doc.setTextColor(30);
+    doc.text(sec.section_name, pw / 2, 50, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setTextColor(80);
+    const rallyLine = [state.rally_name, state.rally_date].filter(Boolean).join(' — ');
+    if (rallyLine) doc.text(rallyLine, pw / 2, 70, { align: 'center' });
+
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Entrants — ${sec.participants.length} registered`, pw / 2, 88, { align: 'center' });
+
+    const hasGroups = sec.participants.some(p => p.group_id);
+    const sorted = [...sec.participants].sort((a, b) => a.car_number - b.car_number);
+
+    const columns = [
+      { header: 'Arrived', dataKey: 'arrived' },
+      { header: 'Car #', dataKey: 'car' },
+      { header: 'Name', dataKey: 'name' },
+    ];
+    if (hasGroups) columns.push({ header: 'Group', dataKey: 'group' });
+
+    const rows = sorted.map(p => ({
+      arrived: '',
+      car: '#' + p.car_number,
+      name: p.name,
+      group: groupName(state, p.group_id),
+    }));
+
+    doc.autoTable({
+      startY: 105,
+      columns,
+      body: rows,
+      theme: 'grid',
+      styles: { fontSize: 11, cellPadding: 6 },
+      headStyles: { fillColor: [40, 40, 60], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+      columnStyles: { arrived: { cellWidth: 60, halign: 'center' } },
+      margin: { left: 40, right: 40 },
+    });
+  }
+
+  if (totalParticipants === 0) return;
+
+  addPageFooter(doc, state.rally_name || 'Rally');
+  downloadPdf(doc, `${safeFilename(state.rally_name || 'rally')}-entrants.pdf`);
+}
+
 // ─── Heat Report ────────────────────────────────────────────────
 
 /**

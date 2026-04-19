@@ -10,6 +10,8 @@ On race day, the operator loads participant data either from a roster package ex
 
 The operator rally home shows all sections with their participant counts, check-in progress, and status. From here you can check in participants, start racing a section, or view the live console for an active section. The track connection badge in the top-right opens the Track Manager.
 
+**Entrants (PDF)** and **Entrants (Excel)** buttons below the section table produce a printable entrants list — one page or sheet per section, with an "Arrived" column you can tick off on paper. Useful as a check-in sheet at the door or for handing to a section lead before racing starts.
+
 ![Operator Rally Home](images/operator-rally-home.png)
 
 ## 3.3 Track Connection
@@ -118,6 +120,7 @@ If you're running short on time, click **End Section Early** (the red button in 
 
 The operator can generate PDF reports from several places:
 
+- **Entrants List** (from Rally Home) — A printable per-section roster with an "Arrived" column for paper check-in. Also available as Excel.
 - **Rally Report** (from Rally Home) — A multi-page PDF covering all sections, with standings, lane statistics, and summary stats for the entire event.
 - **Group Reports** (from Rally Home) — Per-group PDFs showing where each group's participants placed and their heat-by-heat times. Useful for handing to scout leaders.
 - **Section Report** (from Section Complete) — A detailed single-section PDF with standings, lane statistics, heat-by-heat results, and a car statistics matrix.

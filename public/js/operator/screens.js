@@ -7,8 +7,8 @@
 import { computeLeaderboard, computeLaneStats } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart } from '../state-manager.js';
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog, showRallyReportDialog, showSectionReportDialog, showGroupReportsDialog } from './dialogs.js';
-import { generateHeatReport } from './report.js';
-import { exportSectionXlsx } from './export-xlsx.js';
+import { generateHeatReport, generateEntrantsReport } from './report.js';
+import { exportSectionXlsx, exportEntrantsXlsx } from './export-xlsx.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -275,29 +275,45 @@ export function renderRallyHome(container, params, ctx) {
     tbody.appendChild(tr);
   }
 
-  // Report buttons — show when any section has completed starts
+  // Export/report buttons
+  const anyParticipants = sections.some(s => s.participants.length > 0);
   const anyComplete = sections.some(s => getCompletedStarts(s).length > 0);
-  if (anyComplete) {
+
+  if (anyParticipants) {
     const reportWrap = document.createElement('div');
     reportWrap.style.marginTop = '1.5rem';
     reportWrap.style.display = 'flex';
     reportWrap.style.gap = '0.5rem';
     reportWrap.style.flexWrap = 'wrap';
 
-    const reportBtn = document.createElement('button');
-    reportBtn.className = 'btn btn-secondary';
-    reportBtn.textContent = 'Rally Report (PDF)';
-    reportBtn.onclick = () => showRallyReportDialog(ctx);
-    reportWrap.appendChild(reportBtn);
+    const entrantsPdfBtn = document.createElement('button');
+    entrantsPdfBtn.className = 'btn btn-secondary';
+    entrantsPdfBtn.textContent = 'Entrants (PDF)';
+    entrantsPdfBtn.onclick = () => generateEntrantsReport(state);
+    reportWrap.appendChild(entrantsPdfBtn);
 
-    // Group Reports — only if any participants have group_id
-    const hasGroups = sections.some(s => s.participants.some(p => p.group_id));
-    if (hasGroups) {
-      const groupBtn = document.createElement('button');
-      groupBtn.className = 'btn btn-secondary';
-      groupBtn.textContent = 'Group Reports (PDF)';
-      groupBtn.onclick = () => showGroupReportsDialog(ctx);
-      reportWrap.appendChild(groupBtn);
+    const entrantsXlsxBtn = document.createElement('button');
+    entrantsXlsxBtn.className = 'btn btn-secondary';
+    entrantsXlsxBtn.textContent = 'Entrants (Excel)';
+    entrantsXlsxBtn.onclick = () => exportEntrantsXlsx(state);
+    reportWrap.appendChild(entrantsXlsxBtn);
+
+    if (anyComplete) {
+      const reportBtn = document.createElement('button');
+      reportBtn.className = 'btn btn-secondary';
+      reportBtn.textContent = 'Rally Report (PDF)';
+      reportBtn.onclick = () => showRallyReportDialog(ctx);
+      reportWrap.appendChild(reportBtn);
+
+      // Group Reports — only if any participants have group_id
+      const hasGroups = sections.some(s => s.participants.some(p => p.group_id));
+      if (hasGroups) {
+        const groupBtn = document.createElement('button');
+        groupBtn.className = 'btn btn-secondary';
+        groupBtn.textContent = 'Group Reports (PDF)';
+        groupBtn.onclick = () => showGroupReportsDialog(ctx);
+        reportWrap.appendChild(groupBtn);
+      }
     }
 
     container.appendChild(reportWrap);
@@ -1196,10 +1212,11 @@ export function renderSectionComplete(container, params, ctx) {
 
   showBtn.onclick = async () => {
     const m = await import('../broadcast.js');
+    const { withGroupNames } = await import('./app.js');
     const displayName = completedStarts.length > 1 && currentStart
       ? `${sec.section_name} — ${state.rally_name || 'Rally'} ${currentStart.start_number}`
       : sec.section_name;
-    m.sendSectionComplete(displayName, standings);
+    m.sendSectionComplete(displayName, withGroupNames(sec, standings));
     ctx.showToast('Section results sent to audience display', 'success');
 
     // Swap to reveal controls

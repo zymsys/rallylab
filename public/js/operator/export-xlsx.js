@@ -197,3 +197,47 @@ export function exportSectionXlsx(state, section, start) {
   const filename = `${safeFilename(section.section_name)}-results.xlsx`;
   XLSX.writeFile(wb, filename);
 }
+
+/**
+ * Export an entrants list across all sections as an .xlsx workbook.
+ * One sheet per section with an Arrived column for paper check-in.
+ * @param {Object} state - full app state
+ * @param {string[]} [sectionIds] - optional filter; defaults to all sections
+ */
+export function exportEntrantsXlsx(state, sectionIds) {
+  const rd = state.race_day;
+  const allSections = Object.values(rd.sections);
+  const sections = sectionIds
+    ? allSections.filter(s => sectionIds.includes(s.section_id))
+    : allSections;
+
+  const wb = XLSX.utils.book_new();
+  let anyWritten = false;
+
+  for (const section of sections) {
+    if (section.participants.length === 0) continue;
+    anyWritten = true;
+
+    const hasGroups = section.participants.some(p => p.group_id);
+    const sorted = [...section.participants].sort((a, b) => a.car_number - b.car_number);
+
+    const header = ['Arrived', 'Car #', 'Name'];
+    if (hasGroups) header.push('Group');
+
+    const rows = sorted.map(p => {
+      const row = ['', p.car_number, p.name];
+      if (hasGroups) row.push(groupName(state, p.group_id));
+      return row;
+    });
+
+    const aoa = [header, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    autoWidth(ws, aoa);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName(section.section_name));
+  }
+
+  if (!anyWritten) return;
+
+  const filename = `${safeFilename(state.rally_name || 'rally')}-entrants.xlsx`;
+  XLSX.writeFile(wb, filename);
+}

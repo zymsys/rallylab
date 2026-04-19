@@ -440,18 +440,18 @@ async function captureAudience(ctx) {
       section_name: 'Kub Kars',
       heat_number: 1,
       lanes: [
-        { lane: 1, car_number: 101, name: 'Billy Thompson' },
-        { lane: 2, car_number: 102, name: 'Sarah Chen' },
-        { lane: 3, car_number: 103, name: 'Tommy Rodriguez' },
-        { lane: 4, car_number: 104, name: 'Emma Wilson' }
+        { lane: 1, car_number: 101, name: 'Billy Thompson',   group_name: '1st Kingston Pack' },
+        { lane: 2, car_number: 102, name: 'Sarah Chen',       group_name: '7th Trillium Pack' },
+        { lane: 3, car_number: 103, name: 'Tommy Rodriguez',  group_name: '1st Kingston Pack' },
+        { lane: 4, car_number: 104, name: 'Emma Wilson',      group_name: '7th Trillium Pack' }
       ],
       next_heat: {
         heat_number: 2,
         lanes: [
-          { lane: 1, car_number: 103, name: 'Tommy Rodriguez' },
-          { lane: 2, car_number: 105, name: 'Jake Patel' },
-          { lane: 3, car_number: 101, name: 'Billy Thompson' },
-          { lane: 4, car_number: 106, name: 'Lily Okafor' }
+          { lane: 1, car_number: 103, name: 'Tommy Rodriguez', group_name: '1st Kingston Pack' },
+          { lane: 2, car_number: 105, name: 'Jake Patel',      group_name: '7th Trillium Pack' },
+          { lane: 3, car_number: 101, name: 'Billy Thompson',  group_name: '1st Kingston Pack' },
+          { lane: 4, car_number: 106, name: 'Lily Okafor',     group_name: '7th Trillium Pack' }
         ]
       }
     });
@@ -469,10 +469,10 @@ async function captureAudience(ctx) {
       section_name: 'Kub Kars',
       heat_number: 1,
       results: [
-        { car_number: 102, name: 'Sarah Chen', time_ms: 2847, place: 1 },
-        { car_number: 104, name: 'Emma Wilson', time_ms: 2953, place: 2 },
-        { car_number: 101, name: 'Billy Thompson', time_ms: 3124, place: 3 },
-        { car_number: 103, name: 'Tommy Rodriguez', time_ms: 3267, place: 4 }
+        { car_number: 102, name: 'Sarah Chen',      group_name: '7th Trillium Pack', time_ms: 2847, place: 1 },
+        { car_number: 104, name: 'Emma Wilson',     group_name: '7th Trillium Pack', time_ms: 2953, place: 2 },
+        { car_number: 101, name: 'Billy Thompson',  group_name: '1st Kingston Pack', time_ms: 3124, place: 3 },
+        { car_number: 103, name: 'Tommy Rodriguez', group_name: '1st Kingston Pack', time_ms: 3267, place: 4 }
       ]
     });
     ch.close();
@@ -488,13 +488,13 @@ async function captureAudience(ctx) {
       type: 'SHOW_LEADERBOARD',
       section_name: 'Kub Kars',
       standings: [
-        { rank: 1, car_number: 102, name: 'Sarah Chen', avg_time_ms: 2847 },
-        { rank: 2, car_number: 104, name: 'Emma Wilson', avg_time_ms: 2953 },
-        { rank: 3, car_number: 101, name: 'Billy Thompson', avg_time_ms: 3124 },
-        { rank: 4, car_number: 103, name: 'Tommy Rodriguez', avg_time_ms: 3267 },
-        { rank: 5, car_number: 105, name: 'Jake Patel', avg_time_ms: 3401 },
-        { rank: 6, car_number: 106, name: 'Lily Okafor', avg_time_ms: 3512 },
-        { rank: 7, car_number: 107, name: 'Noah Kim', avg_time_ms: 3689 }
+        { rank: 1, car_number: 102, name: 'Sarah Chen',      group_name: '7th Trillium Pack', avg_time_ms: 2847 },
+        { rank: 2, car_number: 104, name: 'Emma Wilson',     group_name: '7th Trillium Pack', avg_time_ms: 2953 },
+        { rank: 3, car_number: 101, name: 'Billy Thompson',  group_name: '1st Kingston Pack', avg_time_ms: 3124 },
+        { rank: 4, car_number: 103, name: 'Tommy Rodriguez', group_name: '1st Kingston Pack', avg_time_ms: 3267 },
+        { rank: 5, car_number: 105, name: 'Jake Patel',      group_name: '7th Trillium Pack', avg_time_ms: 3401 },
+        { rank: 6, car_number: 106, name: 'Lily Okafor',     group_name: '1st Kingston Pack', avg_time_ms: 3512 },
+        { rank: 7, car_number: 107, name: 'Noah Kim',        group_name: '7th Trillium Pack', avg_time_ms: 3689 }
       ]
     });
     ch.close();
@@ -510,13 +510,13 @@ async function captureAudience(ctx) {
       type: 'SHOW_SECTION_COMPLETE',
       section_name: 'Kub Kars',
       standings: [
-        { rank: 1, car_number: 102, name: 'Sarah Chen', avg_time_ms: 2847, heats_run: 6 },
-        { rank: 2, car_number: 104, name: 'Emma Wilson', avg_time_ms: 2953, heats_run: 6 },
-        { rank: 3, car_number: 101, name: 'Billy Thompson', avg_time_ms: 3124, heats_run: 6 },
-        { rank: 4, car_number: 103, name: 'Tommy Rodriguez', avg_time_ms: 3267, heats_run: 6 },
-        { rank: 5, car_number: 105, name: 'Jake Patel', avg_time_ms: 3401, heats_run: 6 },
-        { rank: 6, car_number: 106, name: 'Lily Okafor', avg_time_ms: 3512, heats_run: 6 },
-        { rank: 7, car_number: 107, name: 'Noah Kim', avg_time_ms: 3689, heats_run: 6 }
+        { rank: 1, car_number: 102, name: 'Sarah Chen',      group_name: '7th Trillium Pack', avg_time_ms: 2847, heats_run: 6 },
+        { rank: 2, car_number: 104, name: 'Emma Wilson',     group_name: '7th Trillium Pack', avg_time_ms: 2953, heats_run: 6 },
+        { rank: 3, car_number: 101, name: 'Billy Thompson',  group_name: '1st Kingston Pack', avg_time_ms: 3124, heats_run: 6 },
+        { rank: 4, car_number: 103, name: 'Tommy Rodriguez', group_name: '1st Kingston Pack', avg_time_ms: 3267, heats_run: 6 },
+        { rank: 5, car_number: 105, name: 'Jake Patel',      group_name: '7th Trillium Pack', avg_time_ms: 3401, heats_run: 6 },
+        { rank: 6, car_number: 106, name: 'Lily Okafor',     group_name: '1st Kingston Pack', avg_time_ms: 3512, heats_run: 6 },
+        { rank: 7, car_number: 107, name: 'Noah Kim',        group_name: '7th Trillium Pack', avg_time_ms: 3689, heats_run: 6 }
       ]
     });
     ch.close();
