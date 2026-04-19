@@ -259,7 +259,7 @@ Properties:
 - Car number (painted or written on the car)
 - Associated Participant
 
-In code and protocol contexts, `car_number` is the primary identifier used during race day operations.
+In code and protocol contexts, `car_number` is the primary identifier used during race day operations. It is an opaque string — the system auto-assigns decimal strings (`"1"`, `"2"`, …) by default, but Registrars may supply any label (e.g. `"B100"`, `"A-17"`) on roster upload, and the label is preserved verbatim. Car numbers are unique within a Section.
 
 ### 5.6 Heat
 

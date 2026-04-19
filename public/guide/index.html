@@ -438,6 +438,7 @@
         <ul class="toc-sections">
           <li><a href="#registrar-section-list" class="toc-section-link">Section List</a></li>
           <li><a href="#registrar-check-in" class="toc-section-link">Section Check-In</a></li>
+          <li><a href="#registrar-add-participant" class="toc-section-link">Adding a Late Participant</a></li>
         </ul>
       </div>
 
@@ -578,12 +579,16 @@
         <div class="guide-section" id="uploading-roster">
           <h3>2.9 Uploading a Roster</h3>
           <p>Upload participants from a CSV or Excel spreadsheet. The system automatically detects column mappings for participant names and group assignments.</p>
+          <p><strong>Imports are additive.</strong> Re-uploading the same file (with a few new rows added) only adds the new participants &mdash; anyone already in the roster is skipped. Existing car numbers, check-in status, and participant IDs are preserved. A volunteer can maintain a single spreadsheet and re-import it any time without creating duplicates.</p>
+          <p>Duplicate detection matches by <strong>Car Number</strong> (anywhere in the section) or by <strong>Name</strong> (within the same group, case-insensitive).</p>
+          <p>Include a <strong>Car Number</strong> column (or <strong>Race Number</strong> / <strong>#</strong>) if you want specific numbers preserved &mdash; the imported value is used verbatim, so labels like <code>B100</code> or <code>A-17</code> are kept as-is. Without such a column, car numbers are auto-assigned as <code>1</code>, <code>2</code>, <code>3</code>, &hellip; gap-filling around any existing participants in the section.</p>
+          <p>The preview shows how many rows will be added and how many will be skipped, with a status badge next to each name.</p>
           <img src="images/pre-race-dlg-upload-roster.png" alt="Upload Roster Dialog" class="guide-img">
         </div>
 
         <div class="guide-section" id="adding-participant">
           <h3>2.10 Adding a Participant</h3>
-          <p>Add individual participants manually. A car number is automatically assigned based on the next available number in the section.</p>
+          <p>Add individual participants manually. Leave the Car Number field blank and one will be auto-assigned based on the next available number in the section. To preserve a label that matches the physical car (e.g. <code>B100</code>), enter it in the Car Number field &mdash; the value is stored verbatim. The dialog flags numbers already in use before you submit.</p>
           <img src="images/pre-race-dlg-add-participant.png" alt="Add Participant Dialog" class="guide-img">
         </div>
 
@@ -771,6 +776,12 @@
           <h3>4.2 Section Check-In</h3>
           <p>The registrar check-in screen shows each participant with a "Check In" button. Checking in a participant marks their car as arrived and updates the count. Late arrivals after racing has started will trigger schedule regeneration.</p>
           <img src="images/registrar-section-checkin.png" alt="Registrar Check-In" class="guide-img">
+        </div>
+
+        <div class="guide-section" id="registrar-add-participant">
+          <h3>4.3 Adding a Late Participant</h3>
+          <p>The &ldquo;+ Add Participant&rdquo; button handles walk-up registrations. Enter the name; leave Car Number blank to auto-assign the next available number, or type a specific label to match the physical car. The participant is added and checked in immediately &mdash; and if a section is already racing, the schedule regenerates with catch-up heats.</p>
+          <img src="images/registrar-dlg-add-participant.png" alt="Registrar Add Participant Dialog" class="guide-img">
         </div>
       </section>
 

@@ -4,7 +4,7 @@
  */
 
 import { showAddParticipantDialog, showCheckInConfirmDialog } from './dialogs.js';
-import { getActiveStart, getCompletedStarts } from '../state-manager.js';
+import { getActiveStart, getCompletedStarts, compareCarNumbers } from '../state-manager.js';
 
 // ─── Screen: Section List ────────────────────────────────────────
 
@@ -143,7 +143,7 @@ export function renderSectionCheckIn(container, params, ctx) {
   }
 
   // Roster table with check-in buttons
-  const sorted = [...sec.participants].sort((a, b) => a.car_number - b.car_number);
+  const sorted = [...sec.participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';

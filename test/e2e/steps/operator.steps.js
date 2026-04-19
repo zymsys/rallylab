@@ -16,46 +16,46 @@ import { Given, When, Then } from './fixtures.js';
 // Default roster for most race scenarios.
 // Cars 1-7 are checked in by default; 8-9 are registered but NOT checked in.
 const ROSTER = [
-  { name: 'Alice Anderson', car_number: 1 },
-  { name: 'Bob Baker', car_number: 2 },
-  { name: 'Charlie Clark', car_number: 3 },
-  { name: 'Diana Davis', car_number: 4 },
-  { name: 'Broken Betty', car_number: 5 },
-  { name: 'Frank Fisher', car_number: 6 },
-  { name: 'Grace Green', car_number: 7 },
-  { name: 'Tardy Tina', car_number: 8 },
-  { name: 'Slow Sam', car_number: 9 },
+  { name: 'Alice Anderson', car_number: '1' },
+  { name: 'Bob Baker', car_number: '2' },
+  { name: 'Charlie Clark', car_number: '3' },
+  { name: 'Diana Davis', car_number: '4' },
+  { name: 'Broken Betty', car_number: '5' },
+  { name: 'Frank Fisher', car_number: '6' },
+  { name: 'Grace Green', car_number: '7' },
+  { name: 'Tardy Tina', car_number: '8' },
+  { name: 'Slow Sam', car_number: '9' },
 ];
 const DEFAULT_CHECKED_IN = [1, 2, 3, 4, 5, 6, 7];
 const DEFAULT_LANES = [1, 2, 3, 4];
 
 const SCOUT_TRUCKS_ROSTER = [
-  { name: 'Scout Alpha', car_number: 1 },
-  { name: 'Scout Bravo', car_number: 2 },
-  { name: 'Scout Charlie', car_number: 3 },
-  { name: 'Scout Delta', car_number: 4 },
-  { name: 'Scout Echo', car_number: 5 },
-  { name: 'Scout Foxtrot', car_number: 6 },
-  { name: 'Scout Golf', car_number: 7 },
-  { name: 'Scout Hotel', car_number: 8 },
+  { name: 'Scout Alpha', car_number: '1' },
+  { name: 'Scout Bravo', car_number: '2' },
+  { name: 'Scout Charlie', car_number: '3' },
+  { name: 'Scout Delta', car_number: '4' },
+  { name: 'Scout Echo', car_number: '5' },
+  { name: 'Scout Foxtrot', car_number: '6' },
+  { name: 'Scout Golf', car_number: '7' },
+  { name: 'Scout Hotel', car_number: '8' },
 ];
 
 // Small roster for section-completion tests (4 participants, 3 lanes = 4 heats).
 const SMALL_ROSTER = [
-  { name: 'Amy Adams', car_number: 1 },
-  { name: 'Ben Brown', car_number: 2 },
-  { name: 'Cal Clark', car_number: 3 },
-  { name: 'Dee Davis', car_number: 4 },
+  { name: 'Amy Adams', car_number: '1' },
+  { name: 'Ben Brown', car_number: '2' },
+  { name: 'Cal Clark', car_number: '3' },
+  { name: 'Dee Davis', car_number: '4' },
 ];
 const SMALL_CHECKED_IN = [1, 2, 3, 4];
 const SMALL_LANES = [1, 2, 3];
 
 // Second small roster for multi-section tests.
 const SMALL_ROSTER_B = [
-  { name: 'Erin Evans', car_number: 1 },
-  { name: 'Finn Foster', car_number: 2 },
-  { name: 'Gina Grant', car_number: 3 },
-  { name: 'Hugo Harris', car_number: 4 },
+  { name: 'Erin Evans', car_number: '1' },
+  { name: 'Finn Foster', car_number: '2' },
+  { name: 'Gina Grant', car_number: '3' },
+  { name: 'Hugo Harris', car_number: '4' },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────

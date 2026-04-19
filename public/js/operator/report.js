@@ -9,7 +9,7 @@
  */
 
 import { computeLeaderboard, computeLaneStats, computeCarStats } from '../scoring.js';
-import { getCompletedStarts, getStart, flattenStart } from '../state-manager.js';
+import { getCompletedStarts, getStart, flattenStart, compareCarNumbers } from '../state-manager.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -524,7 +524,7 @@ export function generateEntrantsReport(state, sectionIds) {
     doc.text(`Entrants — ${sec.participants.length} registered`, pw / 2, 88, { align: 'center' });
 
     const hasGroups = sec.participants.some(p => p.group_id);
-    const sorted = [...sec.participants].sort((a, b) => a.car_number - b.car_number);
+    const sorted = [...sec.participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 
     const columns = [
       { header: 'Arrived', dataKey: 'arrived' },

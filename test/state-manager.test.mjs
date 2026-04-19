@@ -5,7 +5,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { initialState, applyEvent, rebuildState, nextAvailableCarNumber } from '../public/js/state-manager.js';
+import { initialState, applyEvent, rebuildState, nextAvailableCarNumber, compareCarNumbers } from '../public/js/state-manager.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
@@ -199,7 +199,7 @@ describe('RosterUpdated updates race_day.sections', () => {
     assert.strictEqual(s.race_day.sections.s1.participants.length, 2);
     const alice = s.race_day.sections.s1.participants.find(p => p.name === 'Alice');
     assert.ok(alice);
-    assert.strictEqual(alice.car_number, 1);
+    assert.strictEqual(alice.car_number, '1');
   });
 });
 
@@ -261,9 +261,9 @@ describe('RosterUpdated with group_id', () => {
     const alice = s.sections.s1.participants.find(p => p.name === 'Alice');
     const bob = s.sections.s1.participants.find(p => p.name === 'Bob');
     const carol = s.sections.s1.participants.find(p => p.name === 'Carol');
-    assert.strictEqual(alice.car_number, 1);
-    assert.strictEqual(bob.car_number, 2);
-    assert.strictEqual(carol.car_number, 3);
+    assert.strictEqual(alice.car_number, '1');
+    assert.strictEqual(bob.car_number, '2');
+    assert.strictEqual(carol.car_number, '3');
     assert.strictEqual(alice.group_id, 'g1');
     assert.strictEqual(carol.group_id, 'g2');
   });
@@ -304,8 +304,8 @@ describe('RosterUpdated with group_id', () => {
     assert.strictEqual(s.sections.s1.participants.length, 4);
     const dave = s.sections.s1.participants.find(p => p.name === 'Dave');
     const eve = s.sections.s1.participants.find(p => p.name === 'Eve');
-    assert.strictEqual(dave.car_number, 2); // fills the gap
-    assert.strictEqual(eve.car_number, 4);  // next available
+    assert.strictEqual(dave.car_number, '2'); // fills the gap
+    assert.strictEqual(eve.car_number, '4');  // next available
   });
 
   it('re-uploading a group replaces only that group', () => {
@@ -357,7 +357,7 @@ describe('ParticipantAdded with group_id', () => {
       }
     ]);
     assert.strictEqual(s.sections.s1.participants[0].group_id, 'g1');
-    assert.strictEqual(s.sections.s1.participants[0].car_number, 1);
+    assert.strictEqual(s.sections.s1.participants[0].car_number, '1');
   });
 
   it('gap-fills car number around existing participants', () => {
@@ -382,7 +382,7 @@ describe('ParticipantAdded with group_id', () => {
     ]);
     // Carol should get car 1 (the gap left by Alice)
     const carol = s.sections.s1.participants.find(p => p.name === 'Carol');
-    assert.strictEqual(carol.car_number, 1);
+    assert.strictEqual(carol.car_number, '1');
   });
 });
 
@@ -411,11 +411,161 @@ describe('nextAvailableCarNumber', () => {
   it('fills gaps across groups', () => {
     const section = {
       participants: [
-        { car_number: 1, group_id: 'g1' },
-        { car_number: 3, group_id: 'g2' }
+        { car_number: '1', group_id: 'g1' },
+        { car_number: '3', group_id: 'g2' }
       ]
     };
-    assert.strictEqual(nextAvailableCarNumber(section), 2);
+    assert.strictEqual(nextAvailableCarNumber(section), '2');
+  });
+
+  it('ignores custom non-numeric labels when picking next integer', () => {
+    const section = {
+      participants: [
+        { car_number: 'B100', group_id: 'g1' },
+        { car_number: 'B101', group_id: 'g1' }
+      ]
+    };
+    assert.strictEqual(nextAvailableCarNumber(section), '1');
+  });
+});
+
+describe('compareCarNumbers', () => {
+  it('orders mixed numeric+letter labels naturally', () => {
+    const arr = ['B100', 'B9', 'B10', 'A005'];
+    arr.sort(compareCarNumbers);
+    assert.deepStrictEqual(arr, ['A005', 'B9', 'B10', 'B100']);
+  });
+
+  it('handles pure numeric strings', () => {
+    const arr = ['10', '2', '1'];
+    arr.sort(compareCarNumbers);
+    assert.deepStrictEqual(arr, ['1', '2', '10']);
+  });
+});
+
+describe('RosterUpdated with explicit car_numbers', () => {
+  it('honors explicit car_numbers from payload', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [
+          { participant_id: 'p1', name: 'Alice', car_number: 'B100' },
+          { participant_id: 'p2', name: 'Bob', car_number: 'B101' }
+        ]
+      }
+    ]);
+    const alice = s.sections.s1.participants.find(p => p.name === 'Alice');
+    const bob = s.sections.s1.participants.find(p => p.name === 'Bob');
+    assert.strictEqual(alice.car_number, 'B100');
+    assert.strictEqual(bob.car_number, 'B101');
+  });
+
+  it('auto-assigns for participants without explicit car_number, avoiding collisions', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [
+          { participant_id: 'p1', name: 'Alice', car_number: '1' },
+          { participant_id: 'p2', name: 'Bob' },  // no explicit → auto-assign
+          { participant_id: 'p3', name: 'Carol' } // no explicit → auto-assign
+        ]
+      }
+    ]);
+    const alice = s.sections.s1.participants.find(p => p.name === 'Alice');
+    const bob = s.sections.s1.participants.find(p => p.name === 'Bob');
+    const carol = s.sections.s1.participants.find(p => p.name === 'Carol');
+    assert.strictEqual(alice.car_number, '1');
+    // Bob and Carol should get 2 and 3 (skipping 1 reserved for Alice)
+    assert.ok(['2', '3'].includes(bob.car_number));
+    assert.ok(['2', '3'].includes(carol.car_number));
+    assert.notStrictEqual(bob.car_number, carol.car_number);
+  });
+
+  it('preserves explicit car_numbers across groups within a section', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [
+          { participant_id: 'p1', name: 'Alice', car_number: 'B100' }
+        ]
+      },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g2',
+        participants: [
+          { participant_id: 'p2', name: 'Bob', car_number: 'B200' }
+        ]
+      }
+    ]);
+    assert.strictEqual(s.sections.s1.participants.length, 2);
+    const alice = s.sections.s1.participants.find(p => p.name === 'Alice');
+    const bob = s.sections.s1.participants.find(p => p.name === 'Bob');
+    assert.strictEqual(alice.car_number, 'B100');
+    assert.strictEqual(bob.car_number, 'B200');
+  });
+});
+
+describe('ParticipantAdded with explicit car_number', () => {
+  it('honors explicit car_number', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        group_id: 'g1',
+        participant: { participant_id: 'p1', name: 'Alice', car_number: 'B100' }
+      }
+    ]);
+    assert.strictEqual(s.sections.s1.participants[0].car_number, 'B100');
+  });
+
+  it('falls back to auto-assign when explicit conflicts', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [{ participant_id: 'p1', name: 'Alice', car_number: 'B100' }]
+      },
+      {
+        type: 'ParticipantAdded',
+        section_id: 's1',
+        group_id: 'g1',
+        // explicit B100 conflicts; should auto-assign instead
+        participant: { participant_id: 'p2', name: 'Bob', car_number: 'B100' }
+      }
+    ]);
+    const bob = s.sections.s1.participants.find(p => p.name === 'Bob');
+    assert.notStrictEqual(bob.car_number, 'B100');
+    assert.strictEqual(bob.car_number, '1');
+  });
+});
+
+describe('CarArrived normalizes car_number', () => {
+  it('deduplicates int and string representations of the same car', () => {
+    const s = buildState([
+      { type: 'SectionCreated', section_id: 's1', section_name: 'Beaver' },
+      {
+        type: 'RosterUpdated',
+        section_id: 's1',
+        group_id: 'g1',
+        participants: [{ participant_id: 'p1', name: 'Alice', car_number: '42' }]
+      },
+      { type: 'CarArrived', section_id: 's1', car_number: 42 },     // int
+      { type: 'CarArrived', section_id: 's1', car_number: '42' }    // string — dup
+    ]);
+    assert.deepStrictEqual(s.race_day.sections.s1.arrived, ['42']);
   });
 });
 

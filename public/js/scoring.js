@@ -4,6 +4,8 @@
  * See specs/08-scoring-and-leaderboard.md for algorithm specification.
  */
 
+import { compareCarNumbers } from './state-manager.js';
+
 /**
  * Get the accepted results from a race day section.
  * The section.results map already stores latest-wins (superseded by applyEvent),
@@ -249,7 +251,7 @@ export function computeCarStats(section) {
       heats_run: c.heats_run,
       removed: c.removed
     }))
-    .sort((a, b) => a.car_number - b.car_number);
+    .sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 }
 
 /**

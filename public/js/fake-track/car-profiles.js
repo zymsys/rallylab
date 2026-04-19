@@ -29,14 +29,15 @@ function triangular(min, max, mode) {
  * @returns {{ baseTime: number, variance: number }}
  */
 export function getOrCreateProfile(car_number) {
-  if (_profiles.has(car_number)) {
-    return _profiles.get(car_number);
+  const key = String(car_number);
+  if (_profiles.has(key)) {
+    return _profiles.get(key);
   }
   const profile = {
     baseTime: Math.round(triangular(2200, 3800, 3000)),
     variance: 80 + Math.random() * 70  // 80–150ms
   };
-  _profiles.set(car_number, profile);
+  _profiles.set(key, profile);
   return profile;
 }
 

@@ -407,6 +407,16 @@ async function captureRegistrar(ctx) {
     await page.waitForSelector('.checkin-counter');
     await sleep(300);
     await capture(page, 'registrar-section-checkin');
+
+    // Open Add Participant dialog (+ Add Participant button at top of check-in screen)
+    const addPartBtn = page.locator('button', { hasText: 'Add Participant' }).first();
+    if (await addPartBtn.count() > 0) {
+      await addPartBtn.click();
+      await page.waitForSelector('#dlg-participant-name', { timeout: 5000 });
+      await capture(page, 'registrar-dlg-add-participant');
+      await page.click('.dialog-close');
+      await sleep(200);
+    }
   }
 
   await page.close();

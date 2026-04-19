@@ -152,9 +152,10 @@ A Registrar uploads a participant list via spreadsheet import.
   "type": "RosterUpdated",
   "rally_id": "uuid",
   "section_id": "uuid",
+  "group_id": "uuid",
   "participants": [
     { "participant_id": "uuid", "name": "Billy Thompson" },
-    { "participant_id": "uuid", "name": "Sarah Chen" }
+    { "participant_id": "uuid", "name": "Sarah Chen", "car_number": "B100" }
   ],
   "submitted_by": "cubmaster@example.com",
   "timestamp": 1708012348901
@@ -166,16 +167,20 @@ A Registrar uploads a participant list via spreadsheet import.
 | `type` | string | yes | `"RosterUpdated"` |
 | `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
-| `participants` | array | yes | List of `{ participant_id, name }` |
+| `group_id` | UUID | no | Scope to a single Group; absent means all groups |
+| `participants` | array | yes | List of `{ participant_id, name, car_number? }` |
 | `submitted_by` | string | yes | Registrar email |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
-**Behavior:**
-- **Destructive** — replaces entire roster for this Section
-- Car numbers are regenerated sequentially (1, 2, 3, ...) based on array order
-- Multiple `RosterUpdated` events for the same Section: latest wins
+**Participant `car_number` is a string** (opaque label) and is optional. If omitted, the reducer auto-assigns the lowest unused decimal string (`"1"`, `"2"`, …). If supplied — e.g. `"B100"` from a spreadsheet — the literal value is preserved and used verbatim. Explicit values that collide with existing numbers in the section fall through to auto-assignment.
 
-**Warning:** If participants have already painted car numbers, uploading a new spreadsheet renumbers all cars. Use `ParticipantAdded` / `ParticipantRemoved` for surgical edits.
+**Behavior:**
+- Scoped to `group_id` when present — only participants in that group are replaced.
+- Auto-assigned numbers gap-fill around existing participants in other groups of the same section.
+- Explicit car_numbers from the payload are reserved before auto-assignment runs.
+- Multiple `RosterUpdated` events for the same Section+Group: latest wins.
+
+**Warning:** If participants have already painted car numbers, upload a file that carries a `Car Number` / `Race Number` / `#` column so the reducer honors them; otherwise cars will be renumbered from scratch. Use `ParticipantAdded` / `ParticipantRemoved` for surgical edits once numbers are distributed.
 
 ---
 
@@ -188,8 +193,7 @@ A Registrar adds a single participant without renumbering existing cars.
   "type": "ParticipantAdded",
   "rally_id": "uuid",
   "section_id": "uuid",
-  "participant": { "participant_id": "uuid", "name": "Tommy Rodriguez" },
-  "car_number": 15,
+  "participant": { "participant_id": "uuid", "name": "Tommy Rodriguez", "car_number": "B115" },
   "added_by": "cubmaster@example.com",
   "timestamp": 1708012349012
 }
@@ -200,10 +204,11 @@ A Registrar adds a single participant without renumbering existing cars.
 | `type` | string | yes | `"ParticipantAdded"` |
 | `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
-| `participant` | object | yes | `{ participant_id, name }` |
-| `car_number` | integer | yes | Next available car number (server-assigned) |
+| `participant` | object | yes | `{ participant_id, name, car_number? }` |
 | `added_by` | string | yes | Registrar email |
 | `timestamp` | integer | yes | Unix ms (UTC) |
+
+**`participant.car_number` is an optional string.** If omitted, the reducer auto-assigns the lowest unused decimal string; if supplied and not in conflict, the literal value (e.g. `"B115"`) is used. A colliding explicit value falls through to auto-assignment.
 
 ---
 
@@ -271,7 +276,7 @@ A participant checks in on race day, confirming their car is present.
 | `type` | string | yes | `"CarArrived"` |
 | `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
-| `car_number` | integer | yes | Car being checked in |
+| `car_number` | string | yes | Car being checked in (opaque identifier) |
 | `timestamp` | integer | yes | Unix ms (UTC) |
 
 **Behavior:**
@@ -484,7 +489,7 @@ A car is removed from the Rally mid-race (destroyed or disqualified).
 | `type` | string | yes | `"CarRemoved"` |
 | `rally_id` | UUID | yes | |
 | `section_id` | UUID | yes | |
-| `car_number` | integer | yes | |
+| `car_number` | string | yes | Opaque car identifier |
 | `heat` | integer | yes | Heat number when removed |
 | `reason` | enum | yes | `"destroyed"` or `"disqualified"` |
 | `timestamp` | integer | yes | Unix ms (UTC) |

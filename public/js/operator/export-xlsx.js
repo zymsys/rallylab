@@ -10,7 +10,7 @@
  */
 
 import { computeLeaderboard, computeLaneStats, computeCarStats } from '../scoring.js';
-import { flattenStart } from '../state-manager.js';
+import { flattenStart, compareCarNumbers } from '../state-manager.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -219,7 +219,7 @@ export function exportEntrantsXlsx(state, sectionIds) {
     anyWritten = true;
 
     const hasGroups = section.participants.some(p => p.group_id);
-    const sorted = [...section.participants].sort((a, b) => a.car_number - b.car_number);
+    const sorted = [...section.participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 
     const header = ['Arrived', 'Car #', 'Name'];
     if (hasGroups) header.push('Group');

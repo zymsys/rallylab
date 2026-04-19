@@ -5,7 +5,7 @@
  */
 
 import { computeLeaderboard, computeLaneStats } from '../scoring.js';
-import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart } from '../state-manager.js';
+import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart, compareCarNumbers } from '../state-manager.js';
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog, showRallyReportDialog, showSectionReportDialog, showGroupReportsDialog } from './dialogs.js';
 import { generateHeatReport, generateEntrantsReport } from './report.js';
 import { exportSectionXlsx, exportEntrantsXlsx } from './export-xlsx.js';
@@ -381,7 +381,7 @@ export function renderCheckIn(container, params, ctx) {
   }
 
   // Roster table with checkboxes
-  const sorted = [...sec.participants].sort((a, b) => a.car_number - b.car_number);
+  const sorted = [...sec.participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';

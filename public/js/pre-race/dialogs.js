@@ -5,6 +5,7 @@
 import { appendEvent, loadRallyState } from './commands.js';
 import { getUser } from '../supabase.js';
 import { parseRosterFile, parseBulkRosterFile } from './roster-import.js';
+import { nextAvailableCarNumber } from '../state-manager.js';
 import { showToast } from './app.js';
 
 const backdrop = () => document.getElementById('dialog-backdrop');
@@ -404,11 +405,6 @@ export function showInviteOperatorDialog(rallyId, existingEmails, onDone) {
 
 // ─── 6. Upload Roster ───────────────────────────────────────────────
 export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onUploaded) {
-  const existingCount = groupId
-    ? section.participants.filter(p => p.group_id === groupId).length
-    : section.participants.length;
-  const isReimport = existingCount > 0;
-
   openDialog(`
     <div class="dialog-header">
       <h2>Upload Roster</h2>
@@ -422,38 +418,29 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
       </div>
       <p class="form-hint" style="margin-top:0.75rem">
         Include a <strong>Name</strong> column, or separate <strong>First Name</strong>
-        and <strong>Last Name</strong> columns. Other columns are ignored.
-        A header row is optional.
+        and <strong>Last Name</strong> columns. A <strong>Car Number</strong> column is optional.
+        Participants already in the roster are skipped — you can re-upload the same file to add new names.
       </p>
       <div id="dlg-upload-error" class="form-error" style="margin-top:0.5rem"></div>
       <div id="dlg-preview" class="preview-table" style="display:none">
         <p class="info-line" id="dlg-preview-count"></p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th></tr></thead>
+            <thead><tr><th id="dlg-preview-head">Name</th></tr></thead>
             <tbody id="dlg-preview-body"></tbody>
           </table>
         </div>
-        ${isReimport ? `
-        <div class="reimport-warning" id="dlg-reimport-warning">
-          <p class="form-hint" style="color:var(--color-warning);margin-top:0.75rem">
-            This will replace the existing ${existingCount} participant${existingCount !== 1 ? 's' : ''}
-            and reassign all car numbers.
-          </p>
-          <label class="checkbox-item" style="margin-top:0.5rem">
-            <input type="checkbox" id="dlg-reimport-confirm">
-            I confirm that car numbers have not yet been distributed
-          </label>
-        </div>` : ''}
       </div>
     </div>
     <div class="dialog-footer">
       <button class="btn btn-secondary" data-action="cancel">Cancel</button>
-      <button class="btn btn-primary" data-action="confirm" disabled>Confirm Upload</button>
+      <button class="btn btn-primary" data-action="confirm" disabled>Add Participants</button>
     </div>
   `);
 
-  let parsedNames = [];
+  let parsedRows = [];  // [{ name, car_number }]
+  let toAdd = [];        // rows that will actually be emitted
+  let skipped = [];
 
   const d = dialogEl();
   const area = d.querySelector('#dlg-upload-area');
@@ -463,7 +450,6 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
   const previewBody = d.querySelector('#dlg-preview-body');
   const previewCount = d.querySelector('#dlg-preview-count');
   const confirmBtn = d.querySelector('[data-action="confirm"]');
-  const reimportCheckbox = d.querySelector('#dlg-reimport-confirm');
 
   d.querySelector('.dialog-close').onclick = closeDialog;
   d.querySelector('[data-action="cancel"]').onclick = closeDialog;
@@ -483,29 +469,17 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
     if (fileInput.files.length) handleFile(fileInput.files[0]);
   });
 
-  function updateConfirmEnabled() {
-    if (parsedNames.length === 0) {
-      confirmBtn.disabled = true;
-    } else if (isReimport && reimportCheckbox) {
-      confirmBtn.disabled = !reimportCheckbox.checked;
-    } else {
-      confirmBtn.disabled = false;
-    }
-  }
-
-  if (reimportCheckbox) {
-    reimportCheckbox.addEventListener('change', updateConfirmEnabled);
-  }
-
   async function handleFile(file) {
     errorEl.textContent = '';
     previewEl.style.display = 'none';
     confirmBtn.disabled = true;
-    parsedNames = [];
+    parsedRows = [];
+    toAdd = [];
+    skipped = [];
 
     try {
-      parsedNames = await parseRosterFile(file);
-      if (parsedNames.length === 0) {
+      parsedRows = await parseRosterFile(file);
+      if (parsedRows.length === 0) {
         errorEl.textContent = 'No participant names found in file';
         return;
       }
@@ -514,46 +488,89 @@ export function showUploadRosterDialog(rallyId, sectionId, groupId, section, onU
       return;
     }
 
-    // Show preview (names only — car numbers are assigned after upload)
-    previewCount.textContent = `${parsedNames.length} participants found`;
+    // Reject within-file and cross-group car_number conflicts up front.
+    const dupCheck = validateCarNumbers(parsedRows, section, groupId);
+    if (dupCheck) {
+      errorEl.textContent = dupCheck;
+      return;
+    }
+
+    // Classify against existing section participants — skip duplicates.
+    const classification = classifyAgainstExisting(parsedRows, section, () => groupId || null);
+    toAdd = classification.toAdd;
+    skipped = classification.skipped;
+
+    const hasCarNumbers = parsedRows.some(r => r.car_number);
+
+    // Summary line
+    const parts = [`${toAdd.length} new`];
+    if (skipped.length > 0) parts.push(`${skipped.length} already in roster (will skip)`);
+    previewCount.textContent = parts.join(', ');
+
+    // Rebuild the preview table header
+    const previewHead = previewEl.querySelector('thead tr');
+    previewHead.innerHTML = hasCarNumbers
+      ? '<th style="width:6rem">Car #</th><th>Name</th><th style="width:8rem">Status</th>'
+      : '<th>Name</th><th style="width:8rem">Status</th>';
+
     previewBody.innerHTML = '';
-    parsedNames.forEach((name) => {
+    const statusNew = '<span class="status-badge status-active">NEW</span>';
+    const statusSkip = '<span class="status-badge status-idle">SKIP</span>';
+
+    // Show new rows first, then skipped (so the new ones are visible without scrolling)
+    const orderedRows = [
+      ...toAdd.map(r => ({ row: r, isNew: true })),
+      ...skipped.map(s => ({ row: s.row, isNew: false }))
+    ];
+    orderedRows.forEach(({ row, isNew }) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${esc(name)}</td>`;
+      if (!isNew) tr.style.opacity = '0.6';
+      tr.innerHTML = hasCarNumbers
+        ? `<td>${row.car_number ? '#' + esc(row.car_number) : '<em>auto</em>'}</td><td>${esc(row.name)}</td><td>${isNew ? statusNew : statusSkip}</td>`
+        : `<td>${esc(row.name)}</td><td>${isNew ? statusNew : statusSkip}</td>`;
       previewBody.appendChild(tr);
     });
+
     previewEl.style.display = 'block';
-    updateConfirmEnabled();
+    confirmBtn.disabled = toAdd.length === 0;
+    confirmBtn.textContent = toAdd.length === 0
+      ? 'Nothing to Add'
+      : `Add ${toAdd.length} Participant${toAdd.length !== 1 ? 's' : ''}`;
   }
 
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Uploading...';
+    confirmBtn.textContent = 'Adding...';
 
     try {
       const user = getUser();
-      const participants = parsedNames.map(name => ({
-        participant_id: crypto.randomUUID(),
-        name
-      }));
+      const now = Date.now();
 
-      await appendEvent({
-        type: 'RosterUpdated',
-        rally_id: rallyId,
-        section_id: sectionId,
-        group_id: groupId || null,
-        participants,
-        submitted_by: user.email,
-        timestamp: Date.now()
-      });
+      // Emit ParticipantAdded per new row (additive; preserves existing roster)
+      for (const row of toAdd) {
+        await appendEvent({
+          type: 'ParticipantAdded',
+          rally_id: rallyId,
+          section_id: sectionId,
+          group_id: groupId || null,
+          participant: {
+            participant_id: crypto.randomUUID(),
+            name: row.name,
+            ...(row.car_number ? { car_number: row.car_number } : {})
+          },
+          added_by: user.email,
+          timestamp: now
+        });
+      }
 
       closeDialog();
-      showToast(`Roster uploaded: ${participants.length} participants`, 'success');
+      const suffix = skipped.length > 0 ? `, skipped ${skipped.length} already in roster` : '';
+      showToast(`Added ${toAdd.length} participant${toAdd.length !== 1 ? 's' : ''}${suffix}`, 'success');
       if (onUploaded) onUploaded();
     } catch (e) {
       showToast(e.message, 'error');
       confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Confirm Upload';
+      confirmBtn.textContent = `Add ${toAdd.length} Participant${toAdd.length !== 1 ? 's' : ''}`;
     }
   };
 }
@@ -648,6 +665,8 @@ export function showCreateFromExistingDialog(rallies, onCreated) {
 
 // ─── 8. Add Participant ────────────────────────────────────────────
 export function showAddParticipantDialog(rallyId, sectionId, groupId, section, onAdded) {
+  const nextCarNum = nextAvailableCarNumber(section);
+
   openDialog(`
     <div class="dialog-header">
       <h2>Add Participant</h2>
@@ -659,7 +678,12 @@ export function showAddParticipantDialog(rallyId, sectionId, groupId, section, o
         <input id="dlg-participant-name" class="form-input" type="text" placeholder="e.g. Tommy Rodriguez" maxlength="100">
         <div id="dlg-participant-name-error" class="form-error"></div>
       </div>
-      <p class="form-hint">Car number will be assigned automatically.</p>
+      <div class="form-group">
+        <label for="dlg-participant-car-number">Car Number <span class="form-hint" style="font-weight:normal">(optional)</span></label>
+        <input id="dlg-participant-car-number" class="form-input" type="text" placeholder="${esc(nextCarNum)} (auto-assigned)" maxlength="20">
+        <div id="dlg-participant-car-number-error" class="form-error"></div>
+        <p class="form-hint">Leave blank for auto-assignment, or enter a specific label (e.g. <code>B100</code>).</p>
+      </div>
     </div>
     <div class="dialog-footer">
       <button class="btn btn-secondary" data-action="cancel">Cancel</button>
@@ -672,10 +696,21 @@ export function showAddParticipantDialog(rallyId, sectionId, groupId, section, o
   d.querySelector('[data-action="cancel"]').onclick = closeDialog;
   d.querySelector('[data-action="add"]').onclick = async () => {
     const name = d.querySelector('#dlg-participant-name').value.trim();
+    const carNumberRaw = d.querySelector('#dlg-participant-car-number').value.trim();
     const nameErr = d.querySelector('#dlg-participant-name-error');
+    const carErr = d.querySelector('#dlg-participant-car-number-error');
     nameErr.textContent = '';
+    carErr.textContent = '';
 
     if (!name) { nameErr.textContent = 'Participant name is required'; return; }
+
+    if (carNumberRaw) {
+      const existing = section.participants.find(p => String(p.car_number) === carNumberRaw);
+      if (existing) {
+        carErr.textContent = `Car #${carNumberRaw} is already assigned to ${existing.name}`;
+        return;
+      }
+    }
 
     const btn = d.querySelector('[data-action="add"]');
     btn.disabled = true;
@@ -688,7 +723,11 @@ export function showAddParticipantDialog(rallyId, sectionId, groupId, section, o
         rally_id: rallyId,
         section_id: sectionId,
         group_id: groupId || null,
-        participant: { participant_id: crypto.randomUUID(), name },
+        participant: {
+          participant_id: crypto.randomUUID(),
+          name,
+          ...(carNumberRaw ? { car_number: carNumberRaw } : {})
+        },
         added_by: user.email,
         timestamp: Date.now()
       });
@@ -722,7 +761,8 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
         </div>
         <p class="form-hint" style="margin-top:0.75rem">
           Include <strong>Section</strong> and <strong>Name</strong> columns.
-          A <strong>Group</strong> column is optional.
+          <strong>Group</strong> and <strong>Car Number</strong> columns are optional.
+          Participants already in the roster are skipped — re-upload the same file any time to add new names.
         </p>
         <div id="dlg-bulk-error" class="form-error" style="margin-top:0.5rem"></div>
       </div>
@@ -769,7 +809,19 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
         return;
       }
 
-      area.innerHTML = `<p><strong>${file.name}</strong> — ${parsedRows.length} participants found</p>`;
+      // Reject within-file duplicate car_numbers up front — that's a
+      // clerical error in the spreadsheet. Cross-roster duplicates are
+      // handled by the classifier at preview time (skip semantics).
+      const err = validateBulkCarNumbers(parsedRows);
+      if (err) {
+        errorEl.textContent = err;
+        parsedRows = [];
+        return;
+      }
+
+      const hasCarNumbers = parsedRows.some(r => r.car_number);
+      const countSuffix = hasCarNumbers ? ' (car numbers preserved)' : '';
+      area.innerHTML = `<p><strong>${file.name}</strong> — ${parsedRows.length} participants found${countSuffix}</p>`;
       nextBtn.disabled = false;
     }
 
@@ -777,9 +829,10 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
   }
 
   function renderPreviewPhase() {
-    // Build section → group → names structure (preserving file order)
+    // Build section → group → rows structure (preserving file order).
+    // Each entry is the full parsed row so car_number flows through to emit.
     const sectionOrder = [];
-    const sectionMap = new Map(); // sectionName → Map(groupName|null → [name])
+    const sectionMap = new Map(); // sectionName → Map(groupName|null → [{name, car_number}])
 
     for (const row of parsedRows) {
       if (!sectionMap.has(row.section)) {
@@ -789,8 +842,10 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
       const groups = sectionMap.get(row.section);
       const key = row.group; // null for ungrouped
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(row.name);
+      groups.get(key).push({ name: row.name, car_number: row.car_number });
     }
+
+    const hasCarNumbers = parsedRows.some(r => r.car_number);
 
     // Build lookup maps for existing sections/groups
     const existingSections = new Map(
@@ -805,42 +860,71 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
       ? [...new Set(parsedRows.filter(r => r.group).map(r => r.group))]
       : [];
 
-    // Check if any existing section has participants that would be replaced
-    const sectionsWithExisting = sectionOrder.filter(name => {
-      const existing = existingSections.get(name.toLowerCase().trim());
-      return existing && existing.participants.length > 0;
-    });
-    const needsReimportConfirm = sectionsWithExisting.length > 0;
+    // Classify per section: which rows are new vs already in the roster.
+    // Keyed by sectionName. Each entry holds the full set of rows (with their
+    // group) broken into toAdd and skipped, so the preview + emit can both use it.
+    const sectionClassification = new Map();
+    for (const sectionName of sectionOrder) {
+      const existing = existingSections.get(sectionName.toLowerCase().trim()) || null;
+      const sectionRows = [];
+      for (const [groupName, entries] of sectionMap.get(sectionName)) {
+        for (const entry of entries) {
+          sectionRows.push({ name: entry.name, car_number: entry.car_number, _group: groupName });
+        }
+      }
+      const groupIdResolver = (row) => {
+        if (!row._group) return null;
+        const g = existingGroups.get(row._group.toLowerCase().trim());
+        return g ? g.group_id : undefined; // undefined = new group (nothing to match)
+      };
+      const { toAdd, skipped } = classifyAgainstExisting(sectionRows, existing, groupIdResolver);
+      sectionClassification.set(sectionName, { toAdd, skipped });
+    }
+
+    const totalToAdd = [...sectionClassification.values()].reduce((n, c) => n + c.toAdd.length, 0);
+    const totalSkipped = [...sectionClassification.values()].reduce((n, c) => n + c.skipped.length, 0);
 
     // Summary line
-    const totalParticipants = parsedRows.length;
-    let summaryParts = [`${totalParticipants} participant${totalParticipants !== 1 ? 's' : ''}`];
+    let summaryParts = [`${totalToAdd} new participant${totalToAdd !== 1 ? 's' : ''}`];
+    if (totalSkipped > 0) summaryParts.push(`${totalSkipped} already in roster`);
     summaryParts.push(`${sectionOrder.length} section${sectionOrder.length !== 1 ? 's' : ''}`);
     if (hasGroups) summaryParts.push(`${uniqueGroups.length} group${uniqueGroups.length !== 1 ? 's' : ''}`);
-    const summary = summaryParts.join(' across ');
+    const summary = summaryParts.join(' · ');
 
-    // Build section preview HTML
+    // Build per-section preview HTML — group rows show new/skip counts.
     let sectionsHtml = '';
     for (const sectionName of sectionOrder) {
-      const isNew = !existingSections.has(sectionName.toLowerCase().trim());
-      const badge = isNew
+      const isNewSection = !existingSections.has(sectionName.toLowerCase().trim());
+      const sectionBadge = isNewSection
         ? '<span class="status-badge status-active">NEW</span>'
         : '<span class="status-badge status-idle">EXISTS</span>';
-
-      const groups = sectionMap.get(sectionName);
+      const { toAdd, skipped } = sectionClassification.get(sectionName);
+      const groupsInSection = sectionMap.get(sectionName);
 
       let bodyHtml = '';
       if (hasGroups) {
         let rowsHtml = '';
-        for (const [groupName, names] of groups) {
+        for (const [groupName, entries] of groupsInSection) {
+          // Count new vs skipped within this group
+          const inGroup = (r) => r._group === groupName;
+          const newInGroup = toAdd.filter(inGroup).length;
+          const skipInGroup = skipped.filter(s => s.row._group === groupName).length;
+
+          const carCount = entries.filter(e => e.car_number).length;
+          const carLabel = hasCarNumbers && carCount > 0
+            ? ` <span class="form-hint">(${carCount} w/ car #)</span>`
+            : '';
+          const countCell = skipInGroup > 0
+            ? `<td>${newInGroup} new, ${skipInGroup} skip</td>`
+            : `<td>${newInGroup}</td>`;
           if (groupName === null) {
-            rowsHtml += `<tr><td><em>Ungrouped</em></td><td>${names.length}</td><td></td></tr>`;
+            rowsHtml += `<tr><td><em>Ungrouped</em>${carLabel}</td>${countCell}<td></td></tr>`;
           } else {
             const gNew = !existingGroups.has(groupName.toLowerCase().trim());
             const gBadge = gNew
               ? '<span class="status-badge status-active">NEW</span>'
               : '<span class="status-badge status-idle">EXISTS</span>';
-            rowsHtml += `<tr><td>${esc(groupName)}</td><td>${names.length}</td><td>${gBadge}</td></tr>`;
+            rowsHtml += `<tr><td>${esc(groupName)}${carLabel}</td>${countCell}<td>${gBadge}</td></tr>`;
           }
         }
         bodyHtml = `
@@ -851,35 +935,24 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
             </table>
           </div>`;
       } else {
-        const count = [...groups.values()].reduce((sum, arr) => sum + arr.length, 0);
-        bodyHtml = `<p class="form-hint" style="margin-left:0.5rem">${count} participants</p>`;
+        const fragments = [`${toAdd.length} new`];
+        if (skipped.length > 0) fragments.push(`${skipped.length} already in roster`);
+        bodyHtml = `<p class="form-hint" style="margin-left:0.5rem">${fragments.join(', ')}</p>`;
       }
 
       sectionsHtml += `
         <div style="margin-bottom:1rem">
           <div class="toolbar" style="margin-bottom:0.25rem">
             <h3 class="area-heading">${esc(sectionName)}</h3>
-            ${badge}
+            ${sectionBadge}
           </div>
           ${bodyHtml}
         </div>`;
     }
 
-    // Reimport warning
-    let reimportHtml = '';
-    if (needsReimportConfirm) {
-      const names = sectionsWithExisting.map(n => `"${esc(n)}"`).join(', ');
-      reimportHtml = `
-        <div class="reimport-warning" style="margin-top:0.75rem">
-          <p class="form-hint" style="color:var(--color-warning)">
-            Existing participants in ${names} will be replaced and car numbers reassigned.
-          </p>
-          <label class="checkbox-item" style="margin-top:0.5rem">
-            <input type="checkbox" id="dlg-bulk-reimport-confirm">
-            I confirm that car numbers have not yet been distributed
-          </label>
-        </div>`;
-    }
+    const confirmLabel = totalToAdd === 0
+      ? 'Nothing to Add'
+      : `Add ${totalToAdd} Participant${totalToAdd !== 1 ? 's' : ''}`;
 
     openDialog(`
       <div class="dialog-header">
@@ -889,11 +962,10 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
       <div class="dialog-body">
         <p class="info-line" style="margin-bottom:1rem">${summary}</p>
         ${sectionsHtml}
-        ${reimportHtml}
       </div>
       <div class="dialog-footer">
         <button class="btn btn-secondary" data-action="back">Back</button>
-        <button class="btn btn-primary" data-action="confirm" ${needsReimportConfirm ? 'disabled' : ''}>Confirm Import</button>
+        <button class="btn btn-primary" data-action="confirm" ${totalToAdd === 0 ? 'disabled' : ''}>${confirmLabel}</button>
       </div>
     `);
 
@@ -902,13 +974,6 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
     d.querySelector('[data-action="back"]').onclick = () => renderUploadPhase();
 
     const confirmBtn = d.querySelector('[data-action="confirm"]');
-    const reimportCheckbox = d.querySelector('#dlg-bulk-reimport-confirm');
-
-    if (reimportCheckbox) {
-      reimportCheckbox.addEventListener('change', () => {
-        confirmBtn.disabled = !reimportCheckbox.checked;
-      });
-    }
 
     confirmBtn.onclick = async () => {
       confirmBtn.disabled = true;
@@ -918,10 +983,13 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
         const user = getUser();
         const now = Date.now();
 
-        // Resolve section names → IDs (create new ones as needed)
-        const sectionIdMap = new Map(); // sectionName (lower) → section_id
+        // Resolve section names → IDs (create new sections on demand)
+        const sectionIdMap = new Map();
         for (const sectionName of sectionOrder) {
           const key = sectionName.toLowerCase().trim();
+          const { toAdd } = sectionClassification.get(sectionName);
+          if (toAdd.length === 0) continue; // nothing to add in this section
+
           const existing = existingSections.get(key);
           if (existing) {
             sectionIdMap.set(key, existing.section_id);
@@ -939,9 +1007,15 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
           }
         }
 
-        // Resolve group names → IDs (create new ones as needed)
-        const groupIdMap = new Map(); // groupName (lower) → group_id
-        for (const groupName of uniqueGroups) {
+        // Resolve group names → IDs (create new groups referenced by rows we're adding)
+        const groupIdMap = new Map();
+        const groupsToCreate = new Set();
+        for (const [, { toAdd }] of sectionClassification) {
+          for (const row of toAdd) {
+            if (row._group) groupsToCreate.add(row._group);
+          }
+        }
+        for (const groupName of groupsToCreate) {
           const key = groupName.toLowerCase().trim();
           const existing = existingGroups.get(key);
           if (existing) {
@@ -960,37 +1034,40 @@ export function showBulkImportDialog(rallyId, state, onComplete) {
           }
         }
 
-        // Emit RosterUpdated per section+group combo
+        // Emit ParticipantAdded per new row (additive — preserves existing roster)
         for (const sectionName of sectionOrder) {
+          const { toAdd } = sectionClassification.get(sectionName);
+          if (toAdd.length === 0) continue;
           const sectionId = sectionIdMap.get(sectionName.toLowerCase().trim());
-          const groups = sectionMap.get(sectionName);
 
-          for (const [groupName, names] of groups) {
-            const groupId = groupName ? groupIdMap.get(groupName.toLowerCase().trim()) : null;
-            const participants = names.map(name => ({
-              participant_id: crypto.randomUUID(),
-              name
-            }));
-
+          for (const row of toAdd) {
+            const groupId = row._group
+              ? groupIdMap.get(row._group.toLowerCase().trim())
+              : null;
             await appendEvent({
-              type: 'RosterUpdated',
+              type: 'ParticipantAdded',
               rally_id: rallyId,
               section_id: sectionId,
               group_id: groupId,
-              participants,
-              submitted_by: user.email,
+              participant: {
+                participant_id: crypto.randomUUID(),
+                name: row.name,
+                ...(row.car_number ? { car_number: row.car_number } : {})
+              },
+              added_by: user.email,
               timestamp: now
             });
           }
         }
 
         closeDialog();
-        showToast(`Imported ${totalParticipants} participants into ${sectionOrder.length} sections`, 'success');
+        const suffix = totalSkipped > 0 ? `, skipped ${totalSkipped} already in roster` : '';
+        showToast(`Imported ${totalToAdd} participant${totalToAdd !== 1 ? 's' : ''}${suffix}`, 'success');
         if (onComplete) onComplete();
       } catch (e) {
         showToast(e.message, 'error');
         confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Confirm Import';
+        confirmBtn.textContent = confirmLabel;
       }
     };
   }
@@ -1003,4 +1080,123 @@ function esc(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+/**
+ * Classify file rows against existing section participants. Used to make
+ * roster imports idempotent — the same file can be uploaded repeatedly and
+ * only new participants are added.
+ *
+ * Matching strategy (skip as duplicate if either matches):
+ *   1. car_number match, section-wide (car_numbers are section-unique)
+ *   2. name match (case-insensitive), scoped to the target group
+ *
+ * @param {Array<{name, car_number?}>} rows — rows being imported
+ * @param {Object|null} existingSection — state.sections[id], or null if new
+ * @param {(row) => string|null|undefined} groupIdResolver — resolve a row's
+ *   target group_id; undefined means the group doesn't exist yet (no matches)
+ * @returns {{ toAdd: Array, skipped: Array<{row, existing}> }}
+ */
+function classifyAgainstExisting(rows, existingSection, groupIdResolver) {
+  if (!existingSection || existingSection.participants.length === 0) {
+    return { toAdd: rows.slice(), skipped: [] };
+  }
+
+  const byCar = new Map();
+  for (const p of existingSection.participants) {
+    byCar.set(String(p.car_number), p);
+  }
+
+  const byNameInGroup = new Map(); // gKey → Map(nameKey → participant)
+  for (const p of existingSection.participants) {
+    const gKey = p.group_id || '__ungrouped__';
+    if (!byNameInGroup.has(gKey)) byNameInGroup.set(gKey, new Map());
+    byNameInGroup.get(gKey).set(p.name.trim().toLowerCase(), p);
+  }
+
+  const toAdd = [];
+  const skipped = [];
+  for (const row of rows) {
+    const car = row.car_number ? String(row.car_number).trim() : null;
+    const nameKey = row.name.trim().toLowerCase();
+
+    if (car && byCar.has(car)) {
+      skipped.push({ row, existing: byCar.get(car) });
+      continue;
+    }
+
+    const rowGroupId = groupIdResolver(row);
+    const gKey = rowGroupId || '__ungrouped__';
+    const groupNames = byNameInGroup.get(gKey);
+    if (groupNames && groupNames.has(nameKey)) {
+      skipped.push({ row, existing: groupNames.get(nameKey) });
+      continue;
+    }
+
+    toAdd.push(row);
+  }
+
+  return { toAdd, skipped };
+}
+
+/**
+ * Validate car_numbers in parsed rows for a single-section/group upload.
+ * Returns an error message string or null if valid.
+ * `section` is optional; when provided, we also reject conflicts with
+ * participants in OTHER groups of the same section.
+ */
+function validateCarNumbers(rows, section, groupId) {
+  const seen = new Map();
+  for (const row of rows) {
+    if (!row.car_number) continue;
+    const key = row.car_number.trim();
+    if (!key) continue;
+    if (seen.has(key)) {
+      return `Duplicate car number "${key}" in file: ${seen.get(key)} and ${row.name}`;
+    }
+    seen.set(key, row.name);
+  }
+
+  if (section) {
+    const otherParticipants = groupId
+      ? section.participants.filter(p => p.group_id !== groupId)
+      : [];
+    for (const p of otherParticipants) {
+      if (seen.has(String(p.car_number))) {
+        return `Car number "${p.car_number}" is already assigned to ${p.name} in this section`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Validate car_numbers within a bulk import file: no section may contain two
+ * rows with the same car_number (that would be a clerical mistake in the
+ * spreadsheet). Cross-section and cross-roster conflicts are handled by the
+ * classifier at import time (via skip semantics).
+ *
+ * @param {Array<{section, group, name, car_number}>} parsedRows
+ * @returns {string|null} error message or null if valid
+ */
+function validateBulkCarNumbers(parsedRows) {
+  const bySection = new Map();
+  for (const row of parsedRows) {
+    if (!bySection.has(row.section)) bySection.set(row.section, []);
+    bySection.get(row.section).push(row);
+  }
+
+  for (const [sectionName, rows] of bySection) {
+    const seen = new Map();
+    for (const row of rows) {
+      if (!row.car_number) continue;
+      const key = row.car_number.trim();
+      if (!key) continue;
+      if (seen.has(key)) {
+        return `Duplicate car number "${key}" in section "${sectionName}": ${seen.get(key)} and ${row.name}`;
+      }
+      seen.set(key, row.name);
+    }
+  }
+  return null;
 }

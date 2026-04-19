@@ -4,7 +4,7 @@
  */
 
 import { computeCarStats } from '../scoring.js';
-import { getCompletedStarts, getStart } from '../state-manager.js';
+import { getCompletedStarts, getStart, compareCarNumbers } from '../state-manager.js';
 import { generateRallyReport, generateSectionReport, generateHeatReport, generateGroupReport } from './report.js';
 
 const backdrop = () => document.getElementById('dialog-backdrop');
@@ -100,7 +100,7 @@ export function showManualRankDialog(sectionId, heatNumber, heatLanes, ctx) {
     const usedPlaces = new Set();
 
     for (const sel of selects) {
-      const carNumber = parseInt(sel.dataset.car, 10);
+      const carNumber = sel.dataset.car;
       const val = sel.value;
       if (val === 'dnf') continue;
       const place = parseInt(val, 10);
@@ -149,7 +149,7 @@ export function showRemoveCarDialog(sectionId, section, ctx) {
   const removedSet = new Set(section.removed);
   const eligible = section.participants
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number))
-    .sort((a, b) => a.car_number - b.car_number);
+    .sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
 
   if (eligible.length === 0) {
     ctx.showToast('No cars to remove', 'warning');
@@ -194,7 +194,7 @@ export function showRemoveCarDialog(sectionId, section, ctx) {
   d.querySelector('.dialog-close').onclick = closeDialog;
   d.querySelector('[data-action="cancel"]').onclick = closeDialog;
   d.querySelector('[data-action="remove"]').onclick = async () => {
-    const carNumber = parseInt(d.querySelector('#dlg-remove-car').value, 10);
+    const carNumber = d.querySelector('#dlg-remove-car').value;
     const reason = d.querySelector('#dlg-remove-reason').value;
 
     const btn = d.querySelector('[data-action="remove"]');
@@ -273,20 +273,20 @@ export function showCorrectLanesDialog(sectionId, heatNumber, heatLanes, ctx) {
 
     for (const sel of selects) {
       const laneNum = parseInt(sel.dataset.lane, 10);
-      const carNumber = parseInt(sel.value, 10);
+      const carNumber = sel.value;
       if (usedCars.has(carNumber)) {
         errorEl.textContent = `Car #${carNumber} assigned to multiple lanes`;
         return;
       }
       usedCars.add(carNumber);
-      const car = carsInHeat.find(c => c.car_number === carNumber);
+      const car = carsInHeat.find(c => String(c.car_number) === carNumber);
       correctedLanes.push({ lane: laneNum, car_number: carNumber, name: car.name });
     }
 
     // Check if anything actually changed
     const unchanged = lanes.every(orig => {
       const corrected = correctedLanes.find(c => c.lane === orig.lane);
-      return corrected && corrected.car_number === orig.car_number;
+      return corrected && String(corrected.car_number) === String(orig.car_number);
     });
     if (unchanged) {
       errorEl.textContent = 'No changes made';

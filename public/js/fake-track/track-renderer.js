@@ -17,7 +17,13 @@ const CAR_COLORS = [
 ];
 
 function carColor(car_number) {
-  return CAR_COLORS[(car_number - 1) % CAR_COLORS.length];
+  // car_number is an opaque string — hash it to an index for stable coloring.
+  const s = String(car_number);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return CAR_COLORS[h % CAR_COLORS.length];
 }
 
 // ─── Create Track ───────────────────────────────────────────────

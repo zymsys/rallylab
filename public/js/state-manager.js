@@ -4,6 +4,29 @@
  * Shared between pre-race and race day.
  */
 
+// Car numbers are opaque string identifiers (e.g. "42", "B100"). Normalize every
+// value crossing into state so equality (Set, ===, .includes) is type-stable.
+function normalizeCarNumber(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
+function normalizeLanes(lanes) {
+  if (!Array.isArray(lanes)) return lanes;
+  return lanes.map(l => l && l.car_number != null
+    ? { ...l, car_number: normalizeCarNumber(l.car_number) }
+    : l);
+}
+
+/**
+ * Compare two car numbers using natural sort (so "B9" < "B100").
+ * Works for strings or numbers.
+ */
+export function compareCarNumbers(a, b) {
+  return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export function initialState() {
   return {
     rally_id: null,
@@ -115,17 +138,34 @@ export function applyEvent(state, event) {
       const otherParticipants = groupId
         ? section.participants.filter(p => p.group_id !== groupId)
         : [];
-      const usedNumbers = new Set(otherParticipants.map(p => p.car_number));
+      const usedNumbers = new Set(otherParticipants.map(p => String(p.car_number)));
 
-      // Assign car numbers to new participants, gap-filling
+      // Reserve any explicit car_numbers in this payload first so auto-assign
+      // avoids them. Duplicates among explicit values are resolved by letting
+      // the first occurrence win and the rest fall through to auto-assign.
+      const explicitReserved = new Set();
+      for (const p of payload.participants) {
+        const explicit = normalizeCarNumber(p.car_number);
+        if (explicit && !usedNumbers.has(explicit) && !explicitReserved.has(explicit)) {
+          explicitReserved.add(explicit);
+        }
+      }
+
       const newParticipants = payload.participants.map(p => {
-        let n = 1;
-        while (usedNumbers.has(n)) n++;
-        usedNumbers.add(n);
+        let carNumber = normalizeCarNumber(p.car_number);
+        // Honor the explicit value only if still available; otherwise auto-assign.
+        if (!carNumber || !explicitReserved.has(carNumber) || usedNumbers.has(carNumber)) {
+          let n = 1;
+          while (usedNumbers.has(String(n)) || explicitReserved.has(String(n))) n++;
+          carNumber = String(n);
+        } else {
+          explicitReserved.delete(carNumber);
+        }
+        usedNumbers.add(carNumber);
         return {
           participant_id: p.participant_id,
           name: p.name,
-          car_number: n,
+          car_number: carNumber,
           group_id: groupId || null
         };
       });
@@ -167,10 +207,15 @@ export function applyEvent(state, event) {
     case 'ParticipantAdded': {
       let newState = state;
 
+      const explicit = normalizeCarNumber(payload.participant.car_number);
+
       // Update pre-race sections
       const section = state.sections[payload.section_id];
       if (section) {
-        const carNumber = nextAvailableCarNumber(section);
+        const used = new Set(section.participants.map(p => String(p.car_number)));
+        const carNumber = (explicit && !used.has(explicit))
+          ? explicit
+          : nextAvailableCarNumber(section);
         newState = {
           ...newState,
           sections: {
@@ -194,7 +239,10 @@ export function applyEvent(state, event) {
       // Update race_day sections (late registration)
       const rdSec = state.race_day.sections[payload.section_id];
       if (rdSec) {
-        const rdCarNumber = nextAvailableCarNumber(rdSec);
+        const rdUsed = new Set(rdSec.participants.map(p => String(p.car_number)));
+        const rdCarNumber = (explicit && !rdUsed.has(explicit))
+          ? explicit
+          : nextAvailableCarNumber(rdSec);
         newState = {
           ...newState,
           race_day: {
@@ -244,7 +292,8 @@ export function applyEvent(state, event) {
       const rd = state.race_day;
       const sec = rd.sections[payload.section_id];
       if (!sec) return state;
-      if (sec.arrived.includes(payload.car_number)) return state;
+      const cn = normalizeCarNumber(payload.car_number);
+      if (cn == null || sec.arrived.includes(cn)) return state;
       return {
         ...state,
         race_day: {
@@ -253,7 +302,7 @@ export function applyEvent(state, event) {
             ...rd.sections,
             [payload.section_id]: {
               ...sec,
-              arrived: [...sec.arrived, payload.car_number]
+              arrived: [...sec.arrived, cn]
             }
           }
         }
@@ -335,7 +384,7 @@ export function applyEvent(state, event) {
         : payload.times_ms;
       const mergedLanes = isPartialMerge
         ? existing.lanes
-        : (payload.lanes || []);
+        : normalizeLanes(payload.lanes || []);
       return {
         ...state,
         race_day: {
@@ -373,6 +422,9 @@ export function applyEvent(state, event) {
       const sn = payload.start_number || activeStartNumber(sec);
       const start = sec.starts[sn];
       if (!start) return state;
+      const normalizedRankings = Array.isArray(payload.rankings)
+        ? payload.rankings.map(r => ({ ...r, car_number: normalizeCarNumber(r.car_number) }))
+        : payload.rankings;
       return {
         ...state,
         race_day: {
@@ -390,8 +442,8 @@ export function applyEvent(state, event) {
                     [payload.heat_number]: {
                       type: 'ResultManuallyEntered',
                       heat_number: payload.heat_number,
-                      lanes: payload.lanes || [],
-                      rankings: payload.rankings,
+                      lanes: normalizeLanes(payload.lanes || []),
+                      rankings: normalizedRankings,
                       timestamp: payload.timestamp
                     }
                   }
@@ -441,7 +493,8 @@ export function applyEvent(state, event) {
       const sn = payload.start_number || activeStartNumber(sec);
       const start = sec.starts[sn];
       if (!start) return state;
-      if (start.removed.includes(payload.car_number)) return state;
+      const cn = normalizeCarNumber(payload.car_number);
+      if (cn == null || start.removed.includes(cn)) return state;
       return {
         ...state,
         race_day: {
@@ -454,7 +507,7 @@ export function applyEvent(state, event) {
                 ...sec.starts,
                 [sn]: {
                   ...start,
-                  removed: [...start.removed, payload.car_number]
+                  removed: [...start.removed, cn]
                 }
               }
             }
@@ -513,7 +566,7 @@ export function applyEvent(state, event) {
                   ...start,
                   lane_corrections: {
                     ...start.lane_corrections,
-                    [payload.heat_number]: payload.corrected_lanes
+                    [payload.heat_number]: normalizeLanes(payload.corrected_lanes)
                   }
                 }
               }
@@ -550,14 +603,16 @@ export function rebuildState(events) {
 }
 
 /**
- * Find the lowest positive integer not currently used by any participant
- * in the given section. This fills gaps left by removed participants.
+ * Find the lowest positive integer (as a string) not currently used by any
+ * participant in the given section. Fills gaps left by removed participants.
+ * Returned as a string because car_numbers are opaque identifiers throughout
+ * the system (registrars may assign custom labels like "B100").
  */
 export function nextAvailableCarNumber(section) {
-  const used = new Set(section.participants.map(p => p.car_number));
+  const used = new Set(section.participants.map(p => String(p.car_number)));
   let n = 1;
-  while (used.has(n)) n++;
-  return n;
+  while (used.has(String(n))) n++;
+  return String(n);
 }
 
 /**

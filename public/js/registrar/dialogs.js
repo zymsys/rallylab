@@ -84,8 +84,9 @@ export function showAddParticipantDialog(sectionId, section, ctx, onComplete) {
         <input type="text" id="dlg-participant-name" class="form-input" placeholder="Participant name" autocomplete="off">
       </div>
       <div class="form-group">
-        <label>Car Number</label>
-        <div class="auto-number">#${nextCarNum} (auto-assigned)</div>
+        <label for="dlg-participant-car-number">Car Number <span class="form-hint" style="font-weight:normal">(optional)</span></label>
+        <input type="text" id="dlg-participant-car-number" class="form-input" placeholder="${esc(nextCarNum)} (auto-assigned)" autocomplete="off" maxlength="20">
+        <p class="form-hint">Leave blank for auto-assignment, or enter a specific label (e.g. <code>B100</code>).</p>
       </div>
       <div id="dlg-add-error" class="form-error"></div>
     </div>
@@ -100,25 +101,39 @@ export function showAddParticipantDialog(sectionId, section, ctx, onComplete) {
   d.querySelector('[data-action="cancel"]').onclick = closeDialog;
 
   const nameInput = d.querySelector('#dlg-participant-name');
+  const carInput = d.querySelector('#dlg-participant-car-number');
 
-  // Submit on Enter
-  nameInput.addEventListener('keydown', (e) => {
+  // Submit on Enter in either input
+  const onEnter = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       d.querySelector('[data-action="submit"]').click();
     }
-  });
+  };
+  nameInput.addEventListener('keydown', onEnter);
+  carInput.addEventListener('keydown', onEnter);
 
   d.querySelector('[data-action="submit"]').onclick = async () => {
     const errorEl = d.querySelector('#dlg-add-error');
     errorEl.textContent = '';
 
     const name = nameInput.value.trim();
+    const carNumberRaw = carInput.value.trim();
     if (!name) {
       errorEl.textContent = 'Name is required';
       nameInput.classList.add('error');
       nameInput.focus();
       return;
+    }
+
+    if (carNumberRaw) {
+      const existing = section.participants.find(p => String(p.car_number) === carNumberRaw);
+      if (existing) {
+        errorEl.textContent = `Car #${carNumberRaw} is already assigned to ${existing.name}`;
+        carInput.classList.add('error');
+        carInput.focus();
+        return;
+      }
     }
 
     const btn = d.querySelector('[data-action="submit"]');
@@ -128,11 +143,15 @@ export function showAddParticipantDialog(sectionId, section, ctx, onComplete) {
     try {
       const participantId = crypto.randomUUID();
 
-      // Emit ParticipantAdded
+      // Emit ParticipantAdded — honor explicit car_number when provided
       const state = await ctx.appendEvent({
         type: 'ParticipantAdded',
         section_id: sectionId,
-        participant: { participant_id: participantId, name },
+        participant: {
+          participant_id: participantId,
+          name,
+          ...(carNumberRaw ? { car_number: carNumberRaw } : {})
+        },
         timestamp: Date.now()
       });
 

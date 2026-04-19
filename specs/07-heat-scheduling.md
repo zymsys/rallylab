@@ -27,14 +27,16 @@ The scheduler runs as derived state — it is computed from the event log, never
 ```javascript
 {
   participants: [
-    { car_number: 1, name: "Billy" },
-    { car_number: 2, name: "Sarah" },
+    { car_number: "1", name: "Billy" },
+    { car_number: "B100", name: "Sarah" },
     // ... only participants with CarArrived events
   ],
   available_lanes: [1, 2, 3, 4, 5, 6],  // from SectionStarted / LanesChanged
   results: []     // empty for initial schedule
 }
 ```
+
+`car_number` is an opaque string (auto-assigned decimal strings by default, or registrar-supplied labels like `"B100"`). Tie-breaks and display ordering use `compareCarNumbers` (natural sort, so `"B9"` < `"B100"`).
 
 `available_lanes` is an array of physical lane numbers. It defaults to all lanes reported by the Track Controller `info` command, but may be a subset (e.g., `[1, 3, 5]` for Scout Trucks, or `[1, 3, 4, 5, 6]` after a lane failure). The scheduler assigns participants to these specific lane numbers — not to sequential 1..N.
 

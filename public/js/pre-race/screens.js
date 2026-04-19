@@ -6,6 +6,7 @@
 import { isDemoMode, setMode, SUPABASE_CONFIGURED } from '../config.js';
 import { signIn, getUser } from '../supabase.js';
 import { loadRallyState, appendEvent, exportRosterPackage, isOrganizer, getAccessibleRallyIds } from './commands.js';
+import { compareCarNumbers } from '../state-manager.js';
 import {
   showCreateRallyDialog,
   showCreateFromExistingDialog,
@@ -658,7 +659,7 @@ function renderFilteredRoster(container, params, state, section, groupId, canEdi
     return;
   }
 
-  const sorted = [...participants].sort((a, b) => a.car_number - b.car_number);
+  const sorted = [...participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
   renderRosterTable(container, sorted, canEdit, params, section);
 
   const count = document.createElement('p');
@@ -701,7 +702,7 @@ function renderGroupedRoster(container, params, state, section, canEdit) {
   const tbody = wrap.querySelector('#roster-body');
 
   for (const [gid, participants] of byGroup) {
-    const sorted = [...participants].sort((a, b) => a.car_number - b.car_number);
+    const sorted = [...participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
     const groupName = gid === '__ungrouped__' ? 'Ungrouped' : (state.groups[gid]?.group_name || 'Unknown Group');
 
     // Group subheading row

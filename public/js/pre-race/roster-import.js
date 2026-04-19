@@ -4,9 +4,15 @@
  */
 
 const HEADER_KEYWORDS = ['name', 'participant', 'scout', 'youth', 'child', 'student', 'first', 'last'];
+const CAR_NUMBER_KEYWORDS = [
+  'car number', 'car #', 'car no', 'car no.',
+  'race number', 'race #', 'race no', 'race no.',
+  'number', 'num', 'no', 'no.', '#'
+];
 
 /**
- * Parse a roster file and return an array of participant name strings.
+ * Parse a roster file and return participant objects: [{ name, car_number }].
+ * car_number is a string (may be null if the file has no such column).
  * Supports CSV and XLSX/XLS.
  */
 export async function parseRosterFile(file) {
@@ -31,7 +37,7 @@ function parseCSV(text) {
   if (lines.length === 0) return [];
 
   const rows = lines.map(parseCSVLine);
-  return extractNames(rows);
+  return extractParticipants(rows);
 }
 
 /**
@@ -85,17 +91,18 @@ async function parseExcel(file) {
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-  return extractNames(rows.map(row => row.map(String)));
+  return extractParticipants(rows.map(row => row.map(String)));
 }
 
-// ─── Name Extraction ───────────────────────────────────────────────
+// ─── Participant Extraction ────────────────────────────────────────
 
 /**
- * Given a 2D array of strings, find the name column(s) and extract names.
- * Handles: single "Name" column, split "First Name"/"Last Name" columns,
- * and headerless files where the first column is assumed to be names.
+ * Given a 2D array of strings, find the name and optional car-number columns
+ * and return [{ name, car_number }]. Handles: single "Name" column, split
+ * "First Name"/"Last Name" columns, and headerless files where the first
+ * column is assumed to be names (no car_numbers in that case).
  */
-function extractNames(rows) {
+function extractParticipants(rows) {
   if (rows.length === 0) return [];
 
   const firstRow = rows[0];
@@ -103,25 +110,42 @@ function extractNames(rows) {
 
   let dataRows;
   let nameExtractor;
+  let carNumberIdx = null;
 
   if (headerInfo) {
     dataRows = rows.slice(1);
     nameExtractor = headerInfo.extractor;
+    carNumberIdx = detectCarNumberColumn(firstRow);
   } else {
     // No header detected — assume first column is full names
     dataRows = rows;
     nameExtractor = (row) => row[0] || '';
   }
 
-  const names = [];
+  const results = [];
   for (const row of dataRows) {
     const name = nameExtractor(row).trim();
-    if (name && !isHeaderKeyword(name)) {
-      names.push(name);
-    }
+    if (!name || isHeaderKeyword(name)) continue;
+    const car_number = carNumberIdx != null
+      ? (String(row[carNumberIdx] || '').trim() || null)
+      : null;
+    results.push({ name, car_number });
   }
 
-  return names;
+  return results;
+}
+
+/**
+ * Find the column index that holds car/race numbers, or null if no such
+ * column exists in the header row.
+ */
+function detectCarNumberColumn(row) {
+  const lower = row.map(cell => String(cell).toLowerCase().trim());
+  for (const kw of CAR_NUMBER_KEYWORDS) {
+    const idx = lower.findIndex(h => h === kw);
+    if (idx !== -1) return idx;
+  }
+  return null;
 }
 
 /**
@@ -170,8 +194,9 @@ const SECTION_KEYWORDS = ['section', 'division', 'class'];
 const GROUP_KEYWORDS = ['group', 'pack', 'troop', 'unit', 'den', 'team'];
 
 /**
- * Parse a roster file with Section, Name, and optional Group columns.
- * Returns [{ section: string, group: string|null, name: string }].
+ * Parse a roster file with Section, Name, optional Group and Car Number columns.
+ * Returns [{ section, group, name, car_number }]. car_number is preserved
+ * verbatim from the source (e.g. "B100") or null if the file has no such column.
  */
 export async function parseBulkRosterFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
@@ -210,19 +235,27 @@ function detectBulkHeaders(row) {
   // Group column (optional)
   const groupIdx = lower.findIndex(h => GROUP_KEYWORDS.includes(h));
 
+  // Car number column (optional)
+  const carNumberIdx = detectCarNumberColumn(row);
+
   // Name column — reuse existing header detection, but exclude section/group columns
   const nameInfo = detectHeaders(row);
   if (!nameInfo) {
     throw new Error('No name column found. Include a "Name" or "First Name"/"Last Name" column.');
   }
 
-  return { sectionIdx, groupIdx: groupIdx === -1 ? null : groupIdx, nameExtractor: nameInfo.extractor };
+  return {
+    sectionIdx,
+    groupIdx: groupIdx === -1 ? null : groupIdx,
+    carNumberIdx,
+    nameExtractor: nameInfo.extractor
+  };
 }
 
 function extractBulkRows(rows) {
   if (rows.length < 2) return []; // need header + at least one data row
 
-  const { sectionIdx, groupIdx, nameExtractor } = detectBulkHeaders(rows[0]);
+  const { sectionIdx, groupIdx, carNumberIdx, nameExtractor } = detectBulkHeaders(rows[0]);
   const results = [];
 
   for (let i = 1; i < rows.length; i++) {
@@ -234,7 +267,10 @@ function extractBulkRows(rows) {
     if (!name || isHeaderKeyword(name)) continue;
 
     const group = groupIdx !== null ? (row[groupIdx] || '').trim() || null : null;
-    results.push({ section, group, name });
+    const car_number = carNumberIdx != null
+      ? (String(row[carNumberIdx] || '').trim() || null)
+      : null;
+    results.push({ section, group, name, car_number });
   }
 
   return results;

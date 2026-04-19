@@ -71,7 +71,7 @@ describe('SectionCreated + RosterUpdated populates race_day', () => {
     const alice = s.race_day.sections.s1.participants[0];
     assert.strictEqual(alice.participant_id, 'p1');
     assert.strictEqual(alice.name, 'Alice');
-    assert.strictEqual(alice.car_number, 1);
+    assert.strictEqual(alice.car_number, '1');
   });
 
   it('has no starts initially', () => {
@@ -107,34 +107,34 @@ describe('CarArrived', () => {
   it('adds car_number to arrived list', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 }
+      { type: 'CarArrived', section_id: 's1', car_number: '1' }
     ]);
-    assert.deepStrictEqual(s.race_day.sections.s1.arrived, [1]);
+    assert.deepStrictEqual(s.race_day.sections.s1.arrived, ['1']);
   });
 
   it('accumulates multiple arrivals', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 },
-      { type: 'CarArrived', section_id: 's1', car_number: 2 },
-      { type: 'CarArrived', section_id: 's1', car_number: 3 }
+      { type: 'CarArrived', section_id: 's1', car_number: '1' },
+      { type: 'CarArrived', section_id: 's1', car_number: '2' },
+      { type: 'CarArrived', section_id: 's1', car_number: '3' }
     ]);
-    assert.deepStrictEqual(s.race_day.sections.s1.arrived, [1, 2, 3]);
+    assert.deepStrictEqual(s.race_day.sections.s1.arrived, ['1', '2', '3']);
   });
 
   it('ignores duplicate arrivals', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 },
-      { type: 'CarArrived', section_id: 's1', car_number: 1 }
+      { type: 'CarArrived', section_id: 's1', car_number: '1' },
+      { type: 'CarArrived', section_id: 's1', car_number: '1' }
     ]);
-    assert.deepStrictEqual(s.race_day.sections.s1.arrived, [1]);
+    assert.deepStrictEqual(s.race_day.sections.s1.arrived, ['1']);
   });
 
   it('ignores unknown section', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 'unknown', car_number: 1 }
+      { type: 'CarArrived', section_id: 'unknown', car_number: '1' }
     ]);
     assert.strictEqual(s.race_day.sections.unknown, undefined);
   });
@@ -214,8 +214,8 @@ describe('LanesChanged', () => {
 describe('RaceCompleted', () => {
   it('stores result keyed by heat_number with lanes', () => {
     const lanes = [
-      { lane: 1, car_number: 1, name: 'Alice' },
-      { lane: 2, car_number: 2, name: 'Bob' }
+      { lane: 1, car_number: '1', name: 'Alice' },
+      { lane: 2, car_number: '2', name: 'Bob' }
     ];
     const s = buildState([
       ...baseRosterPayloads(),
@@ -245,7 +245,7 @@ describe('RaceCompleted', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       },
@@ -253,7 +253,7 @@ describe('RaceCompleted', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2600 },
         timestamp: 2000
       }
@@ -269,12 +269,12 @@ describe('RaceCompleted', () => {
 describe('ResultManuallyEntered', () => {
   it('stores manual ranking result with lanes', () => {
     const lanes = [
-      { lane: 1, car_number: 1, name: 'Alice' },
-      { lane: 2, car_number: 2, name: 'Bob' }
+      { lane: 1, car_number: '1', name: 'Alice' },
+      { lane: 2, car_number: '2', name: 'Bob' }
     ];
     const rankings = [
-      { car_number: 1, place: 1 },
-      { car_number: 2, place: 2 }
+      { car_number: '1', place: 1 },
+      { car_number: '2', place: 2 }
     ];
     const s = buildState([
       ...baseRosterPayloads(),
@@ -295,7 +295,7 @@ describe('ResultManuallyEntered', () => {
   });
 
   it('supersedes RaceCompleted for same heat', () => {
-    const lanes = [{ lane: 1, car_number: 1, name: 'Alice' }];
+    const lanes = [{ lane: 1, car_number: '1', name: 'Alice' }];
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1' },
@@ -312,7 +312,7 @@ describe('ResultManuallyEntered', () => {
         section_id: 's1',
         heat_number: 1,
         lanes,
-        rankings: [{ car_number: 1, place: 1 }],
+        rankings: [{ car_number: '1', place: 1 }],
         timestamp: 2000
       }
     ]);
@@ -325,7 +325,7 @@ describe('ResultManuallyEntered', () => {
 
 describe('RerunDeclared', () => {
   it('increments rerun count and clears accepted result', () => {
-    const lanes = [{ lane: 1, car_number: 1, name: 'Alice' }];
+    const lanes = [{ lane: 1, car_number: '1', name: 'Alice' }];
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1' },
@@ -345,7 +345,7 @@ describe('RerunDeclared', () => {
   });
 
   it('increments rerun count on multiple reruns', () => {
-    const lanes = [{ lane: 1, car_number: 1, name: 'Alice' }];
+    const lanes = [{ lane: 1, car_number: '1', name: 'Alice' }];
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1' },
@@ -381,19 +381,19 @@ describe('CarRemoved', () => {
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1' },
-      { type: 'CarRemoved', section_id: 's1', car_number: 2 }
+      { type: 'CarRemoved', section_id: 's1', car_number: '2' }
     ]);
-    assert.deepStrictEqual(s.race_day.sections.s1.starts[1].removed, [2]);
+    assert.deepStrictEqual(s.race_day.sections.s1.starts[1].removed, ['2']);
   });
 
   it('ignores duplicate removals', () => {
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1' },
-      { type: 'CarRemoved', section_id: 's1', car_number: 2 },
-      { type: 'CarRemoved', section_id: 's1', car_number: 2 }
+      { type: 'CarRemoved', section_id: 's1', car_number: '2' },
+      { type: 'CarRemoved', section_id: 's1', car_number: '2' }
     ]);
-    assert.deepStrictEqual(s.race_day.sections.s1.starts[1].removed, [2]);
+    assert.deepStrictEqual(s.race_day.sections.s1.starts[1].removed, ['2']);
   });
 });
 
@@ -426,7 +426,7 @@ describe('deriveRaceDayPhase', () => {
   it('returns check-in before section started', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 }
+      { type: 'CarArrived', section_id: 's1', car_number: '1' }
     ]);
     assert.strictEqual(deriveRaceDayPhase(s, 's1'), 'check-in');
   });
@@ -447,7 +447,7 @@ describe('deriveRaceDayPhase', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       }
@@ -463,7 +463,7 @@ describe('deriveRaceDayPhase', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       },
@@ -527,7 +527,7 @@ describe('ParticipantAdded in race_day context', () => {
     const dave = rdSec.participants.find(p => p.participant_id === 'p4');
     assert.ok(dave);
     assert.strictEqual(dave.name, 'Dave');
-    assert.strictEqual(dave.car_number, 4); // next after 1, 2, 3
+    assert.strictEqual(dave.car_number, '4'); // next after 1, 2, 3
   });
 
   it('fills gaps in pre-race car numbers after removal', () => {
@@ -550,17 +550,17 @@ describe('ParticipantAdded in race_day context', () => {
     ]);
     // Pre-race fills the gap (Alice removed, car 1 free)
     const davePreRace = s.sections.s1.participants.find(p => p.participant_id === 'p4');
-    assert.strictEqual(davePreRace.car_number, 1);
+    assert.strictEqual(davePreRace.car_number, '1');
     // Race day has no gap (ParticipantRemoved doesn't affect race_day)
     const daveRaceDay = s.race_day.sections.s1.participants.find(p => p.participant_id === 'p4');
-    assert.strictEqual(daveRaceDay.car_number, 3);
+    assert.strictEqual(daveRaceDay.car_number, '3');
   });
 
   it('full late-registration flow: ParticipantAdded + CarArrived', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 },
-      { type: 'CarArrived', section_id: 's1', car_number: 2 },
+      { type: 'CarArrived', section_id: 's1', car_number: '1' },
+      { type: 'CarArrived', section_id: 's1', car_number: '2' },
       { type: 'SectionStarted', section_id: 's1' },
       // Late registration
       {
@@ -568,14 +568,14 @@ describe('ParticipantAdded in race_day context', () => {
         section_id: 's1',
         participant: { participant_id: 'p4', name: 'Dave' }
       },
-      { type: 'CarArrived', section_id: 's1', car_number: 4 }
+      { type: 'CarArrived', section_id: 's1', car_number: '4' }
     ]);
     const rdSec = s.race_day.sections.s1;
     assert.strictEqual(rdSec.participants.length, 4);
-    assert.deepStrictEqual(rdSec.arrived, [1, 2, 4]);
+    assert.deepStrictEqual(rdSec.arrived, ['1', '2', '4']);
     assert.strictEqual(rdSec.starts[1].started, true);
     const dave = rdSec.participants.find(p => p.participant_id === 'p4');
-    assert.strictEqual(dave.car_number, 4);
+    assert.strictEqual(dave.car_number, '4');
     assert.strictEqual(dave.name, 'Dave');
   });
 
@@ -601,12 +601,12 @@ describe('ParticipantAdded in race_day context', () => {
 describe('ResultCorrected', () => {
   it('stores corrected lanes in lane_corrections', () => {
     const originalLanes = [
-      { lane: 1, car_number: 1, name: 'Alice' },
-      { lane: 2, car_number: 2, name: 'Bob' }
+      { lane: 1, car_number: '1', name: 'Alice' },
+      { lane: 2, car_number: '2', name: 'Bob' }
     ];
     const correctedLanes = [
-      { lane: 1, car_number: 2, name: 'Bob' },
-      { lane: 2, car_number: 1, name: 'Alice' }
+      { lane: 1, car_number: '2', name: 'Bob' },
+      { lane: 2, car_number: '1', name: 'Alice' }
     ];
     const s = buildState([
       ...baseRosterPayloads(),
@@ -635,8 +635,8 @@ describe('ResultCorrected', () => {
 
   it('does not affect results/times', () => {
     const lanes = [
-      { lane: 1, car_number: 1, name: 'Alice' },
-      { lane: 2, car_number: 2, name: 'Bob' }
+      { lane: 1, car_number: '1', name: 'Alice' },
+      { lane: 2, car_number: '2', name: 'Bob' }
     ];
     const s = buildState([
       ...baseRosterPayloads(),
@@ -653,7 +653,7 @@ describe('ResultCorrected', () => {
         type: 'ResultCorrected',
         section_id: 's1',
         heat_number: 1,
-        corrected_lanes: [{ lane: 1, car_number: 2, name: 'Bob' }, { lane: 2, car_number: 1, name: 'Alice' }]
+        corrected_lanes: [{ lane: 1, car_number: '2', name: 'Bob' }, { lane: 2, car_number: '1', name: 'Alice' }]
       }
     ]);
     const result = s.race_day.sections.s1.starts[1].results[1];
@@ -669,7 +669,7 @@ describe('ResultCorrected', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       },
@@ -677,7 +677,7 @@ describe('ResultCorrected', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 2,
-        lanes: [{ lane: 1, car_number: 2, name: 'Bob' }],
+        lanes: [{ lane: 1, car_number: '2', name: 'Bob' }],
         times_ms: { '1': 2600 },
         timestamp: 2000
       },
@@ -685,12 +685,12 @@ describe('ResultCorrected', () => {
         type: 'ResultCorrected',
         section_id: 's1',
         heat_number: 1,
-        corrected_lanes: [{ lane: 1, car_number: 3, name: 'Carol' }]
+        corrected_lanes: [{ lane: 1, car_number: '3', name: 'Carol' }]
       }
     ]);
     const start = s.race_day.sections.s1.starts[1];
     // Heat 2 result lanes unchanged
-    assert.deepStrictEqual(start.results[2].lanes, [{ lane: 1, car_number: 2, name: 'Bob' }]);
+    assert.deepStrictEqual(start.results[2].lanes, [{ lane: 1, car_number: '2', name: 'Bob' }]);
     // No lane_corrections for heat 2
     assert.strictEqual(start.lane_corrections[2], undefined);
   });
@@ -703,7 +703,7 @@ describe('ResultCorrected', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }, { lane: 2, car_number: 2, name: 'Bob' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }, { lane: 2, car_number: '2', name: 'Bob' }],
         times_ms: { '1': 2500, '2': 2700 },
         timestamp: 1000
       },
@@ -711,16 +711,16 @@ describe('ResultCorrected', () => {
         type: 'ResultCorrected',
         section_id: 's1',
         heat_number: 1,
-        corrected_lanes: [{ lane: 1, car_number: 2, name: 'Bob' }, { lane: 2, car_number: 1, name: 'Alice' }]
+        corrected_lanes: [{ lane: 1, car_number: '2', name: 'Bob' }, { lane: 2, car_number: '1', name: 'Alice' }]
       },
       {
         type: 'ResultCorrected',
         section_id: 's1',
         heat_number: 1,
-        corrected_lanes: [{ lane: 1, car_number: 3, name: 'Carol' }, { lane: 2, car_number: 1, name: 'Alice' }]
+        corrected_lanes: [{ lane: 1, car_number: '3', name: 'Carol' }, { lane: 2, car_number: '1', name: 'Alice' }]
       }
     ]);
-    assert.strictEqual(s.race_day.sections.s1.starts[1].lane_corrections[1][0].car_number, 3);
+    assert.strictEqual(s.race_day.sections.s1.starts[1].lane_corrections[1][0].car_number, '3');
   });
 
   it('ignores unknown section', () => {
@@ -744,12 +744,12 @@ describe('Integration: pre-race + race day coexistence', () => {
     const s = buildState([
       { type: 'RallyCreated', rally_id: 'e1', rally_name: 'Rally', rally_date: '2026-03-15', created_by: 'org@x.com' },
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 }
+      { type: 'CarArrived', section_id: 's1', car_number: '1' }
     ]);
     assert.strictEqual(s.rally_name, 'Rally');
     assert.strictEqual(s.sections.s1.section_name, 'Kub Kars');
     assert.strictEqual(s.race_day.sections.s1.section_name, 'Kub Kars');
-    assert.deepStrictEqual(s.race_day.sections.s1.arrived, [1]);
+    assert.deepStrictEqual(s.race_day.sections.s1.arrived, ['1']);
   });
 });
 
@@ -780,7 +780,7 @@ describe('Multiple starts per section', () => {
         section_id: 's1',
         start_number: 1,
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       },
@@ -791,7 +791,7 @@ describe('Multiple starts per section', () => {
         section_id: 's1',
         start_number: 2,
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2600 },
         timestamp: 2000
       }
@@ -807,26 +807,26 @@ describe('Multiple starts per section', () => {
     const s = buildState([
       ...baseRosterPayloads(),
       { type: 'SectionStarted', section_id: 's1', start_number: 1 },
-      { type: 'CarRemoved', section_id: 's1', start_number: 1, car_number: 2 },
+      { type: 'CarRemoved', section_id: 's1', start_number: 1, car_number: '2' },
       { type: 'SectionCompleted', section_id: 's1', start_number: 1 },
       { type: 'SectionStarted', section_id: 's1', start_number: 2 }
     ]);
     const sec = s.race_day.sections.s1;
-    assert.deepStrictEqual(sec.starts[1].removed, [2]);
+    assert.deepStrictEqual(sec.starts[1].removed, ['2']);
     assert.deepStrictEqual(sec.starts[2].removed, []);
   });
 
   it('arrived is section-level, shared across starts', () => {
     const s = buildState([
       ...baseRosterPayloads(),
-      { type: 'CarArrived', section_id: 's1', car_number: 1 },
+      { type: 'CarArrived', section_id: 's1', car_number: '1' },
       { type: 'SectionStarted', section_id: 's1', start_number: 1 },
       { type: 'SectionCompleted', section_id: 's1', start_number: 1 },
-      { type: 'CarArrived', section_id: 's1', car_number: 2 },
+      { type: 'CarArrived', section_id: 's1', car_number: '2' },
       { type: 'SectionStarted', section_id: 's1', start_number: 2 }
     ]);
     const sec = s.race_day.sections.s1;
-    assert.deepStrictEqual(sec.arrived, [1, 2]);
+    assert.deepStrictEqual(sec.arrived, ['1', '2']);
   });
 
   it('getActiveStart returns the non-completed start', () => {
@@ -876,7 +876,7 @@ describe('Multiple starts per section', () => {
         section_id: 's1',
         start_number: 1,
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       }
@@ -907,7 +907,7 @@ describe('Multiple starts per section', () => {
         type: 'RaceCompleted',
         section_id: 's1',
         heat_number: 1,
-        lanes: [{ lane: 1, car_number: 1, name: 'Alice' }],
+        lanes: [{ lane: 1, car_number: '1', name: 'Alice' }],
         times_ms: { '1': 2500 },
         timestamp: 1000
       },

@@ -6,6 +6,8 @@
  * See specs/07-heat-scheduling.md for algorithm specification.
  */
 
+import { compareCarNumbers } from './state-manager.js';
+
 // ─── Public API ──────────────────────────────────────────────────────
 
 /**
@@ -316,7 +318,7 @@ function selectCarsForHeat(participants, heatsRun, maxCars) {
   const sorted = [...participants].sort((a, b) => {
     const diff = (heatsRun[a.car_number] || 0) - (heatsRun[b.car_number] || 0);
     if (diff !== 0) return diff;
-    return a.car_number - b.car_number;
+    return compareCarNumbers(a.car_number, b.car_number);
   });
 
   return sorted.slice(0, maxCars);
@@ -487,7 +489,7 @@ export function groupBySpeed(participants, results, laneCount) {
   const sorted = [...participants].sort((a, b) => {
     const diff = averages[a.car_number] - averages[b.car_number];
     if (diff !== 0) return diff;
-    return a.car_number - b.car_number;
+    return compareCarNumbers(a.car_number, b.car_number);
   });
 
   const groups = [];

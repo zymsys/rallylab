@@ -395,13 +395,13 @@ Car numbers are derived by the state manager when replaying events (sequential a
 ### 5.8 Registrar: Add / Remove Participant
 
 ```javascript
-// Add
+// Add — car_number is optional on participant. Omit to auto-assign;
+// supply to preserve a literal label (e.g. "B115" from a paper roster).
 await appendEvent(supabase, {
   type: 'ParticipantAdded',
   rally_id: rallyId,
   section_id: sectionId,
   participant: { participant_id: crypto.randomUUID(), name: 'Tommy Rodriguez' },
-  car_number: nextAvailableCarNumber,  // computed from current derived state
   added_by: user.email,
   timestamp: Date.now()
 });
@@ -464,15 +464,15 @@ The Organizer can export the derived roster as a JSON file before race day:
       "section_id": "uuid",
       "section_name": "Cubs",
       "participants": [
-        { "participant_id": "uuid", "name": "Billy Thompson", "car_number": 1 },
-        { "participant_id": "uuid", "name": "Sarah Chen", "car_number": 2 }
+        { "participant_id": "uuid", "name": "Billy Thompson", "car_number": "1" },
+        { "participant_id": "uuid", "name": "Sarah Chen", "car_number": "B100" }
       ]
     }
   ]
 }
 ```
 
-Car numbers restart at 1 per Section. The Race Controller uses `(section_id, car_number)` as the unique identifier.
+Car numbers are unique within a Section. Auto-assigned values are decimal strings (`"1"`, `"2"`, …) that restart per Section; registrar-supplied labels (e.g. `"B100"`) are preserved verbatim. The Race Controller uses `(section_id, car_number)` as the unique identifier.
 
 ---
 

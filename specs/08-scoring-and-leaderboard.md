@@ -13,6 +13,8 @@ Scoring determines participant rankings within a Section based on race results. 
 
 **Average time across all accepted heats.** Lower average = higher rank.
 
+Throughout this spec, `car_number` is an opaque string identifier (auto-assigned decimal strings by default, or registrar-supplied labels like `"B100"`). It is used as an object key and equality target; when sorting for display, use `compareCarNumbers` (natural sort) rather than numeric subtraction.
+
 ---
 
 ## 2. Accepted Results

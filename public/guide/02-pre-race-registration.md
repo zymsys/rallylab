@@ -52,11 +52,21 @@ Groups represent Scout troops or packs (e.g., "1st Newmarket", "2nd Aurora"). Gr
 
 Upload participants from a CSV or Excel spreadsheet. The system automatically detects column mappings for participant names and group assignments.
 
+**Imports are additive.** Re-uploading the same file (with a few new rows added) only adds the new participants — anyone already in the roster is skipped. Existing car numbers, check-in status, and participant IDs are preserved. A volunteer can maintain a single spreadsheet and re-import it any time without creating duplicates.
+
+**Duplicate detection matches by:**
+- **Car Number** — if the file row's car number matches an existing participant anywhere in the section, the row is skipped.
+- **Name** — within the same group, a case-insensitive name match counts as a duplicate.
+
+Include a **Car Number** column (or **Race Number** / **#**) if you want specific numbers preserved — the imported value is used verbatim, so labels like `B100` or `A-17` are kept as-is. Without such a column, car numbers are auto-assigned as `1`, `2`, `3`, … gap-filling around any existing participants in the section.
+
+The preview shows how many rows will be added and how many will be skipped, with a status badge next to each name.
+
 ![Upload Roster Dialog](images/pre-race-dlg-upload-roster.png)
 
 ## 2.10 Adding a Participant
 
-Add individual participants manually. A car number is automatically assigned based on the next available number in the section.
+Add individual participants manually. Leave the Car Number field blank and one will be auto-assigned based on the next available number in the section. To preserve a label that matches the physical car (e.g. `B100`), enter it in the Car Number field — the value is stored verbatim. The dialog flags numbers already in use before you submit.
 
 ![Add Participant Dialog](images/pre-race-dlg-add-participant.png)
 
