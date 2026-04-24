@@ -10,7 +10,7 @@
  */
 
 import { computeLeaderboard, computeLaneStats, computeCarStats } from '../scoring.js';
-import { flattenStart, compareCarNumbers } from '../state-manager.js';
+import { flattenStart, compareCarNumbers, getCompletedStarts } from '../state-manager.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -195,6 +195,104 @@ export function exportSectionXlsx(state, section, start) {
   // ── Download ──────────────────────────────────────────────────
 
   const filename = `${safeFilename(section.section_name)}-results.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+/**
+ * Export a single heat as an .xlsx workbook.
+ * Sheet 1: Heat Result — lane-by-lane results with metadata
+ * Sheet 2: Standings   — current section standings (as of all data so far)
+ *
+ * @param {Object} state - full app state
+ * @param {Object} section - race_day section object
+ * @param {Object} start - the start object containing this heat
+ * @param {number} heatNumber
+ */
+export function exportHeatXlsx(state, section, start, heatNumber) {
+  const result = (start.results || {})[heatNumber];
+  if (!result) return;
+
+  const completedStarts = getCompletedStarts(section);
+  const multiStart = completedStarts.length > 1;
+  const startSuffix = multiStart ? ` (Rally ${start.start_number})` : '';
+
+  const hasGroups = section.participants.some(p => p.group_id);
+  const carGroupMap = {};
+  for (const p of section.participants) {
+    carGroupMap[p.car_number] = p.group_id || null;
+  }
+
+  const laneCorr = (start.lane_corrections || {})[heatNumber];
+  const effectiveLanes = laneCorr || result.lanes || [];
+  const sortedLanes = [...effectiveLanes].sort((a, b) => a.lane - b.lane);
+  const sourceLabel = result.type === 'RaceCompleted' ? 'Timed' : 'Manual';
+  const rerunCount = (start.reruns || {})[heatNumber] || 0;
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Heat Result ───────────────────────────────────────
+
+  {
+    const metaRows = [
+      ['Rally', state.rally_name || ''],
+      ['Date', state.rally_date || ''],
+      ['Section', section.section_name + startSuffix],
+      ['Heat', heatNumber],
+      ['Source', sourceLabel],
+    ];
+    if (rerunCount > 0) metaRows.push(['Re-runs', rerunCount]);
+    if (result.timestamp) {
+      const d = new Date(result.timestamp);
+      metaRows.push(['Recorded', d.toLocaleString()]);
+    }
+
+    const header = ['Lane', 'Car #', 'Name'];
+    if (hasGroups) header.push('Group');
+    if (result.type === 'RaceCompleted') header.push('Time (s)');
+    if (result.type === 'ResultManuallyEntered') header.push('Place');
+
+    const resultRows = sortedLanes.map(lane => {
+      const row = [lane.lane, lane.car_number, lane.name];
+      if (hasGroups) row.push(groupName(state, carGroupMap[lane.car_number]));
+      if (result.type === 'RaceCompleted' && result.times_ms) {
+        const t = result.times_ms[String(lane.lane)];
+        row.push(t != null ? fmtTime(t) : 'DNF');
+      } else if (result.type === 'ResultManuallyEntered' && result.rankings) {
+        const r = result.rankings.find(r => r.car_number === lane.car_number);
+        row.push(r ? r.place : null);
+      }
+      return row;
+    });
+
+    const aoa = [...metaRows, [], header, ...resultRows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    autoWidth(ws, aoa);
+    XLSX.utils.book_append_sheet(wb, ws, 'Heat Result');
+  }
+
+  // ── Sheet 2: Standings ─────────────────────────────────────────
+
+  const flatSec = flattenStart(section, start);
+  const standings = computeLeaderboard(flatSec);
+  if (standings.length > 0) {
+    const header = ['Rank', 'Car #', 'Name'];
+    if (hasGroups) header.push('Group');
+    header.push('Avg Time (s)', 'Best Time (s)', 'Heats Run', 'Complete');
+
+    const rows = standings.map(s => {
+      const row = [s.rank, s.car_number, s.name];
+      if (hasGroups) row.push(groupName(state, s.group_id));
+      row.push(fmtTime(s.avg_time_ms), fmtTime(s.best_time_ms), s.heats_run, !s.incomplete);
+      return row;
+    });
+
+    const aoa = [header, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    autoWidth(ws, aoa);
+    XLSX.utils.book_append_sheet(wb, ws, 'Standings');
+  }
+
+  const filename = `${safeFilename(section.section_name)}-heat-${heatNumber}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 

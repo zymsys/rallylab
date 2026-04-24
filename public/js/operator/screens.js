@@ -8,7 +8,8 @@ import { computeLeaderboard, computeLaneStats } from '../scoring.js';
 import { deriveRaceDayPhase, getAcceptedResult, getActiveStart, getLatestStart, getStart, getCompletedStarts, flattenStart, compareCarNumbers } from '../state-manager.js';
 import { showManualRankDialog, showRemoveCarDialog, showLoadRosterDialog, showCorrectLanesDialog, showStartSectionDialog, showChangeLanesDialog, showRestoreFromUSBDialog, showTrackManagerDialog, showCarStatsDialog, showRallyReportDialog, showSectionReportDialog, showGroupReportsDialog } from './dialogs.js';
 import { generateHeatReport, generateEntrantsReport } from './report.js';
-import { exportSectionXlsx, exportEntrantsXlsx } from './export-xlsx.js';
+import { exportSectionXlsx, exportEntrantsXlsx, exportHeatXlsx } from './export-xlsx.js';
+import { exportHeatTxt, exportSectionTxt } from './export-txt.js';
 import { showDemoDataDialog } from './demo-data.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
@@ -867,6 +868,18 @@ export function renderLiveConsole(container, params, ctx) {
       heatPdfBtn.onclick = () => generateHeatReport(state, sec, currentStart, hn);
       btnRow.appendChild(heatPdfBtn);
 
+      const heatXlsxBtn = document.createElement('button');
+      heatXlsxBtn.className = 'btn btn-sm btn-secondary';
+      heatXlsxBtn.textContent = 'Excel';
+      heatXlsxBtn.onclick = () => exportHeatXlsx(state, sec, currentStart, hn);
+      btnRow.appendChild(heatXlsxBtn);
+
+      const heatTxtBtn = document.createElement('button');
+      heatTxtBtn.className = 'btn btn-sm btn-secondary';
+      heatTxtBtn.textContent = 'Text';
+      heatTxtBtn.onclick = () => exportHeatTxt(state, sec, currentStart, hn);
+      btnRow.appendChild(heatTxtBtn);
+
       body.appendChild(btnRow);
 
       details.appendChild(body);
@@ -1187,6 +1200,12 @@ export function renderSectionComplete(container, params, ctx) {
     pdfBtn.textContent = 'Export PDF';
     pdfBtn.onclick = () => showSectionReportDialog(sec, ctx);
     actions.appendChild(pdfBtn);
+
+    const txtBtn = document.createElement('button');
+    txtBtn.className = 'btn btn-secondary';
+    txtBtn.textContent = 'Export Text';
+    txtBtn.onclick = () => exportSectionTxt(state, sec, currentStart);
+    actions.appendChild(txtBtn);
   }
 
   // Reveal flow state
