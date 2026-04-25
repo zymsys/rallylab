@@ -473,7 +473,7 @@ Channel name: `rallylab-race`
 
 - No custom backend server (Python, Node, etc.)
 - No frontend framework (React, Vue, etc.)
-- No WebSocket layer
+- No custom WebSocket server. Managed push channels (e.g. Supabase Realtime) are permitted as an *optimization* over polling for inbound sync, but never as a load-bearing dependency — the offline-first replay/pull path must always work without them.
 - No distributed real-time sync on race day
 - No concurrent multi-operator editing (multiple operator accounts are for backup, not simultaneous use)
 - No remote spectator apps (same-laptop only)

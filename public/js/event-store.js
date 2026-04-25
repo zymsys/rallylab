@@ -200,6 +200,25 @@ export async function markSynced(localId, serverId) {
 }
 
 /**
+ * Get a single event by its local auto-incremented id.
+ * @param {number} localId
+ * @returns {Promise<Object|null>}
+ */
+export async function getEventByLocalId(localId) {
+  const db = await openStore();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EVENTS_STORE, 'readonly');
+    const request = tx.objectStore(EVENTS_STORE).get(localId);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = (e) => {
+      reject(new Error('Failed to get event by id: ' + e.target.error?.message));
+    };
+  });
+}
+
+/**
  * Check if a server event already exists locally.
  * @param {string} serverId
  * @returns {Promise<boolean>}

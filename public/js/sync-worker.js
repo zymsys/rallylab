@@ -7,7 +7,7 @@
  * See spec 02 section 7 for the sync pattern.
  */
 
-import { getUnsyncedEvents, markSynced, hasServerEvent, appendEvent as storeAppend } from './event-store.js';
+import { getUnsyncedEvents, markSynced, hasServerEvent, appendEvent as storeAppend, getEventByLocalId } from './event-store.js';
 
 const SYNC_INTERVAL_MS = 5000;
 const MAX_BACKOFF_MS = 60000;
@@ -92,6 +92,7 @@ export function stopSync() {
     _intervalId = null;
   }
   _client = null;
+  unsubscribeFromRally();
 }
 
 /**
@@ -184,19 +185,201 @@ export async function restoreFromSupabase(supabaseClient, rallyId, sectionId) {
 
   let imported = 0;
   for (const event of events) {
-    // Skip if we already have this event locally
-    if (await hasServerEvent(String(event.id))) continue;
-
-    await storeAppend({
-      ...event.payload,
-      type: event.event_type,
-      rally_id: event.rally_id,
-      section_id: event.section_id,
-      synced: true,
-      server_id: String(event.id)
-    });
-    imported++;
+    if (await _ingestServerRow(event)) imported++;
   }
 
   return imported;
+}
+
+// ─── Inbound: Realtime push + reconnect pull ──────────────────────
+//
+// While online, subscribe to Supabase Realtime so check-ins and other
+// pre-race events from registrars land in the operator's IndexedDB
+// immediately. On reconnect (window 'online' event), do a catch-up
+// pull so anything missed while disconnected is recovered.
+//
+// Echo dedup: our own uploads come back through the same channel.
+// We match on (created_by === _userId, client_event_id) and update
+// the local record's server_id instead of appending a duplicate.
+
+let _realtimeClient = null;
+let _realtimeChannel = null;
+let _realtimeRallyId = null;
+let _inboundListeners = [];
+let _onlineListenerAttached = false;
+
+/**
+ * @typedef {'idle' | 'connecting' | 'live' | 'offline' | 'error'} InboundStatus
+ */
+let _inboundStatus = 'idle';
+let _inboundStatusListeners = [];
+
+function _setInboundStatus(status) {
+  if (_inboundStatus === status) return;
+  _inboundStatus = status;
+  for (const cb of _inboundStatusListeners) {
+    try { cb(status); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Subscribe to inbound channel status changes.
+ * Callback receives an InboundStatus string. Returns an unsubscribe function.
+ */
+export function onInboundStatus(callback) {
+  _inboundStatusListeners.push(callback);
+  callback(_inboundStatus);
+  return () => {
+    _inboundStatusListeners = _inboundStatusListeners.filter(cb => cb !== callback);
+  };
+}
+
+export function getInboundStatus() {
+  return _inboundStatus;
+}
+
+/**
+ * Subscribe to inbound events callbacks.
+ * Callback receives (count, kind) where kind is 'pull' or 'push'.
+ * Returns an unsubscribe function.
+ */
+export function onInboundEvents(callback) {
+  _inboundListeners.push(callback);
+  return () => {
+    _inboundListeners = _inboundListeners.filter(cb => cb !== callback);
+  };
+}
+
+function _notifyInbound(count, kind) {
+  for (const cb of _inboundListeners) {
+    try { cb(count, kind); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Ingest one server-side event row into IndexedDB.
+ * Returns true if a new local record was appended, false if it was
+ * a duplicate or an echo of one of our own writes.
+ */
+async function _ingestServerRow(row) {
+  if (!row || row.id == null) return false;
+  const serverId = String(row.id);
+  if (await hasServerEvent(serverId)) return false;
+
+  // Echo of our own write — promote the local record instead of duplicating.
+  if (_userId && row.created_by === _userId && row.client_event_id != null) {
+    const local = await getEventByLocalId(row.client_event_id);
+    if (local) {
+      if (!local.synced || local.server_id !== serverId) {
+        await markSynced(row.client_event_id, serverId);
+      }
+      return false;
+    }
+  }
+
+  await storeAppend({
+    ...row.payload,
+    type: row.event_type,
+    rally_id: row.rally_id,
+    section_id: row.section_id,
+    synced: true,
+    server_id: serverId
+  });
+  return true;
+}
+
+/**
+ * Subscribe to inbound events for a rally: initial catch-up pull,
+ * then a Realtime push channel. Idempotent — calling twice with the
+ * same rallyId is a no-op; with a different rallyId, swaps subscription.
+ *
+ * @param {Object} supabaseClient
+ * @param {string} rallyId
+ */
+export async function subscribeToRally(supabaseClient, rallyId) {
+  if (!supabaseClient || !rallyId) return;
+  if (_realtimeRallyId === rallyId && _realtimeChannel) return;
+
+  unsubscribeFromRally();
+  _realtimeClient = supabaseClient;
+  _realtimeRallyId = rallyId;
+  _setInboundStatus(navigator.onLine ? 'connecting' : 'offline');
+
+  // Catch-up pull first (idempotent; uses _ingestServerRow under the hood)
+  if (navigator.onLine) {
+    try {
+      const imported = await restoreFromSupabase(supabaseClient, rallyId);
+      if (imported > 0) _notifyInbound(imported, 'pull');
+    } catch (e) {
+      console.warn('Inbound initial pull failed:', e.message);
+    }
+  }
+
+  // Realtime push
+  try {
+    _realtimeChannel = supabaseClient
+      .channel(`domain_events_${rallyId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'domain_events',
+        filter: `rally_id=eq.${rallyId}`
+      }, async (payload) => {
+        try {
+          if (await _ingestServerRow(payload.new)) {
+            _notifyInbound(1, 'push');
+          }
+        } catch (e) {
+          console.warn('Inbound event ingest failed:', e.message);
+        }
+      })
+      .subscribe((state) => {
+        // supabase-js channel state: SUBSCRIBED | CHANNEL_ERROR | TIMED_OUT | CLOSED
+        if (state === 'SUBSCRIBED') _setInboundStatus('live');
+        else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') _setInboundStatus('error');
+        else if (state === 'CLOSED') _setInboundStatus(navigator.onLine ? 'connecting' : 'offline');
+      });
+  } catch (e) {
+    console.warn('Realtime subscribe failed:', e.message);
+    _setInboundStatus('error');
+  }
+
+  if (!_onlineListenerAttached && typeof window !== 'undefined') {
+    window.addEventListener('online', _onlineReconnect);
+    window.addEventListener('offline', _onlineGoOffline);
+    _onlineListenerAttached = true;
+  }
+}
+
+/**
+ * Tear down the Realtime subscription and online listener.
+ */
+export function unsubscribeFromRally() {
+  if (_realtimeChannel) {
+    try { _realtimeChannel.unsubscribe(); } catch { /* ignore */ }
+    _realtimeChannel = null;
+  }
+  _realtimeClient = null;
+  _realtimeRallyId = null;
+  if (_onlineListenerAttached && typeof window !== 'undefined') {
+    window.removeEventListener('online', _onlineReconnect);
+    window.removeEventListener('offline', _onlineGoOffline);
+    _onlineListenerAttached = false;
+  }
+  _setInboundStatus('idle');
+}
+
+async function _onlineReconnect() {
+  if (!_realtimeClient || !_realtimeRallyId) return;
+  _setInboundStatus('connecting');
+  try {
+    const imported = await restoreFromSupabase(_realtimeClient, _realtimeRallyId);
+    if (imported > 0) _notifyInbound(imported, 'pull');
+  } catch (e) {
+    console.warn('Reconnect pull failed:', e.message);
+  }
+}
+
+function _onlineGoOffline() {
+  _setInboundStatus('offline');
 }

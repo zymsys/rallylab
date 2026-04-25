@@ -19,7 +19,7 @@ import {
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
-import { startSync, stopSync, onSyncStatus, restoreFromSupabase } from '../sync-worker.js';
+import { startSync, stopSync, onSyncStatus, subscribeToRally, onInboundEvents, onInboundStatus } from '../sync-worker.js';
 import {
   renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -1115,10 +1115,20 @@ function initSyncIndicator() {
   if (isDemoMode()) return;
 
   const el = document.getElementById('user-info');
+
+  // Inbound (Realtime push) status — shows whether registrar events
+  // are arriving live or only via reconnect-pull.
+  const inbound = document.createElement('span');
+  inbound.id = 'inbound-indicator';
+  inbound.className = 'sync-indicator';
+  inbound.title = 'Cloud push channel';
+  el.prepend(inbound);
+
+  // Outbound (upload) status — preserves prior behavior.
   const indicator = document.createElement('span');
   indicator.id = 'sync-indicator';
   indicator.className = 'sync-indicator';
-  indicator.title = 'Sync status';
+  indicator.title = 'Upload status';
   el.prepend(indicator);
 
   onSyncStatus(({ status, pendingCount }) => {
@@ -1129,27 +1139,46 @@ function initSyncIndicator() {
       offline: 'Offline',
       error: 'Sync error'
     };
-    indicator.textContent = labels[status] || status;
-    indicator.title = labels[status] || status;
+    indicator.textContent = '↑ ' + (labels[status] || status);
+    indicator.title = 'Upload: ' + (labels[status] || status);
+  });
+
+  onInboundStatus((status) => {
+    // Reuse existing sync-* color classes for visual consistency.
+    const klass = {
+      idle: 'sync-offline',
+      connecting: 'sync-pending',
+      live: 'sync-synced',
+      offline: 'sync-offline',
+      error: 'sync-error'
+    }[status] || 'sync-offline';
+    inbound.className = `sync-indicator ${klass}`;
+    const labels = {
+      idle: 'Push idle',
+      connecting: 'Connecting…',
+      live: 'Live',
+      offline: 'Offline',
+      error: 'Push error'
+    };
+    inbound.textContent = '↓ ' + (labels[status] || status);
+    inbound.title = 'Push channel: ' + (labels[status] || status);
   });
 }
 
 /**
- * Attempt to restore race-day events from Supabase into IndexedDB.
- * Runs silently; imports any server events not already present locally.
+ * Wire up inbound sync for the active rally: an initial catch-up pull
+ * from Supabase, plus a Realtime push subscription so registrar events
+ * (check-ins, late roster updates) land in IndexedDB while we're online.
+ * On reconnect, the subscription does another catch-up pull. The actual
+ * rebuild + render is driven by the onInboundEvents listener in init().
  */
 async function tryRestore(rallyId) {
-  if (isDemoMode() || !navigator.onLine || !rallyId) return;
+  if (isDemoMode() || !rallyId) return;
   try {
     const client = await getClient();
-    const imported = await restoreFromSupabase(client, rallyId);
-    if (imported > 0) {
-      await rebuildFromStore();
-      showToast(`Restored ${imported} event${imported !== 1 ? 's' : ''} from cloud`, 'success');
-      renderCurrentScreen();
-    }
+    await subscribeToRally(client, rallyId);
   } catch (e) {
-    console.warn('Restore failed:', e.message);
+    console.warn('Subscribe failed:', e.message);
   }
 }
 
@@ -1261,6 +1290,18 @@ async function init() {
       }
       renderCurrentScreen();
     }
+  });
+
+  // Listen for inbound events from Supabase (Realtime push + reconnect pull)
+  onInboundEvents(async (count, kind) => {
+    await rebuildFromStore();
+    if (kind === 'pull' && count > 0) {
+      showToast(`Pulled ${count} event${count !== 1 ? 's' : ''} from cloud`, 'success');
+    }
+    if (_liveSection) {
+      handleLateArrival(_liveSection.sectionId);
+    }
+    renderCurrentScreen();
   });
 
   // Route to current hash or rally list
