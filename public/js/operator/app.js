@@ -1004,7 +1004,7 @@ async function changeLanes(sectionId, newLanes, reason) {
     .filter(p => arrivedSet.has(p.car_number) && !removedSet.has(p.car_number));
 
   if (participants.length >= 2) {
-    const currentHeatNum = getLastCompletedHeatNumber(sectionId);
+    const currentHeatNum = getLastCompletedHeatNumber(sectionId, startNumber);
     const completedHeats = _liveSection?.schedule?.heats.filter(h => h.heat_number <= currentHeatNum) || [];
     const newSchedule = generateSchedule({ participants, available_lanes: newLanes });
 
@@ -1015,7 +1015,9 @@ async function changeLanes(sectionId, newLanes, reason) {
     }));
 
     _liveSection = {
+      ..._liveSection,
       sectionId,
+      startNumber,
       schedule: {
         heats: [...completedHeats, ...renumberedHeats],
         metadata: {
@@ -1023,7 +1025,8 @@ async function changeLanes(sectionId, newLanes, reason) {
           total_heats: completedHeats.length + renumberedHeats.length,
           available_lanes: newLanes
         }
-      }
+      },
+      stagingHeat: null
     };
   }
 
