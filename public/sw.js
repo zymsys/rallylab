@@ -10,7 +10,7 @@
  * reloads mid-race.
  */
 
-const CACHE_VERSION = 'rallylab-v7';
+const CACHE_VERSION = 'rallylab-v8';
 
 const APP_SHELL = [
   './',

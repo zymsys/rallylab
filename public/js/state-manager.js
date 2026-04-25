@@ -598,8 +598,33 @@ export function applyEvent(state, event) {
   }
 }
 
+/**
+ * Compare two events for replay order.
+ *
+ * Local IndexedDB `id` reflects insertion order *on this device*, not the
+ * canonical event order. When an operator already has pre-race events
+ * locally and then receives a registrar-originated CarArrived back from
+ * the cloud, the inbound event can land at a lower local id than the
+ * SectionCreated it depends on (or vice versa across devices), and the
+ * reducer drops it because the section "doesn't exist yet."
+ *
+ * Supabase's BIGSERIAL `server_id` is monotonic across all devices, so we
+ * use it as the primary key when present, and fall back to local id for
+ * events still queued offline (which by definition came after everything
+ * already synced on this device).
+ */
+function compareEventsForReplay(a, b) {
+  const aServer = a.server_id != null ? Number(a.server_id) : null;
+  const bServer = b.server_id != null ? Number(b.server_id) : null;
+  if (aServer != null && bServer != null) return aServer - bServer;
+  if (aServer != null) return -1;
+  if (bServer != null) return 1;
+  return (a.id || 0) - (b.id || 0);
+}
+
 export function rebuildState(events) {
-  return events.reduce((state, event) => applyEvent(state, event), initialState());
+  const ordered = [...events].sort(compareEventsForReplay);
+  return ordered.reduce((state, event) => applyEvent(state, event), initialState());
 }
 
 /**
