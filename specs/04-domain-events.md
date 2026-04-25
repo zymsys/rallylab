@@ -232,6 +232,41 @@ Car number is retired (not immediately reused). `ParticipantAdded` fills gaps bu
 
 ---
 
+### 2.8 ParticipantUpdated
+
+A Registrar corrects a participant's name and/or moves them to a different group.
+Used for typo fixes and group reassignment during check-in. Does not change the
+car number or participant_id — to retire a number, use `ParticipantRemoved`.
+
+```json
+{
+  "type": "ParticipantUpdated",
+  "rally_id": "uuid",
+  "section_id": "uuid",
+  "participant_id": "uuid",
+  "name": "Tommy Rodriguez",
+  "group_id": "uuid",
+  "updated_by": "registrar@example.com",
+  "timestamp": 1708012351000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | `"ParticipantUpdated"` |
+| `rally_id` | UUID | yes | |
+| `section_id` | UUID | yes | |
+| `participant_id` | UUID | yes | |
+| `name` | string | no | New display name. Omit to leave name unchanged. |
+| `group_id` | UUID \| null | no | New group, or `null` for ungrouped. Omit to leave group unchanged. |
+| `updated_by` | string | yes | Registrar email |
+| `timestamp` | integer | yes | Unix ms (UTC) |
+
+The reducer applies the patch to both the pre-race roster and any race-day
+section copy so check-in screens reflect corrections immediately.
+
+---
+
 ## 3. Race Day Events (Race Controller)
 
 These events occur during race day and are stored in IndexedDB, with background sync to Supabase's `domain_events` table.
@@ -617,7 +652,7 @@ Certain events can only occur after others:
 - `SectionCreated` requires `RallyCreated`
 - `RegistrarInvited` requires `SectionCreated`
 - `OperatorInvited` requires `RallyCreated`
-- `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved` require `RegistrarInvited`
+- `RosterUpdated`, `ParticipantAdded`, `ParticipantRemoved`, `ParticipantUpdated` require `RegistrarInvited`
 
 **Race day:**
 - `SectionStarted` requires `RosterLoaded`
@@ -733,6 +768,7 @@ See `05-pre-race-data.md` for RLS policies and access control.
 | `RosterUpdated` | Pre-race | Registrar uploads spreadsheet |
 | `ParticipantAdded` | Pre-race | Registrar adds one participant |
 | `ParticipantRemoved` | Pre-race | Registrar removes one participant |
+| `ParticipantUpdated` | Pre-race / Race day | Registrar corrects participant name or group |
 | `RosterLoaded` | Race day | Operator imports roster |
 | `CarArrived` | Race day | Operator checks in car |
 | `SectionStarted` | Race day | Operator starts racing |

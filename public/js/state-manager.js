@@ -286,6 +286,51 @@ export function applyEvent(state, event) {
       };
     }
 
+    case 'ParticipantUpdated': {
+      // Patches participant fields (name, group_id) without changing car_number
+      // or participant_id. Applied to both the pre-race roster and any race-day
+      // section copy so check-in screens see corrections immediately.
+      const patch = (p) => {
+        if (p.participant_id !== payload.participant_id) return p;
+        const next = { ...p };
+        if (Object.prototype.hasOwnProperty.call(payload, 'name')) next.name = payload.name;
+        if (Object.prototype.hasOwnProperty.call(payload, 'group_id')) next.group_id = payload.group_id || null;
+        return next;
+      };
+
+      let newState = state;
+      const section = state.sections[payload.section_id];
+      if (section) {
+        newState = {
+          ...newState,
+          sections: {
+            ...newState.sections,
+            [payload.section_id]: {
+              ...section,
+              participants: section.participants.map(patch)
+            }
+          }
+        };
+      }
+      const rdSec = state.race_day.sections[payload.section_id];
+      if (rdSec) {
+        newState = {
+          ...newState,
+          race_day: {
+            ...newState.race_day,
+            sections: {
+              ...newState.race_day.sections,
+              [payload.section_id]: {
+                ...rdSec,
+                participants: rdSec.participants.map(patch)
+              }
+            }
+          }
+        };
+      }
+      return newState;
+    }
+
     // ─── Race Day Events ──────────────────────────────────────────
 
     case 'CarArrived': {

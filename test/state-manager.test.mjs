@@ -407,6 +407,53 @@ describe('ParticipantRemoved with group_id', () => {
   });
 });
 
+describe('ParticipantUpdated', () => {
+  const seed = [
+    { type: 'SectionCreated', section_id: 's1', section_name: 'Kub Kars' },
+    {
+      type: 'ParticipantAdded',
+      section_id: 's1',
+      group_id: 'g1',
+      participant: { participant_id: 'p1', name: 'Alise', car_number: '7' }
+    }
+  ];
+
+  it('renames a participant in pre-race and race-day rosters', () => {
+    const s = buildState([
+      ...seed,
+      { type: 'ParticipantUpdated', section_id: 's1', participant_id: 'p1', name: 'Alice' }
+    ]);
+    assert.strictEqual(s.sections.s1.participants[0].name, 'Alice');
+    assert.strictEqual(s.sections.s1.participants[0].car_number, '7');
+    assert.strictEqual(s.race_day.sections.s1.participants[0].name, 'Alice');
+  });
+
+  it('changes group without touching name', () => {
+    const s = buildState([
+      ...seed,
+      { type: 'ParticipantUpdated', section_id: 's1', participant_id: 'p1', group_id: 'g2' }
+    ]);
+    assert.strictEqual(s.sections.s1.participants[0].name, 'Alise');
+    assert.strictEqual(s.sections.s1.participants[0].group_id, 'g2');
+  });
+
+  it('clears group when group_id is null', () => {
+    const s = buildState([
+      ...seed,
+      { type: 'ParticipantUpdated', section_id: 's1', participant_id: 'p1', group_id: null }
+    ]);
+    assert.strictEqual(s.sections.s1.participants[0].group_id, null);
+  });
+
+  it('ignores unknown participant_id', () => {
+    const s = buildState([
+      ...seed,
+      { type: 'ParticipantUpdated', section_id: 's1', participant_id: 'unknown', name: 'X' }
+    ]);
+    assert.strictEqual(s.sections.s1.participants[0].name, 'Alise');
+  });
+});
+
 describe('nextAvailableCarNumber', () => {
   it('fills gaps across groups', () => {
     const section = {

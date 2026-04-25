@@ -3,7 +3,7 @@
  * Registrar-only: no Start Section, no operator controls.
  */
 
-import { showAddParticipantDialog, showCheckInConfirmDialog } from './dialogs.js';
+import { showAddParticipantDialog, showCheckInConfirmDialog, showEditParticipantDialog } from './dialogs.js';
 import { getActiveStart, getCompletedStarts, compareCarNumbers } from '../state-manager.js';
 
 // ─── Screen: Section List ────────────────────────────────────────
@@ -148,12 +148,19 @@ export function renderSectionCheckIn(container, params, ctx) {
 
   // Roster table with check-in buttons
   const sorted = [...sec.participants].sort((a, b) => compareCarNumbers(a.car_number, b.car_number));
+  const groups = state.groups || {};
+  const showGroupCol = sorted.some(p => p.group_id);
 
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Car #</th><th>Name</th><th></th></tr></thead>
+      <thead><tr>
+        <th>Car #</th>
+        <th>Name</th>
+        ${showGroupCol ? '<th>Group</th>' : ''}
+        <th></th>
+      </tr></thead>
       <tbody id="reg-checkin-body"></tbody>
     </table>
   `;
@@ -162,17 +169,34 @@ export function renderSectionCheckIn(container, params, ctx) {
   const tbody = wrap.querySelector('#reg-checkin-body');
   for (const p of sorted) {
     const isArrived = arrivedSet.has(p.car_number);
+    const groupName = p.group_id && groups[p.group_id] ? groups[p.group_id].group_name : '';
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
       <td><strong>#${p.car_number}</strong></td>
       <td>${esc(p.name)}</td>
+      ${showGroupCol ? `<td>${esc(groupName)}</td>` : ''}
       <td class="table-actions"></td>
     `;
 
     const actionsCell = tr.querySelector('.table-actions');
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm btn-ghost';
+    editBtn.textContent = 'Edit';
+    editBtn.title = 'Correct name or change group';
+    editBtn.onclick = () => {
+      showEditParticipantDialog(sectionId, p, ctx, () => {
+        renderSectionCheckIn(container, params, ctx);
+      });
+    };
+
     if (isArrived) {
-      actionsCell.innerHTML = '<span class="status-badge status-arrived">Arrived</span>';
+      const badge = document.createElement('span');
+      badge.className = 'status-badge status-arrived';
+      badge.textContent = 'Arrived';
+      actionsCell.appendChild(badge);
+      actionsCell.appendChild(editBtn);
     } else {
       const btn = document.createElement('button');
       btn.className = 'btn btn-sm btn-primary';
@@ -190,6 +214,7 @@ export function renderSectionCheckIn(container, params, ctx) {
         });
       };
       actionsCell.appendChild(btn);
+      actionsCell.appendChild(editBtn);
     }
 
     tbody.appendChild(tr);
