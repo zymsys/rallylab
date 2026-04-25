@@ -7,7 +7,7 @@
  *   null  → no mode chosen yet, treated as signed-out (shows login screen)
  */
 
-import { isDemoMode, getMode, clearMode, SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { isDemoMode, getMode, setMode, clearMode, SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 // ─── Real Supabase client (lazy-initialized) ─────────────────────
 let _realClient = null;
@@ -146,6 +146,16 @@ export function onAuthChange(callback) {
  * Initialize auth — restores existing session.
  */
 export async function initAuth() {
+  // A magic-link callback lands on the page with the access token in the URL
+  // hash. Force real mode so supabase-js gets initialized below and can
+  // consume the token via detectSessionInUrl. This handles users who clicked
+  // the link in a different browser/profile or after signing out (which
+  // clears the stored mode).
+  if (typeof location !== 'undefined' && /[#&]access_token=/.test(location.hash)
+      && SUPABASE_CONFIGURED && getMode() !== 'real') {
+    setMode('real');
+  }
+
   if (getMode() === null) return null;
 
   if (isDemoMode()) return _session;
