@@ -97,6 +97,30 @@ body {
   color: #fff;
 }
 
+/* ===== Audience Zoom Control ===== */
+.audience-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+}
+.audience-zoom-label {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-right: 0.25rem;
+}
+.audience-zoom-btn,
+.audience-zoom-value {
+  padding: 0.1rem 0.4rem;
+  min-width: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.audience-zoom-value {
+  min-width: 3rem;
+}
+
 /* ===== View Menu ===== */
 .view-menu { position: relative; }
 .view-menu-dropdown {

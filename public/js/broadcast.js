@@ -3,18 +3,26 @@
  */
 
 const CHANNEL_NAME = 'rallylab-race';
+const ZOOM_STORAGE_KEY = 'rallylab-audience-zoom';
 
 // ─── Operator Side ──────────────────────────────────────────────
 
 let _operatorChannel = null;
 let _lastMessage = null;
+let _lastZoom = (() => {
+  try {
+    const v = parseFloat(localStorage.getItem(ZOOM_STORAGE_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  } catch { return 1; }
+})();
 
 function getOperatorChannel() {
   if (!_operatorChannel) {
     _operatorChannel = new BroadcastChannel(CHANNEL_NAME);
     _operatorChannel.onmessage = (e) => {
-      if (e.data?.type === 'REQUEST_STATE' && _lastMessage) {
-        _operatorChannel.postMessage(_lastMessage);
+      if (e.data?.type === 'REQUEST_STATE') {
+        _operatorChannel.postMessage({ type: 'SET_ZOOM', level: _lastZoom });
+        if (_lastMessage) _operatorChannel.postMessage(_lastMessage);
       }
     };
   }
@@ -76,6 +84,16 @@ export function sendRevealNext() {
 
 export function sendRevealAll() {
   getOperatorChannel().postMessage({ type: 'REVEAL_ALL' });
+}
+
+export function sendZoom(level) {
+  _lastZoom = level;
+  try { localStorage.setItem(ZOOM_STORAGE_KEY, String(level)); } catch {}
+  getOperatorChannel().postMessage({ type: 'SET_ZOOM', level });
+}
+
+export function getZoom() {
+  return _lastZoom;
 }
 
 // ─── Audience Side ──────────────────────────────────────────────

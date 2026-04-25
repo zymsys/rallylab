@@ -17,7 +17,7 @@ import {
   connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
   sendSerialCommand, startLearnMode
 } from '../track-connection.js';
-import { sendWelcome, sendStaging, sendResults, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
+import { sendWelcome, sendStaging, sendResults, sendZoom, getZoom, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
 import { startSync, stopSync, onSyncStatus, subscribeToRally, onInboundEvents, onInboundStatus } from '../sync-worker.js';
 import {
@@ -1217,10 +1217,55 @@ async function beginSync() {
 
 // ─── User Info ──────────────────────────────────────────────
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3.0;
+const ZOOM_STEP = 0.1;
+
+function clampZoom(level) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(level * 10) / 10));
+}
+
+function buildAudienceZoomControl() {
+  const wrap = document.createElement('div');
+  wrap.className = 'audience-zoom';
+  wrap.title = 'Audience display zoom';
+
+  const label = document.createElement('span');
+  label.className = 'audience-zoom-label';
+  label.textContent = 'Audience';
+
+  const minus = document.createElement('button');
+  minus.className = 'btn btn-sm btn-ghost audience-zoom-btn';
+  minus.textContent = '−';
+  minus.setAttribute('aria-label', 'Decrease audience zoom');
+
+  const value = document.createElement('button');
+  value.className = 'btn btn-sm btn-ghost audience-zoom-value';
+  value.title = 'Reset audience zoom to 100%';
+
+  const plus = document.createElement('button');
+  plus.className = 'btn btn-sm btn-ghost audience-zoom-btn';
+  plus.textContent = '+';
+  plus.setAttribute('aria-label', 'Increase audience zoom');
+
+  const render = () => { value.textContent = `${Math.round(getZoom() * 100)}%`; };
+  const set = (lvl) => { sendZoom(clampZoom(lvl)); render(); };
+
+  minus.onclick = () => set(getZoom() - ZOOM_STEP);
+  plus.onclick = () => set(getZoom() + ZOOM_STEP);
+  value.onclick = () => set(1);
+
+  wrap.append(label, minus, value, plus);
+  render();
+  return wrap;
+}
+
 function updateUserInfo() {
   const el = document.getElementById('user-info');
   el.innerHTML = '';
   const user = getUser();
+
+  el.appendChild(buildAudienceZoomControl());
 
   const viewWrap = document.createElement('div');
   viewWrap.className = 'view-menu';
@@ -1285,6 +1330,7 @@ function updateUserInfo() {
 
 async function init() {
   initOperatorChannel();
+  sendZoom(getZoom());
   await initAuth();
   updateUserInfo();
   initSyncIndicator();

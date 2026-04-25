@@ -11,10 +11,22 @@ import {
 } from './screens.js';
 
 const app = () => document.getElementById('app');
+const ZOOM_STORAGE_KEY = 'rallylab-audience-zoom';
 let _hasReceived = false;
 
+function applyZoom(level) {
+  const z = Number.isFinite(level) && level > 0 ? level : 1;
+  app().style.zoom = z;
+}
+
+// Apply any persisted zoom immediately so first paint isn't briefly unscaled.
+try {
+  const saved = parseFloat(localStorage.getItem(ZOOM_STORAGE_KEY));
+  if (Number.isFinite(saved) && saved > 0) applyZoom(saved);
+} catch {}
+
 onMessage((msg) => {
-  _hasReceived = true;
+  if (msg.type !== 'SET_ZOOM') _hasReceived = true;
   const container = app();
 
   switch (msg.type) {
@@ -38,6 +50,10 @@ onMessage((msg) => {
       break;
     case 'REVEAL_ALL':
       revealAll();
+      break;
+    case 'SET_ZOOM':
+      applyZoom(msg.level);
+      try { localStorage.setItem(ZOOM_STORAGE_KEY, String(msg.level)); } catch {}
       break;
   }
 });
