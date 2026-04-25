@@ -56,7 +56,10 @@ export async function signIn(email) {
   }
 
   const client = await getRealClient();
-  const { data, error } = await client.auth.signInWithOtp({ email });
+  const { data, error } = await client.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: new URL('registration.html', location.origin).href }
+  });
   return { data, error };
 }
 

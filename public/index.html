@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Supabase magic-link callbacks land here with #access_token=... in the
+    // hash. The app lives on registration.html, so forward the hash there.
+    if (/[#&](access_token|error_description)=/.test(location.hash)) {
+      location.replace('registration.html' + location.hash);
+    }
+  </script>
   <title>RallyLab — Pinewood Derby Race Management for Scouting</title>
   <meta name="description" content="Free, open source pinewood derby race management for Scouting. Registration, scheduling, live timing, and audience display — entirely in the browser.">
   <meta name="theme-color" content="#1a1a2e">
