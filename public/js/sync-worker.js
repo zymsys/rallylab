@@ -25,23 +25,26 @@ let _consecutiveErrors = 0;
  */
 let _status = 'synced';
 let _pendingCount = 0;
+let _lastError = null;
 
-function setStatus(status, pendingCount = 0) {
+function setStatus(status, pendingCount = 0, error = null) {
   _status = status;
   _pendingCount = pendingCount;
+  _lastError = error;
+  const payload = { status: _status, pendingCount: _pendingCount, error: _lastError };
   for (const cb of _listeners) {
-    try { cb({ status: _status, pendingCount: _pendingCount }); } catch { /* ignore */ }
+    try { cb(payload); } catch { /* ignore */ }
   }
 }
 
 /**
  * Subscribe to sync status changes.
- * Callback receives { status: SyncStatus, pendingCount: number }.
+ * Callback receives { status: SyncStatus, pendingCount: number, error: string|null }.
  * Returns an unsubscribe function.
  */
 export function onSyncStatus(callback) {
   _listeners.push(callback);
-  callback({ status: _status, pendingCount: _pendingCount });
+  callback({ status: _status, pendingCount: _pendingCount, error: _lastError });
   return () => {
     _listeners = _listeners.filter(cb => cb !== callback);
   };
@@ -51,7 +54,7 @@ export function onSyncStatus(callback) {
  * Get current sync status.
  */
 export function getSyncStatus() {
-  return { status: _status, pendingCount: _pendingCount };
+  return { status: _status, pendingCount: _pendingCount, error: _lastError };
 }
 
 // ─── Sync Loop ────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ export async function syncOnce() {
     if (error) {
       console.warn('Sync error:', error.message);
       _consecutiveErrors++;
-      setStatus('error', events.length);
+      setStatus('error', events.length, _formatSupabaseError(error));
       return;
     }
 
@@ -152,8 +155,21 @@ export async function syncOnce() {
   } catch (err) {
     console.warn('Sync error:', err.message);
     _consecutiveErrors++;
-    setStatus('error');
+    setStatus('error', _pendingCount, err.message || String(err));
   }
+}
+
+/**
+ * Format a Supabase PostgREST error object into a single human-readable line.
+ * Includes hint/details when present so RLS denials and schema mismatches
+ * surface enough context to be actionable.
+ */
+function _formatSupabaseError(error) {
+  const parts = [error.message || 'Unknown error'];
+  if (error.code) parts.push(`(code ${error.code})`);
+  if (error.details) parts.push(`details: ${error.details}`);
+  if (error.hint) parts.push(`hint: ${error.hint}`);
+  return parts.join(' ');
 }
 
 // ─── Restore from Supabase ────────────────────────────────────────
@@ -213,30 +229,34 @@ let _onlineListenerAttached = false;
  * @typedef {'idle' | 'connecting' | 'live' | 'offline' | 'error'} InboundStatus
  */
 let _inboundStatus = 'idle';
+let _inboundError = null;
 let _inboundStatusListeners = [];
 
-function _setInboundStatus(status) {
-  if (_inboundStatus === status) return;
+function _setInboundStatus(status, error = null) {
+  if (_inboundStatus === status && _inboundError === error) return;
   _inboundStatus = status;
+  _inboundError = error;
+  const payload = { status, error };
   for (const cb of _inboundStatusListeners) {
-    try { cb(status); } catch { /* ignore */ }
+    try { cb(payload); } catch { /* ignore */ }
   }
 }
 
 /**
  * Subscribe to inbound channel status changes.
- * Callback receives an InboundStatus string. Returns an unsubscribe function.
+ * Callback receives { status: InboundStatus, error: string|null }.
+ * Returns an unsubscribe function.
  */
 export function onInboundStatus(callback) {
   _inboundStatusListeners.push(callback);
-  callback(_inboundStatus);
+  callback({ status: _inboundStatus, error: _inboundError });
   return () => {
     _inboundStatusListeners = _inboundStatusListeners.filter(cb => cb !== callback);
   };
 }
 
 export function getInboundStatus() {
-  return _inboundStatus;
+  return { status: _inboundStatus, error: _inboundError };
 }
 
 /**
@@ -313,6 +333,7 @@ export async function subscribeToRally(supabaseClient, rallyId) {
       if (imported > 0) _notifyInbound(imported, 'pull');
     } catch (e) {
       console.warn('Inbound initial pull failed:', e.message);
+      _setInboundStatus('error', `Initial pull failed: ${e.message || e}`);
     }
   }
 
@@ -334,15 +355,16 @@ export async function subscribeToRally(supabaseClient, rallyId) {
           console.warn('Inbound event ingest failed:', e.message);
         }
       })
-      .subscribe((state) => {
+      .subscribe((state, err) => {
         // supabase-js channel state: SUBSCRIBED | CHANNEL_ERROR | TIMED_OUT | CLOSED
         if (state === 'SUBSCRIBED') _setInboundStatus('live');
-        else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') _setInboundStatus('error');
+        else if (state === 'CHANNEL_ERROR') _setInboundStatus('error', `Channel error${err ? ': ' + (err.message || err) : ''}`);
+        else if (state === 'TIMED_OUT') _setInboundStatus('error', 'Realtime channel timed out');
         else if (state === 'CLOSED') _setInboundStatus(navigator.onLine ? 'connecting' : 'offline');
       });
   } catch (e) {
     console.warn('Realtime subscribe failed:', e.message);
-    _setInboundStatus('error');
+    _setInboundStatus('error', `Realtime subscribe failed: ${e.message || e}`);
   }
 
   if (!_onlineListenerAttached && typeof window !== 'undefined') {
@@ -378,6 +400,7 @@ async function _onlineReconnect() {
     if (imported > 0) _notifyInbound(imported, 'pull');
   } catch (e) {
     console.warn('Reconnect pull failed:', e.message);
+    _setInboundStatus('error', `Reconnect pull failed: ${e.message || e}`);
   }
 }
 

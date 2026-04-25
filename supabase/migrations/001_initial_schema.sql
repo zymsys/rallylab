@@ -14,10 +14,13 @@ CREATE TABLE IF NOT EXISTS domain_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Dedup index for race day sync
+-- Dedup index for race day sync.
+-- Non-partial so ON CONFLICT inference works through PostgREST upsert (which
+-- can't supply the index predicate). NULL client_event_id rows (pre-race
+-- events written directly to Supabase) stay non-conflicting because NULLs
+-- are distinct in unique indexes by default.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_race_day_dedup
-  ON domain_events(rally_id, section_id, client_event_id)
-  WHERE client_event_id IS NOT NULL;
+  ON domain_events(rally_id, section_id, client_event_id);
 
 -- Lookup index for replaying events
 CREATE INDEX IF NOT EXISTS idx_domain_events_lookup

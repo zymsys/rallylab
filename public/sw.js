@@ -10,7 +10,7 @@
  * reloads mid-race.
  */
 
-const CACHE_VERSION = 'rallylab-v3';
+const CACHE_VERSION = 'rallylab-v7';
 
 const APP_SHELL = [
   './',
@@ -44,6 +44,8 @@ const APP_SHELL = [
   'js/registrar/app.js',
   'js/registrar/screens.js',
   'js/registrar/dialogs.js',
+  'js/shared/sync-indicator.js',
+  'js/shared/rally-header.js',
   'js/audience/app.js',
   'js/audience/screens.js',
   'manifest.json'
@@ -57,10 +59,17 @@ const CDN_DEPS = [
 ];
 
 self.addEventListener('install', event => {
+  // Use `cache: 'reload'` so the SW pulls fresh copies past Safari's HTTP
+  // cache. Without this, a SW version bump can re-cache whatever stale
+  // modules the browser still has on disk, and bug fixes never reach the
+  // user — exactly the iOS Safari trap we hit during dev.
   event.waitUntil(
-    caches.open(CACHE_VERSION).then(cache =>
-      cache.addAll([...APP_SHELL, ...CDN_DEPS])
-    )
+    caches.open(CACHE_VERSION).then(cache => {
+      const requests = [...APP_SHELL, ...CDN_DEPS].map(
+        url => new Request(url, { cache: 'reload' })
+      );
+      return cache.addAll(requests);
+    })
   );
 });
 
@@ -85,13 +94,17 @@ self.addEventListener('fetch', event => {
   // Skip non-GET requests and Supabase API calls
   if (event.request.method !== 'GET') return;
   if (url.hostname.includes('supabase')) return;
+  // Cache API only supports http(s); skip chrome-extension://, data:, etc.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
   // Stale-while-revalidate: serve cached immediately, fetch fresh in background
   event.respondWith(
     caches.open(CACHE_VERSION).then(cache =>
       cache.match(event.request).then(cached => {
         const fetchPromise = fetch(event.request).then(response => {
-          if (response.ok) cache.put(event.request, response.clone());
+          if (response.ok && response.type !== 'opaque') {
+            cache.put(event.request, response.clone()).catch(() => { /* unsupported scheme/partial response */ });
+          }
           return response;
         });
         return cached || fetchPromise;

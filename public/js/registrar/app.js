@@ -10,6 +10,7 @@ import { rebuildState } from '../state-manager.js';
 import { notifyEventsChanged, onSyncMessage } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
 import { startSync, subscribeToRally, onInboundEvents } from '../sync-worker.js';
+import { initSyncIndicator } from '../shared/sync-indicator.js';
 import { renderSectionList, renderSectionCheckIn } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -220,6 +221,7 @@ function updateUserInfo() {
 async function init() {
   await initAuth();
   updateUserInfo();
+  initSyncIndicator({ getRallyId: () => _state?.rally_id });
   await openStore();
   await rebuildFromStore();
 

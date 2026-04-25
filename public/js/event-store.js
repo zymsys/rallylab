@@ -5,9 +5,13 @@
  */
 
 const DB_NAME = 'rallylab';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const EVENTS_STORE = 'events';
 const SETTINGS_STORE = 'settings';
+
+// IndexedDB does not allow boolean keys, so `synced` is persisted as 0/1.
+const SYNCED_TRUE = 1;
+const SYNCED_FALSE = 0;
 
 let _db = null;
 
@@ -27,11 +31,29 @@ export async function openStore() {
 
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
+      const tx = e.target.transaction;
       if (!db.objectStoreNames.contains(EVENTS_STORE)) {
         const store = db.createObjectStore(EVENTS_STORE, { keyPath: 'id', autoIncrement: true });
         store.createIndex('rally_id', 'rally_id', { unique: false });
         store.createIndex('synced', 'synced', { unique: false });
         store.createIndex('server_id', 'server_id', { unique: false });
+      } else if (e.oldVersion < 2) {
+        // v1 stored `synced` as a boolean, which IndexedDB rejects when used
+        // as an index key (`index.getAll(false)` throws). Rewrite each record
+        // with 0/1 so the index becomes queryable again.
+        const store = tx.objectStore(EVENTS_STORE);
+        const cursorReq = store.openCursor();
+        cursorReq.onsuccess = (ev) => {
+          const cursor = ev.target.result;
+          if (!cursor) return;
+          const rec = cursor.value;
+          const next = rec.synced === true || rec.synced === 1 ? SYNCED_TRUE : SYNCED_FALSE;
+          if (rec.synced !== next) {
+            rec.synced = next;
+            cursor.update(rec);
+          }
+          cursor.continue();
+        };
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
@@ -40,11 +62,21 @@ export async function openStore() {
 
     request.onsuccess = (e) => {
       _db = e.target.result;
+      // Another tab triggering a future upgrade should be allowed to proceed —
+      // close our connection so we don't block them, then drop the cached ref.
+      _db.onversionchange = () => {
+        try { _db.close(); } catch { /* ignore */ }
+        _db = null;
+      };
       resolve(_db);
     };
 
     request.onerror = (e) => {
       reject(new Error('Failed to open IndexedDB: ' + e.target.error?.message));
+    };
+
+    request.onblocked = () => {
+      reject(new Error('IndexedDB upgrade blocked: another tab has the database open at the previous version. Close other RallyLab tabs and reload.'));
     };
   });
 }
@@ -61,7 +93,7 @@ export async function appendEvent(event) {
     ...event,
     rally_id: event.rally_id || crypto.randomUUID(),
     stored_at: Date.now(),
-    synced: event.synced ?? false,
+    synced: event.synced ? SYNCED_TRUE : SYNCED_FALSE,
     server_id: event.server_id ?? null
   };
 
@@ -152,22 +184,19 @@ export async function getRallyIds() {
 
 /**
  * Get all unsynced events.
+ *
+ * Implementation note: this used to call `index.getAll(0)` on the `synced`
+ * index, but iOS Safari has shown intermittent "parameter is not a valid
+ * key" failures even with a numeric primitive. The race-day store is small
+ * (a few hundred events at most), so a full scan with an in-JS filter is
+ * fast enough and is robust across browsers and historical data shapes
+ * (boolean, 0/1, undefined).
+ *
  * @returns {Promise<Array>}
  */
 export async function getUnsyncedEvents() {
-  const db = await openStore();
-
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(EVENTS_STORE, 'readonly');
-    const store = tx.objectStore(EVENTS_STORE);
-    const index = store.index('synced');
-    const request = index.getAll(false);
-
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = (e) => {
-      reject(new Error('Failed to read unsynced events: ' + e.target.error?.message));
-    };
-  });
+  const all = await getAllEvents();
+  return all.filter(e => !e.synced);
 }
 
 /**
@@ -187,7 +216,7 @@ export async function markSynced(localId, serverId) {
     getReq.onsuccess = () => {
       const record = getReq.result;
       if (!record) { resolve(); return; }
-      record.synced = true;
+      record.synced = SYNCED_TRUE;
       record.server_id = serverId;
       store.put(record);
     };

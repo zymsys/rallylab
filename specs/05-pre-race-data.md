@@ -64,10 +64,12 @@ CREATE TABLE domain_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Dedup index for race day sync (only applies when client_event_id is set)
+-- Dedup index for race day sync. Non-partial so PostgREST upsert can infer
+-- the conflict target — partial-index inference requires the INSERT to
+-- supply the same WHERE predicate, which PostgREST does not. NULL
+-- client_event_id rows stay non-conflicting because NULLs are distinct.
 CREATE UNIQUE INDEX idx_race_day_dedup
-  ON domain_events(rally_id, section_id, client_event_id)
-  WHERE client_event_id IS NOT NULL;
+  ON domain_events(rally_id, section_id, client_event_id);
 
 -- Lookup index for replaying events
 CREATE INDEX idx_domain_events_lookup

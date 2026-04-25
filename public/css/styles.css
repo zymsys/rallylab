@@ -158,6 +158,35 @@ body {
 .sync-pending { color: #facc15; }
 .sync-offline { color: #94a3b8; }
 .sync-error { color: #f87171; }
+.sync-indicator.sync-clickable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  /* Accessible touch target on phones — minimum 44px per Apple HIG. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  -webkit-tap-highlight-color: rgba(255, 255, 255, 0.15);
+  user-select: none;
+  touch-action: manipulation;
+}
+.sync-indicator.sync-clickable:hover { filter: brightness(1.2); }
+.sync-indicator.sync-clickable:active { filter: brightness(0.85); }
+.sync-error-detail {
+  background: #111;
+  color: #fca5a5;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+.sync-error-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
 
 
 /* ===== Main Content ===== */

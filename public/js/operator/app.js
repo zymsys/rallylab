@@ -19,7 +19,8 @@ import {
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, sendZoom, getZoom, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
-import { startSync, stopSync, onSyncStatus, subscribeToRally, onInboundEvents, onInboundStatus } from '../sync-worker.js';
+import { startSync, stopSync, subscribeToRally, onInboundEvents } from '../sync-worker.js';
+import { initSyncIndicator } from '../shared/sync-indicator.js';
 import {
   renderRallyList, renderRallyHome, renderCheckIn,
   renderLiveConsole, renderSectionComplete
@@ -1127,60 +1128,9 @@ function renderCurrentScreen() {
 }
 
 // ─── Sync Status Indicator ────────────────────────────────────────
-
-function initSyncIndicator() {
-  if (isDemoMode()) return;
-
-  const el = document.getElementById('user-info');
-
-  // Inbound (Realtime push) status — shows whether registrar events
-  // are arriving live or only via reconnect-pull.
-  const inbound = document.createElement('span');
-  inbound.id = 'inbound-indicator';
-  inbound.className = 'sync-indicator';
-  inbound.title = 'Cloud push channel';
-  el.prepend(inbound);
-
-  // Outbound (upload) status — preserves prior behavior.
-  const indicator = document.createElement('span');
-  indicator.id = 'sync-indicator';
-  indicator.className = 'sync-indicator';
-  indicator.title = 'Upload status';
-  el.prepend(indicator);
-
-  onSyncStatus(({ status, pendingCount }) => {
-    indicator.className = `sync-indicator sync-${status}`;
-    const labels = {
-      synced: 'Synced',
-      pending: `${pendingCount} pending`,
-      offline: 'Offline',
-      error: 'Sync error'
-    };
-    indicator.textContent = '↑ ' + (labels[status] || status);
-    indicator.title = 'Upload: ' + (labels[status] || status);
-  });
-
-  onInboundStatus((status) => {
-    // Reuse existing sync-* color classes for visual consistency.
-    const klass = {
-      idle: 'sync-offline',
-      connecting: 'sync-pending',
-      live: 'sync-synced',
-      offline: 'sync-offline',
-      error: 'sync-error'
-    }[status] || 'sync-offline';
-    inbound.className = `sync-indicator ${klass}`;
-    const labels = {
-      idle: 'Push idle',
-      connecting: 'Connecting…',
-      live: 'Live',
-      offline: 'Offline',
-      error: 'Push error'
-    };
-    inbound.textContent = '↓ ' + (labels[status] || status);
-    inbound.title = 'Push channel: ' + (labels[status] || status);
-  });
-}
+// Implementation lives in shared/sync-indicator.js so the registrar can
+// reuse it. We pass a getter so the inbound retry can re-subscribe to
+// whatever rally is currently active.
 
 /**
  * Wire up inbound sync for the active rally: an initial catch-up pull
@@ -1333,7 +1283,7 @@ async function init() {
   sendZoom(getZoom());
   await initAuth();
   updateUserInfo();
-  initSyncIndicator();
+  initSyncIndicator({ getRallyId: () => _state?.rally_id });
   await openStore();
   await rebuildFromStore();
 
