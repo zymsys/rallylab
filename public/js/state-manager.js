@@ -747,6 +747,7 @@ export function getCompletedStarts(section) {
 export function flattenStart(section, start) {
   return {
     participants: section.participants,
+    arrived: section.arrived,
     results: start.results,
     removed: start.removed,
     lane_corrections: start.lane_corrections,

@@ -686,7 +686,7 @@ export function renderLiveConsole(container, params, ctx) {
   rightPanel.className = 'console-panel';
   rightPanel.innerHTML = '<h3 class="area-heading">Standings</h3>';
 
-  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, results: {}, removed: [], lane_corrections: {}, reruns: {} };
+  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, arrived: sec.arrived, results: {}, removed: [], lane_corrections: {}, reruns: {} };
   const standings = computeLeaderboard(flatSec);
   const standingsHaveGroups = standings.some(s => s.group_id);
   if (standings.length > 0) {
@@ -1141,7 +1141,7 @@ export function renderSectionComplete(container, params, ctx) {
     container.appendChild(pickerWrap);
   }
 
-  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, results: {}, removed: [], lane_corrections: {}, reruns: {} };
+  const flatSec = currentStart ? flattenStart(sec, currentStart) : { participants: sec.participants, arrived: sec.arrived, results: {}, removed: [], lane_corrections: {}, reruns: {} };
   const standings = computeLeaderboard(flatSec);
   const resultsHaveGroups = standings.some(s => s.group_id);
 
