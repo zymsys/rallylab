@@ -171,6 +171,42 @@ export async function getAccessibleRallyIds() {
   return [...ids];
 }
 
+/**
+ * List rallies the current user can access, with display metadata.
+ * Returns [{ rally_id, rally_name, rally_date }] suitable for a picker.
+ * Uses the most recent RallyCreated event per rally for the name/date.
+ */
+export async function listAccessibleRallies() {
+  const ids = await getAccessibleRallyIds();
+  if (ids.length === 0) return [];
+
+  if (isDemoMode()) {
+    const events = await getAllEvents();
+    const byRally = new Map();
+    for (const e of events) {
+      if (e.type === 'RallyCreated' && ids.includes(e.rally_id)) {
+        byRally.set(e.rally_id, { rally_id: e.rally_id, rally_name: e.rally_name, rally_date: e.rally_date });
+      }
+    }
+    return [...byRally.values()];
+  }
+
+  const client = await getClient();
+  const { data: rows, error } = await client
+    .from('domain_events')
+    .select('rally_id, payload')
+    .in('rally_id', ids)
+    .eq('event_type', 'RallyCreated');
+
+  if (error) throw new Error(error.message);
+
+  return (rows || []).map(r => ({
+    rally_id: r.rally_id,
+    rally_name: r.payload?.rally_name || '(unnamed)',
+    rally_date: r.payload?.rally_date || null
+  }));
+}
+
 // ─── Clone Rally ─────────────────────────────────────────────────
 
 /**

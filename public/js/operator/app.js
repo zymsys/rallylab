@@ -238,7 +238,9 @@ function renderScreen(screenName, params) {
     renderCurrentScreen,
     getTrackPhase: () => _trackPhase,
     getTrackPhaseLog: () => _trackPhaseLog,
-    pauseRaceLoop: () => { if (_raceAbort) _raceAbort.abort(); }
+    pauseRaceLoop: () => { if (_raceAbort) _raceAbort.abort(); },
+    openCloudRally,
+    isCloudAvailable: () => !isDemoMode() && !!getUser()
   };
 
   const result = renderFn(container, params, ctx);
@@ -372,6 +374,21 @@ export async function clearAndRebuild() {
   await clearStore();
   _state = rebuildState([]);
   _liveSection = null;
+}
+
+/**
+ * Bootstrap a rally from Supabase: pull all events into IndexedDB, subscribe
+ * to Realtime push for live updates, rebuild state, and navigate to its home.
+ * Used by the rally-list "Open from Cloud" picker.
+ */
+export async function openCloudRally(rallyId) {
+  if (isDemoMode() || !rallyId) return;
+  const client = await getClient();
+  const user = getUser();
+  if (user) startSync(client, user.id);  // before subscribeToRally so echo dedup sees _userId
+  await subscribeToRally(client, rallyId);
+  await rebuildFromStore();
+  navigate('rally-home', {});
 }
 
 // ─── Schedule Reconstruction ────────────────────────────────────

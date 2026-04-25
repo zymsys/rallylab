@@ -4,10 +4,12 @@
  * Shares IndexedDB with operator via event-store.js.
  */
 
+import { isDemoMode } from '../config.js';
 import { openStore, appendEvent as storeAppend, getAllEvents } from '../event-store.js';
 import { rebuildState } from '../state-manager.js';
 import { notifyEventsChanged, onSyncMessage } from '../broadcast.js';
-import { getUser, signOut, initAuth } from '../supabase.js';
+import { getUser, getClient, signOut, initAuth } from '../supabase.js';
+import { startSync, subscribeToRally, onInboundEvents } from '../sync-worker.js';
 import { renderSectionList, renderSectionCheckIn } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -72,7 +74,9 @@ function renderScreen(screenName, params) {
     state: _state,
     navigate,
     appendEvent: appendAndRebuild,
-    showToast
+    showToast,
+    openCloudRally,
+    isCloudAvailable: () => !isDemoMode() && !!getUser()
   };
 
   renderFn(container, params, ctx);
@@ -132,6 +136,11 @@ export function showToast(message, type = 'info') {
 // ─── Event Append + State Rebuild ────────────────────────────────
 
 async function appendAndRebuild(payload) {
+  // Ensure rally_id is set so sync-worker uploads to the correct rally and
+  // event-store doesn't fall back to a fresh random UUID.
+  if (!payload.rally_id && _state?.rally_id) {
+    payload = { ...payload, rally_id: _state.rally_id };
+  }
   await storeAppend(payload);
   await rebuildFromStore();
   notifyEventsChanged();
@@ -140,7 +149,41 @@ async function appendAndRebuild(payload) {
 
 async function rebuildFromStore() {
   const events = await getAllEvents();
-  _state = rebuildState(events.map(e => ({ payload: e })));
+  _state = rebuildState(events);
+}
+
+/**
+ * Bring up Supabase plumbing once we know the rally we're on:
+ *   - startSync uploads any local events the registrar has accumulated offline
+ *   - subscribeToRally pulls the full event history and opens a Realtime
+ *     channel so other devices' check-ins land here within a tick.
+ * Safe to call multiple times — both helpers are idempotent for the same args.
+ */
+async function bringUpCloudSync(rallyId) {
+  if (isDemoMode() || !rallyId) return;
+  const user = getUser();
+  if (!user) return;
+  try {
+    const client = await getClient();
+    startSync(client, user.id);
+    await subscribeToRally(client, rallyId);
+  } catch (e) {
+    console.warn('Cloud sync setup failed:', e.message);
+  }
+}
+
+/**
+ * Bootstrap a rally chosen from the cloud picker: pulls events into IndexedDB
+ * and opens the Realtime channel, then re-renders so the section list fills in.
+ */
+export async function openCloudRally(rallyId) {
+  if (isDemoMode() || !rallyId) return;
+  const client = await getClient();
+  const user = getUser();
+  if (user) startSync(client, user.id);  // before subscribeToRally so echo dedup sees _userId
+  await subscribeToRally(client, rallyId);
+  await rebuildFromStore();
+  navigate('section-list', {}, { replace: true });
 }
 
 // ─── Render Helper ───────────────────────────────────────────────
@@ -180,12 +223,22 @@ async function init() {
   await openStore();
   await rebuildFromStore();
 
+  // If we already have a rally locally, bring up cloud sync so registrars
+  // on other devices see this device's check-ins (and vice-versa).
+  if (_state?.rally_id) bringUpCloudSync(_state.rally_id);
+
   // Listen for sync messages from other tabs (e.g. operator)
   onSyncMessage(async (msg) => {
     if (msg.type === 'EVENTS_CHANGED') {
       await rebuildFromStore();
       renderCurrentScreen();
     }
+  });
+
+  // Listen for inbound events from Supabase (Realtime push + reconnect pull)
+  onInboundEvents(async () => {
+    await rebuildFromStore();
+    renderCurrentScreen();
   });
 
   // Route to current hash or section list

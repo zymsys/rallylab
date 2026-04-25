@@ -23,8 +23,12 @@ export function renderSectionList(container, params, ctx) {
   if (!rd.loaded || sections.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = 'No roster loaded. The operator needs to load a roster package first.';
+    empty.textContent = 'No roster loaded. Open a rally from the cloud or wait for the operator to load a roster package.';
     container.appendChild(empty);
+
+    if (ctx.isCloudAvailable && ctx.isCloudAvailable()) {
+      renderCloudRallyPicker(container, ctx);
+    }
     return;
   }
 
@@ -190,6 +194,57 @@ export function renderSectionCheckIn(container, params, ctx) {
 
     tbody.appendChild(tr);
   }
+}
+
+// ─── Cloud Rally Picker ─────────────────────────────────────────
+
+async function renderCloudRallyPicker(container, ctx) {
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '1.5rem';
+  wrap.innerHTML = `<h3 class="screen-subtitle" style="margin-bottom:0.5rem">Open from cloud</h3><p class="info-line" id="cloud-status">Loading…</p>`;
+  container.appendChild(wrap);
+
+  let rallies = [];
+  try {
+    const { listAccessibleRallies } = await import('../pre-race/commands.js');
+    rallies = await listAccessibleRallies();
+  } catch (e) {
+    wrap.querySelector('#cloud-status').textContent = `Couldn't load cloud rallies: ${e.message}`;
+    return;
+  }
+
+  if (rallies.length === 0) {
+    wrap.querySelector('#cloud-status').textContent = 'No cloud rallies available for your account.';
+    return;
+  }
+
+  wrap.querySelector('#cloud-status').remove();
+
+  const list = document.createElement('div');
+  list.className = 'table-wrap';
+  list.innerHTML = `<table><thead><tr><th>Rally</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>`;
+  const tbody = list.querySelector('tbody');
+  for (const r of rallies) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><strong>${esc(r.rally_name)}</strong></td><td>${esc(r.rally_date || '')}</td><td class="table-actions"></td>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-primary';
+    btn.textContent = 'Open';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
+      try {
+        await ctx.openCloudRally(r.rally_id);
+      } catch (e) {
+        ctx.showToast(`Open failed: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Open';
+      }
+    };
+    tr.querySelector('.table-actions').appendChild(btn);
+    tbody.appendChild(tr);
+  }
+  wrap.appendChild(list);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────

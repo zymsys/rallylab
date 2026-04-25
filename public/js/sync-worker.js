@@ -159,9 +159,11 @@ export async function syncOnce() {
 // ─── Restore from Supabase ────────────────────────────────────────
 
 /**
- * Pull existing race-day events from Supabase into IndexedDB.
- * Used when an operator loads a rally online and wants to restore
- * a previous session or sync from another device.
+ * Pull existing events for a rally from Supabase into IndexedDB.
+ * Used to bootstrap a fresh device, restore a previous session, or
+ * catch up on events that arrived while offline. Pulls both pre-race
+ * events (no client_event_id) and race-day events (with one) — dedup
+ * happens via server_id in _ingestServerRow.
  *
  * @param {Object} supabaseClient
  * @param {string} rallyId
@@ -173,8 +175,7 @@ export async function restoreFromSupabase(supabaseClient, rallyId, sectionId) {
     .from('domain_events')
     .select('*')
     .eq('rally_id', rallyId)
-    .not('client_event_id', 'is', null)
-    .order('client_event_id');
+    .order('id');
 
   if (sectionId) query = query.eq('section_id', sectionId);
 
