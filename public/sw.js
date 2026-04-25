@@ -3,9 +3,14 @@
  *
  * Cache-first strategy: cached assets are served immediately.
  * Bump CACHE_VERSION to force an update on next visit.
+ *
+ * Update flow: a freshly installed SW does NOT auto-activate. It waits in the
+ * `waiting` state until the page sends a `SKIP_WAITING` message (the in-app
+ * "New version available" banner is what triggers it). This avoids surprise
+ * reloads mid-race.
  */
 
-const CACHE_VERSION = 'rallylab-v2';
+const CACHE_VERSION = 'rallylab-v3';
 
 const APP_SHELL = [
   './',
@@ -23,6 +28,7 @@ const APP_SHELL = [
   'js/broadcast.js',
   'js/scheduler.js',
   'js/scoring.js',
+  'js/sw-update.js',
   'js/pre-race/app.js',
   'js/pre-race/screens.js',
   'js/pre-race/dialogs.js',
@@ -56,7 +62,6 @@ self.addEventListener('install', event => {
       cache.addAll([...APP_SHELL, ...CDN_DEPS])
     )
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -66,6 +71,12 @@ self.addEventListener('activate', event => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', event => {
