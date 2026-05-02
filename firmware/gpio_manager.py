@@ -112,11 +112,17 @@ class GpioManager:
                 if now_ms - self._lane_stable[lane] >= DEBOUNCE_MS:
                     self._lane_state[lane] = raw
                     self._lane_last_edge[lane] = now_ms
-                    # Falling edge (pull-up to ground) = car arrived
                     if raw == 0:
+                        # Falling edge (pull-up to ground) = car arrived.
                         self._fire_edge("lane", "triggered", lane, now_ms, LANE_PINS[lane])
                         if self.on_lane_triggered:
                             self.on_lane_triggered(lane, now_ms)
+                    else:
+                        # Rising edge = sensor cleared. The race engine
+                        # ignores this (timing only uses the trigger),
+                        # but v2 live-status subscribers need it to flip
+                        # back to clear in the operator UI.
+                        self._fire_edge("lane", "cleared", lane, now_ms, LANE_PINS[lane])
 
     # -- watch-all mode (scans GP0-GP22) ---------------------------------
 

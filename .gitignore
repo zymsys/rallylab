@@ -29,3 +29,7 @@ test-results/
 playwright-report/
 blob-report/
 .features-gen/
+
+# Python bytecode (firmware tests run under CPython)
+__pycache__/
+*.pyc

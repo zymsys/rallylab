@@ -106,17 +106,24 @@ export function computeLeaderboard(section) {
     }
   }
 
-  // Determine expected heats (max heats_run among non-removed participants)
-  const expectedHeats = Math.max(
-    0,
-    ...Object.values(scores)
-      .filter(s => !s.removed)
-      .map(s => s.heats_run)
-  );
-
   // Rank participants (include removed cars — they keep their prior results, marked incomplete)
   const entries = Object.values(scores)
     .filter(s => s.heats_run > 0);
+
+  // Determine expected heats (max heats_run among non-removed participants).
+  // When the section was ended early, fairness rule (specs/08 §4.3): all
+  // remaining cars are ranked together by avg time regardless of how many
+  // heats they ran — so we collapse expectedHeats to 0 and only "removed"
+  // cars stay in the incomplete bucket.
+  const earlyEnd = !!section.early_end;
+  const expectedHeats = earlyEnd
+    ? 0
+    : Math.max(
+        0,
+        ...Object.values(scores)
+          .filter(s => !s.removed)
+          .map(s => s.heats_run)
+      );
 
   // Separate complete and incomplete (removed cars are always incomplete)
   const complete = entries.filter(s => s.heats_run >= expectedHeats && !s.removed);

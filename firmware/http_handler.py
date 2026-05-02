@@ -1,34 +1,40 @@
-# http_handler.py — Non-blocking HTTP server for WiFi transport
+# http_handler.py — HTTP/SSE transport for protocol v2.
 #
-# Implements the same command set as serial_handler (minus dbg_watch)
-# over HTTP GET. All responses are pretty-printed JSON with CORS headers.
+# Two routes:
+#   POST /cmd   — body is one v2 JSON request frame; returns one v2 frame.
+#   GET  /events?topics=gate,lanes — Server-Sent Events stream of v2 frames.
 #
-# Long-poll endpoints (/wait/race, /wait/gate) hold the socket open
-# until the event occurs or a timeout expires.
+# Each SSE connection owns one v2 Session. /cmd creates a short-lived
+# session, dispatches the request, captures the first frame, and closes.
+#
+# See specs/03-track-controller-protocol-v2.md §1.2.
 
 import socket
 import time
 import errno
-from config import FIRMWARE_VERSION, PROTOCOL_VERSION, LANE_COUNT, HTTP_PORT, DEBOUNCE_MS
-from json_format import pretty
 
-_MAX_WAIT_CLIENTS = 4
+from config import HTTP_PORT
+from protocol_v2 import HTTP_QUEUE_CAP
+
+
 _PENDING_TIMEOUT_MS = 5000
 _CORS = "Access-Control-Allow-Origin: *\r\n"
 
 
 class HttpHandler:
-    def __init__(self, engine, gpio, wifi):
-        self._engine = engine
-        self._gpio = gpio
+    def __init__(self, dispatcher, wifi):
+        self._d = dispatcher
         self._wifi = wifi
         self._server = None
-        self._pending = []        # (sock, buf, accept_ms) — partial requests
-        self._wait_race = []      # sockets waiting for race completion
-        self._wait_gate = []      # sockets waiting for gate ready
+
+        # (sock, buf, accept_ms) for in-progress request reads.
+        self._pending = []
+        # (sock, session, last_keepalive_ms) for active SSE clients.
+        self._sse = []
+
+    # ─── Lifecycle ─────────────────────────────────────────────────
 
     def start(self):
-        """Bind port 80, listen, set non-blocking."""
         self._server = socket.socket()
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server.bind(("0.0.0.0", HTTP_PORT))
@@ -36,226 +42,269 @@ class HttpHandler:
         self._server.setblocking(False)
 
     def poll(self):
-        """Accept new connections and process pending requests. Non-blocking."""
-        # Accept new connections
+        """Accept new connections, read pending requests, drain SSE."""
+        # Accept
         try:
-            cl, addr = self._server.accept()
+            cl, _addr = self._server.accept()
             cl.setblocking(False)
             self._pending.append((cl, b"", time.ticks_ms()))
         except OSError as e:
             if e.errno != errno.EAGAIN:
                 raise
 
-        # Process pending connections
         now = time.ticks_ms()
-        still_pending = []
+
+        # Read pending request bodies
+        still = []
         for cl, buf, accept_ms in self._pending:
-            # Timeout stale connections
             if time.ticks_diff(now, accept_ms) > _PENDING_TIMEOUT_MS:
                 cl.close()
                 continue
-            # Try to read more data
             try:
-                data = cl.recv(512)
+                data = cl.recv(1024)
                 if not data:
                     cl.close()
                     continue
                 buf += data
             except OSError as e:
                 if e.errno == errno.EAGAIN:
-                    still_pending.append((cl, buf, accept_ms))
+                    still.append((cl, buf, accept_ms))
                     continue
                 cl.close()
                 continue
-            # Check for end of headers
-            if b"\r\n\r\n" in buf:
+            if self._request_complete(buf):
                 self._handle_request(cl, buf)
             else:
-                still_pending.append((cl, buf, accept_ms))
-        self._pending = still_pending
+                still.append((cl, buf, accept_ms))
+        self._pending = still
+
+        # SSE keepalive + drain queued frames
+        sse_alive = []
+        for cl, sess, last_ka in self._sse:
+            try:
+                # Drain any frames the session has queued.
+                # Session.drain() will use _write_line; closure on error
+                # will set sess._closed and we drop it below.
+                sess.drain()
+            except OSError:
+                cl.close()
+                continue
+            if sess._closed:
+                try:
+                    cl.close()
+                except Exception:
+                    pass
+                continue
+            # Heartbeat every 15s.
+            if time.ticks_diff(now, last_ka) > 15000:
+                try:
+                    cl.send(b": ping\n\n")
+                    last_ka = now
+                except OSError:
+                    cl.close()
+                    continue
+            sse_alive.append((cl, sess, last_ka))
+        self._sse = sse_alive
+
+    # ─── Routing ───────────────────────────────────────────────────
+
+    def _request_complete(self, buf):
+        # Headers ended? If POST, also need the body length to be present.
+        idx = buf.find(b"\r\n\r\n")
+        if idx < 0:
+            return False
+        head = buf[:idx].decode("utf-8", "ignore")
+        first = head.split("\r\n", 1)[0]
+        if first.startswith("GET "):
+            return True
+        if first.startswith("POST "):
+            body = buf[idx + 4:]
+            length = 0
+            for ln in head.split("\r\n")[1:]:
+                if ln.lower().startswith("content-length:"):
+                    try:
+                        length = int(ln.split(":", 1)[1].strip())
+                    except ValueError:
+                        length = 0
+                    break
+            return len(body) >= length
+        # Unknown verb — treat as complete so we 405 promptly.
+        return True
 
     def _handle_request(self, cl, raw):
-        """Parse HTTP request and route to handler."""
+        head_end = raw.find(b"\r\n\r\n")
+        head_bytes, body = raw[:head_end], raw[head_end + 4:]
         try:
-            line = raw.split(b"\r\n", 1)[0].decode()
+            head = head_bytes.decode("utf-8", "ignore")
         except Exception:
             cl.close()
             return
-
-        parts = line.split()
+        first = head.split("\r\n", 1)[0]
+        parts = first.split()
         if len(parts) < 2:
-            self._send(cl, 400, {"error": "bad request"})
+            self._send_json(cl, 400, {"err": "bad request", "code": "bad_frame"})
+            return
+        method, path_raw = parts[0], parts[1]
+
+        path, query = self._split_query(path_raw)
+
+        if method == "OPTIONS":
+            self._send_options(cl)
             return
 
-        method = parts[0]
-        if method != "GET":
-            self._send(cl, 405, {"error": "method not allowed"})
+        if method == "POST" and path == "/cmd":
+            self._route_cmd(cl, body)
             return
 
-        path_raw = parts[1]
-        path, params = self._parse_url(path_raw)
+        if method == "GET" and path == "/events":
+            self._route_events(cl, query)
+            return
 
-        if path == "/info":
+        if method == "GET" and path == "/info":
+            # Convenience for HTTP probing — mirror the v2 info command.
             self._route_info(cl)
-        elif path == "/state":
-            self._route_state(cl)
-        elif path == "/wait/race":
-            self._route_wait_race(cl, params)
-        elif path == "/gate":
-            self._route_gate(cl)
-        elif path == "/wait/gate":
-            self._route_wait_gate(cl)
-        elif path == "/dbg":
-            self._route_dbg(cl)
-        elif path == "/wifi/scan":
-            self._route_wifi_scan(cl)
-        else:
-            self._send(cl, 404, {"error": "not found"})
+            return
 
-    def _parse_url(self, url):
-        """Parse '/path?key=val&key=val' into (path, params_dict)."""
-        params = {}
+        self._send_json(cl, 404, {"err": "not found", "code": "not_supported"})
+
+    def _split_query(self, url):
         if "?" in url:
-            path, query = url.split("?", 1)
-            for pair in query.split("&"):
+            path, q = url.split("?", 1)
+            params = {}
+            for pair in q.split("&"):
                 if "=" in pair:
                     k, v = pair.split("=", 1)
                     params[k] = v
-        else:
-            path = url
-        return path, params
+            return path, params
+        return url, {}
 
-    def _send(self, cl, status, obj):
-        """Send HTTP response with JSON body, then close."""
-        body = pretty(obj)
-        status_text = "OK" if status == 200 else "Error"
-        header = "HTTP/1.1 %d %s\r\n" % (status, status_text)
-        header += "Content-Type: application/json\r\n"
-        header += _CORS
-        header += "Connection: close\r\n"
-        header += "Content-Length: %d\r\n\r\n" % len(body)
+    # ─── /info ─────────────────────────────────────────────────────
+
+    def _route_info(self, cl):
+        # Use a transient session to render the info response once.
+        captured = []
+        sess = self._d.new_session(lambda l: captured.append(l) or True,
+                                   queue_cap=HTTP_QUEUE_CAP)
+        sess.feed_line('{"id":1,"cmd":"info"}')
+        sess.drain()
+        sess.close()
+        if not captured:
+            self._send_json(cl, 500, {"err": "no response"})
+            return
+        # Captured is a JSON line; forward as-is.
+        body = captured[0]
+        header = ("HTTP/1.1 200 OK\r\n"
+                  "Content-Type: application/json\r\n"
+                  + _CORS +
+                  "Connection: close\r\n"
+                  "Content-Length: %d\r\n\r\n" % len(body))
         try:
             cl.send(header.encode() + body.encode())
         except OSError:
             pass
         cl.close()
 
-    # -- routes ----------------------------------------------------------------
+    # ─── /cmd ──────────────────────────────────────────────────────
 
-    def _route_info(self, cl):
-        self._send(cl, 200, {
-            "protocol": PROTOCOL_VERSION,
-            "firmware": FIRMWARE_VERSION,
-            "lane_count": LANE_COUNT,
-        })
-
-    def _route_state(self, cl):
-        if self._engine.last_race is None:
-            self._send(cl, 200, None)
-        else:
-            self._send(cl, 200, self._engine.last_race)
-
-    def _route_wait_race(self, cl, params):
-        after = params.get("after")
-        lanes = params.get("lanes")
-
-        # If after doesn't match current, return immediately
-        if after and self._engine.last_race:
-            if after != self._engine.last_race.get("race_id"):
-                self._send(cl, 200, self._engine.last_race)
-                return
-
-        # Check wait client limit
-        if len(self._wait_race) >= _MAX_WAIT_CLIENTS:
-            self._send(cl, 503, {"error": "too many wait clients"})
+    def _route_cmd(self, cl, body):
+        try:
+            line = body.decode("utf-8", "ignore").strip()
+        except Exception:
+            self._send_json(cl, 400, {"err": "bad body"})
+            return
+        if not line:
+            self._send_json(cl, 400, {"err": "empty body"})
             return
 
-        # Validate lanes
-        if lanes:
+        captured = []
+        sess = self._d.new_session(lambda l: captured.append(l) or True,
+                                   queue_cap=HTTP_QUEUE_CAP)
+        sess.feed_line(line)
+        sess.drain()
+        # /cmd is request/response; close the transient session.
+        sess.close()
+
+        if not captured:
+            # No synchronous response — request is a long wait.
+            # /cmd is unsuitable for those; tell the client.
+            self._send_json(cl, 202, {"err": "use SSE for waits", "code": "bad_state"})
+            return
+
+        body_out = captured[0]
+        header = ("HTTP/1.1 200 OK\r\n"
+                  "Content-Type: application/json\r\n"
+                  + _CORS +
+                  "Connection: close\r\n"
+                  "Content-Length: %d\r\n\r\n" % len(body_out))
+        try:
+            cl.send(header.encode() + body_out.encode())
+        except OSError:
+            pass
+        cl.close()
+
+    # ─── /events (SSE) ─────────────────────────────────────────────
+
+    def _route_events(self, cl, query):
+        topics = query.get("topics", "")
+        topic_list = [t.strip() for t in topics.split(",") if t.strip()]
+        # Send SSE preamble.
+        try:
+            cl.send(("HTTP/1.1 200 OK\r\n"
+                     "Content-Type: text/event-stream\r\n"
+                     + _CORS +
+                     "Cache-Control: no-cache\r\n"
+                     "Connection: keep-alive\r\n\r\n").encode())
+        except OSError:
+            cl.close()
+            return
+
+        # Bind a session whose write_line emits SSE-framed lines.
+        def write(line):
             try:
-                seen = set()
-                for ch in lanes:
-                    n = int(ch)
-                    if n < 1 or n > LANE_COUNT:
-                        self._send(cl, 400, {"error": "lane %d out of range 1..%d" % (n, LANE_COUNT)})
-                        return
-                    if n in seen:
-                        self._send(cl, 400, {"error": "duplicate lane %d" % n})
-                        return
-                    seen.add(n)
-            except ValueError:
-                self._send(cl, 400, {"error": "invalid lanes: %s" % lanes})
-                return
+                cl.send(("data: " + line + "\n\n").encode())
+                return True
+            except OSError:
+                return False  # tell session to back off
 
-        # Arm or attach as listener
-        if self._engine.phase in ("ARMED", "RACING"):
-            self._engine.add_listener(self._on_race_complete)
-        else:
-            self._engine.arm(lanes, self._on_race_complete)
+        sess = self._d.new_session(write, queue_cap=HTTP_QUEUE_CAP)
 
-        self._wait_race.append(cl)
+        # If the client passed topics in the query, auto-subscribe.
+        if topic_list:
+            import json as _json
+            sess.feed_line(_json.dumps({"id": 1, "cmd": "subscribe",
+                                         "topics": topic_list}))
+        sess.drain()
 
-    def _route_gate(self, cl):
-        self._send(cl, 200, {"gate_ready": self._engine.gate_ready})
+        self._sse.append((cl, sess, time.ticks_ms()))
 
-    def _route_wait_gate(self, cl):
-        if self._engine.gate_ready:
-            self._send(cl, 200, {"gate_ready": True})
-            return
+    # ─── Helpers ───────────────────────────────────────────────────
 
-        if len(self._wait_gate) >= _MAX_WAIT_CLIENTS:
-            self._send(cl, 503, {"error": "too many wait clients"})
-            return
+    def _send_json(self, cl, status, obj):
+        try:
+            import json as _json
+            body = _json.dumps(obj)
+        except Exception:
+            body = '{"err":"encode error"}'
+        text = "OK" if status == 200 else "Error"
+        header = ("HTTP/1.1 %d %s\r\n"
+                  "Content-Type: application/json\r\n"
+                  + _CORS +
+                  "Connection: close\r\n"
+                  "Content-Length: %d\r\n\r\n") % (status, text, len(body))
+        try:
+            cl.send(header.encode() + body.encode())
+        except OSError:
+            pass
+        cl.close()
 
-        self._wait_gate.append(cl)
-
-    def _route_dbg(self, cl):
-        result = {
-            "controller": {
-                "protocol": PROTOCOL_VERSION,
-                "firmware": FIRMWARE_VERSION,
-                "uptime_ms": time.ticks_ms(),
-            },
-            "io": {
-                "start_gate": self._gpio.gate_dbg(),
-                "lanes": self._gpio.lanes_dbg(),
-                "debounce_ms": DEBOUNCE_MS,
-            },
-            "engine": {
-                "phase": self._engine.phase,
-                "race_id": self._engine.race_id,
-                "active_lanes": sorted(list(self._engine.active_lanes)) if self._engine.active_lanes else None,
-                "gate_ready": self._engine.gate_ready,
-            },
-        }
-        if self._wifi:
-            result["wifi"] = self._wifi.status()
-        self._send(cl, 200, result)
-
-    def _route_wifi_scan(self, cl):
-        if self._wifi:
-            self._send(cl, 200, self._wifi.scan())
-        else:
-            self._send(cl, 200, [])
-
-    # -- long-poll resolution --------------------------------------------------
-
-    def check_gate_ready(self):
-        """Called from main loop. Resolves waiting /wait/gate clients."""
-        if not self._wait_gate:
-            return
-        if not self._engine.gate_ready:
-            return
-        for cl in self._wait_gate:
-            self._send(cl, 200, {"gate_ready": True})
-        self._wait_gate = []
-
-    def on_race_complete(self, result):
-        """Called externally (from _on_race_complete) to send to all waiters."""
-        for cl in self._wait_race:
-            self._send(cl, 200, result)
-        self._wait_race = []
-
-    def _on_race_complete(self, result):
-        """Engine callback — delegates to on_race_complete."""
-        self.on_race_complete(result)
+    def _send_options(self, cl):
+        header = ("HTTP/1.1 204 No Content\r\n"
+                  + _CORS +
+                  "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                  "Access-Control-Allow-Headers: Content-Type\r\n"
+                  "Content-Length: 0\r\n\r\n")
+        try:
+            cl.send(header.encode())
+        except OSError:
+            pass
+        cl.close()

@@ -751,7 +751,8 @@ export function flattenStart(section, start) {
     results: start.results,
     removed: start.removed,
     lane_corrections: start.lane_corrections,
-    reruns: start.reruns
+    reruns: start.reruns,
+    early_end: start.early_end || false
   };
 }
 

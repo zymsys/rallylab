@@ -590,6 +590,14 @@ export function showTrackManagerDialog(ctx) {
       <div style="border-top:1px solid var(--color-border);padding-top:1rem;margin-bottom:1rem">
         <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.5rem;color:var(--color-text-secondary)">Sensor Status</label>
         <div id="dlg-sensor-status">Loading&hellip;</div>
+      </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:1rem;margin-bottom:1rem">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.5rem;color:var(--color-text-secondary)">Firmware</label>
+        <div id="dlg-firmware-status" class="form-hint">Checking&hellip;</div>
+        <div id="dlg-firmware-progress" class="form-hint" style="display:none;margin-top:0.5rem"></div>
+        <button class="btn btn-secondary btn-sm" data-action="flash-firmware" id="dlg-flash-btn"
+                style="display:none;margin-top:0.5rem">Flash latest</button>
+        <div id="dlg-firmware-error" class="form-error" style="margin-top:0.5rem"></div>
       </div>`;
   }
 
@@ -708,6 +716,7 @@ export function showTrackManagerDialog(ctx) {
   // Live sensor status polling
   if (isSerial || isWifi) {
     _startSensorPolling(d, ctx, isSerial);
+    _setupFirmwareSection(d, ctx, isSerial);
   }
 
   // USB Serial → WiFi setup
@@ -719,6 +728,111 @@ export function showTrackManagerDialog(ctx) {
   if (isDisconnected) {
     _setupConnectOptions(d, ctx);
   }
+}
+
+async function _setupFirmwareSection(d, ctx, isSerial) {
+  const statusEl = d.querySelector('#dlg-firmware-status');
+  const flashBtn = d.querySelector('#dlg-flash-btn');
+  const progressEl = d.querySelector('#dlg-firmware-progress');
+  const errorEl = d.querySelector('#dlg-firmware-error');
+  if (!statusEl || !flashBtn) return;
+
+  const { fetchLatestFirmware, parseFirmwareVersion, flashFirmwareInBand } =
+    await import('../track-connection.js');
+
+  let device = null;
+  let latest = null;
+  let latestVersion = null;
+  let latestFiles = null;
+
+  // Read device version (already known via the v2 info exchange at connect).
+  try {
+    const info = isSerial
+      ? await ctx.sendSerialCommand('info')
+      : await fetch(`http://${ctx.getSavedTrackIp()}/info`).then(r => r.json()).then(j => j.ok || j);
+    device = info;
+  } catch (e) {
+    statusEl.textContent = 'Could not read device firmware version.';
+    return;
+  }
+
+  // Fetch latest from GitHub.
+  try {
+    statusEl.textContent = 'Checking for updates…';
+    latest = await fetchLatestFirmware(() => {});
+    const cfg = latest.find(f => f.name === 'config.py');
+    latestVersion = cfg ? parseFirmwareVersion(cfg.content) : null;
+    latestFiles = latest;
+  } catch (e) {
+    statusEl.innerHTML = `Device: <strong>${esc(device.firmware || '?')}</strong> &middot; Could not check GitHub for updates`;
+    return;
+  }
+
+  const isV2 = device.protocol === '2.0';
+  const upToDate = isV2 && latestVersion && device.firmware === latestVersion;
+
+  if (upToDate) {
+    statusEl.innerHTML = `Up to date &mdash; <strong>${esc(device.firmware || '')}</strong>`;
+  } else if (!isV2) {
+    statusEl.innerHTML = `<span style="color:var(--color-danger)">Incompatible firmware (protocol ${esc(device.protocol || '?')}). Flash required.</span>`;
+    flashBtn.style.display = '';
+    flashBtn.classList.replace('btn-secondary', 'btn-primary');
+  } else {
+    statusEl.innerHTML =
+      `Update available: <strong>${esc(device.firmware || '?')}</strong> &rarr; ` +
+      `<strong>${esc(latestVersion || '?')}</strong>`;
+    flashBtn.style.display = '';
+  }
+
+  flashBtn.onclick = async () => {
+    if (!isSerial) {
+      // WiFi flashing of v1 devices is not supported; v2 in-band flashing IS.
+      // For now, only allow in-band flash (any v2 device).
+      if (!isV2) {
+        errorEl.textContent = 'Connect via USB to flash an incompatible Pico.';
+        return;
+      }
+    }
+    flashBtn.disabled = true;
+    progressEl.style.display = '';
+    progressEl.textContent = 'Starting flash…';
+    errorEl.textContent = '';
+    try {
+      // Cancel any outstanding wait_race so the engine returns to IDLE
+      // before update_commit runs (firmware refuses to commit otherwise).
+      // pauseRaceLoop fires the AbortSignal on the active wait, which the
+      // v2 client translates into a cancel frame on the wire.
+      if (typeof ctx.pauseRaceLoop === 'function') {
+        ctx.pauseRaceLoop();
+        // Give the cancel a moment to land on the firmware.
+        await new Promise(r => setTimeout(r, 250));
+      }
+
+      if (!isV2 && isSerial) {
+        // Out-of-band: use raw-REPL recovery by reconnecting.
+        progressEl.textContent = 'Re-flashing via raw REPL — keep the cable connected…';
+        await ctx.connectSerial((stage) => { progressEl.textContent = stage; });
+        progressEl.textContent = 'Flash complete. Reconnecting…';
+      } else {
+        await flashFirmwareInBand(latestFiles, latestVersion || 'unknown', (stage, info) => {
+          if (stage === 'begin') progressEl.textContent = 'Opening update session…';
+          else if (stage === 'commit') progressEl.textContent = 'Committing & rebooting…';
+          else if (stage === 'rebooting') progressEl.textContent = 'Waiting for device to come back…';
+          else if (stage === 'done') progressEl.textContent = `Done — firmware ${info.firmware}.`;
+          else if (stage === 'chunk' && info) {
+            progressEl.textContent =
+              `Uploading ${info.file} (${info.fileIndex + 1}/${info.totalFiles}) — ` +
+              `${Math.round((info.sent / info.size) * 100)}%`;
+          }
+        });
+      }
+      ctx.showToast('Firmware flashed', 'success');
+      setTimeout(() => closeDialog(), 1500);
+    } catch (e) {
+      errorEl.textContent = `Flash failed: ${e.message}`;
+      flashBtn.disabled = false;
+    }
+  };
 }
 
 function _startSensorPolling(d, ctx, isSerial) {
@@ -1031,9 +1145,12 @@ function _setupConnectOptions(d, ctx) {
       connectWifiBtn.textContent = 'Connecting\u2026';
       try {
         await ctx.connectWifi(ip);
-        closeDialog();
         ctx.showToast(`Track connected at ${ip}`, 'success');
         afterTrackConnect(ctx);
+        // Re-open so the operator immediately sees the connected state
+        // and any firmware-update prompt, rather than hunting for it.
+        closeDialog();
+        showTrackManagerDialog(ctx);
       } catch (e) {
         connectError.textContent = e.message;
         connectWifiBtn.disabled = false;
@@ -1055,9 +1172,10 @@ function _setupConnectOptions(d, ctx) {
         await ctx.connectSerial((status) => {
           connectUsbBtn.textContent = status;
         });
-        closeDialog();
         ctx.showToast('Track connected via USB', 'success');
         afterTrackConnect(ctx);
+        closeDialog();
+        showTrackManagerDialog(ctx);
       } catch (e) {
         connectError.textContent = e.message;
         connectUsbBtn.disabled = false;

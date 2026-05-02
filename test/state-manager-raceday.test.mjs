@@ -207,6 +207,26 @@ describe('LanesChanged', () => {
     ]);
     assert.strictEqual(s.race_day.sections.unknown, undefined);
   });
+
+  it('preserves prior heat results when lanes are changed mid-section', () => {
+    const lanes = [
+      { lane: 1, car_number: '1', name: 'Alice' },
+      { lane: 2, car_number: '2', name: 'Bob' }
+    ];
+    const s = buildState([
+      ...baseRosterPayloads(),
+      { type: 'SectionStarted', section_id: 's1', available_lanes: [1, 2, 3, 4] },
+      { type: 'RaceCompleted', section_id: 's1', heat_number: 1, lanes, times_ms: { '1': 2500, '2': 2700 } },
+      { type: 'RaceCompleted', section_id: 's1', heat_number: 2, lanes, times_ms: { '1': 2480, '2': 2680 } },
+      { type: 'LanesChanged', section_id: 's1', available_lanes: [1, 2, 3] }
+    ]);
+    const start = s.race_day.sections.s1.starts[1];
+    assert.deepStrictEqual(start.available_lanes, [1, 2, 3]);
+    assert.ok(start.results[1], 'heat 1 result preserved');
+    assert.ok(start.results[2], 'heat 2 result preserved');
+    assert.deepStrictEqual(start.results[1].times_ms, { '1': 2500, '2': 2700 });
+    assert.deepStrictEqual(start.results[2].times_ms, { '1': 2480, '2': 2680 });
+  });
 });
 
 // ─── RaceCompleted ──────────────────────────────────────────────

@@ -29,9 +29,7 @@ export function renderWelcome(container, rallyName) {
 
 export function renderStaging(container, sectionName, heatNumber, lanes, nextHeat) {
   const sortedLanes = [...lanes].sort((a, b) => a.lane - b.lane);
-  const showGroupCurrent = sortedLanes.some(l => l.group_name);
   const nextLanesSorted = nextHeat ? [...nextHeat.lanes].sort((a, b) => a.lane - b.lane) : [];
-  const showGroupNext = nextLanesSorted.some(l => l.group_name);
 
   let currentRows = '';
   for (const lane of sortedLanes) {
@@ -40,7 +38,6 @@ export function renderStaging(container, sectionName, heatNumber, lanes, nextHea
         <td class="audience-lane-number">Lane ${lane.lane}</td>
         <td class="audience-car-number">#${lane.car_number}</td>
         <td class="audience-name">${esc(lane.name)}</td>
-        ${showGroupCurrent ? `<td class="audience-group">${esc(lane.group_name || '')}</td>` : ''}
       </tr>`;
   }
 
@@ -53,7 +50,6 @@ export function renderStaging(container, sectionName, heatNumber, lanes, nextHea
           <td class="audience-lane-number">Lane ${lane.lane}</td>
           <td class="audience-car-number">#${lane.car_number}</td>
           <td class="audience-name">${esc(lane.name)}</td>
-          ${showGroupNext ? `<td class="audience-group">${esc(lane.group_name || '')}</td>` : ''}
         </tr>`;
     }
     nextHtml = `

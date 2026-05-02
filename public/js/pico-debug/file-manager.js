@@ -164,5 +164,38 @@ export function createFileManager(rawRepl) {
     }
   }
 
-  return { listFiles, readFile, writeFile, writeFiles, deleteFile };
+  /**
+   * Remove any .py files on the device that aren't in `keep`. Useful
+   * during a v1→v2 cutover where stale modules (json_format.py, etc.)
+   * would otherwise linger. Non-.py files (wifi.json, etc.) are
+   * preserved unconditionally.
+   *
+   * @param {Array<string>} keep — filenames to leave alone
+   */
+  async function cleanStalePyFiles(keep) {
+    const keepSet = new Set(keep);
+    await rawRepl.enter();
+    try {
+      const { stdout } = await rawRepl.exec(
+        'import os\nfor f in os.listdir("/"):\n if f.endswith(".py"):print(f)'
+      );
+      const present = stdout.split('\n').map(l => l.trim()).filter(Boolean);
+      const stale = present.filter(name => !keepSet.has(name));
+      for (const name of stale) {
+        const { stderr } = await rawRepl.exec(
+          `import os\ntry:\n os.remove('${name}')\n print('ok')\nexcept Exception as e:\n print(repr(e))`
+        );
+        if (stderr.trim()) {
+          throw new Error(`cleanStale(${name}) error: ${stderr.trim()}`);
+        }
+      }
+      await rawRepl.exit();
+      return stale;
+    } catch (err) {
+      try { await rawRepl.exit(); } catch {}
+      throw err;
+    }
+  }
+
+  return { listFiles, readFile, writeFile, writeFiles, deleteFile, cleanStalePyFiles };
 }

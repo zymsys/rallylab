@@ -161,31 +161,33 @@ function rankParticipants(scores) {
 2. **Best single heat time** (secondary) — the fastest individual heat
 3. **If still tied:** Same rank assigned to both participants
 
-### 4.3 Incomplete Participants (Removed Cars)
+### 4.3 Incomplete Participants
 
-Participants removed mid-rally (`CarRemoved`):
-- Their completed heats are scored normally
-- They are ranked **below** all participants who completed the full schedule
-- Marked with `incomplete: true` in the leaderboard
-- Sorted among themselves by average time of completed heats
+A participant is **incomplete** when either:
+
+1. **Removed mid-rally** (`CarRemoved` emitted) — full stop. Their completed heats are scored normally but they rank below all complete participants.
+2. **Ran fewer heats than the field, mid-section** — only while the section is still in progress (i.e. `start.early_end !== true`). When a section is ended early via `SectionCompleted` with `early_end: true`, this rule is **dropped**: cars that happened to be later in the rotation when the operator stopped should not be punished, so all surviving (non-removed) cars are ranked together by average time regardless of `heats_run`.
+
+This is the **early-end fairness rule**. The motivation: if an operator stops a section partway through a rotation, the cars whose turn hadn't come up yet don't deserve to fall below cars that ran one more heat purely because of schedule order. Removed cars (DNF, withdrawn) still bucket separately because there's a real reason they didn't finish.
 
 ```javascript
-function separateCompleteAndIncomplete(rankings, expectedHeats) {
-  const complete = rankings.filter(r => r.heats_run >= expectedHeats);
-  const incomplete = rankings.filter(r => r.heats_run < expectedHeats)
+function separateCompleteAndIncomplete(rankings, section) {
+  const earlyEnd = !!section.early_end;
+  // When ended early, expectedHeats collapses to 0 — only `removed` cars
+  // are incomplete.
+  const expectedHeats = earlyEnd
+    ? 0
+    : Math.max(0, ...rankings.filter(r => !r.removed).map(r => r.heats_run));
+
+  const complete = rankings.filter(r => r.heats_run >= expectedHeats && !r.removed);
+  const incomplete = rankings.filter(r => r.heats_run < expectedHeats || r.removed)
     .map(r => ({ ...r, incomplete: true }));
 
   // Re-rank: complete first, then incomplete
   let rank = 1;
   const final = [];
-
-  for (const entry of complete) {
-    final.push({ ...entry, rank: rank++ });
-  }
-  for (const entry of incomplete) {
-    final.push({ ...entry, rank: rank++ });
-  }
-
+  for (const entry of complete) final.push({ ...entry, rank: rank++ });
+  for (const entry of incomplete) final.push({ ...entry, rank: rank++ });
   return final;
 }
 ```

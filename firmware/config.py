@@ -1,8 +1,8 @@
 # config.py — Pin mapping and constants
 # This is the one file builders edit for their specific track wiring.
 
-FIRMWARE_VERSION = "0.1.0"
-PROTOCOL_VERSION = "1.0"
+FIRMWARE_VERSION = "0.2.1"
+PROTOCOL_VERSION = "2.0"
 
 # ---------------------------------------------------------------------------
 # Breadboard preset (7 buttons on a breadboard, no real track)

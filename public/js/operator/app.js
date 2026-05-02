@@ -15,7 +15,7 @@ import {
   connectWifi, disconnectWifi, isUsingWifi, getSavedTrackIp,
   getTrackMode, getWifiError,
   connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
-  sendSerialCommand, startLearnMode
+  sendSerialCommand, startLearnMode, subscribeTrackEvents
 } from '../track-connection.js';
 import { sendWelcome, sendStaging, sendResults, sendZoom, getZoom, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
@@ -232,6 +232,7 @@ function renderScreen(screenName, params) {
     isSerialSupported,
     sendSerialCommand,
     startLearnMode,
+    subscribeTrackEvents,
     configureUSBBackup,
     reauthorizeUSBBackup,
     disableUSBBackup,

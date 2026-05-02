@@ -269,6 +269,81 @@ describe('computeLeaderboard — removed cars', () => {
   });
 });
 
+describe('computeLeaderboard — early-end fairness', () => {
+  // When a section is ended early, cars that happened to have run fewer heats
+  // shouldn't be punished by being bucketed below cars that ran more.
+  // See specs/08 §4.3 and project_early_end_fairness.md.
+  it('mid-section keeps fewer-heat cars in the incomplete bucket', () => {
+    const section = makeSection({
+      participants: [alice, bob, carol],
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2800, '2': 2900, '3': 2700 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' },
+          { lane: 3, car_number: 3, name: 'Carol' }
+        ], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2810, '2': 2910 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' }
+        ], timestamp: 200 }
+      }
+    });
+    const standings = computeLeaderboard(section);
+    // Carol ran 1 of expected 2 heats → incomplete, ranked below Alice/Bob
+    // even though her single time was the fastest.
+    assert.strictEqual(standings.length, 3);
+    assert.strictEqual(standings[2].name, 'Carol');
+    assert.strictEqual(standings[2].incomplete, true);
+  });
+
+  it('early_end ranks all surviving cars together by avg time', () => {
+    const section = makeSection({
+      participants: [alice, bob, carol],
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2800, '2': 2900, '3': 2700 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' },
+          { lane: 3, car_number: 3, name: 'Carol' }
+        ], timestamp: 100 },
+        2: { type: 'RaceCompleted', heat_number: 2, times_ms: { '1': 2810, '2': 2910 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' }
+        ], timestamp: 200 }
+      }
+    });
+    section.early_end = true;
+    const standings = computeLeaderboard(section);
+    // Now Carol's 2.700 avg places her first overall.
+    assert.strictEqual(standings.length, 3);
+    assert.strictEqual(standings[0].name, 'Carol');
+    assert.strictEqual(standings[0].incomplete, false);
+    assert.strictEqual(standings[1].name, 'Alice');
+    assert.strictEqual(standings[2].name, 'Bob');
+  });
+
+  it('early_end still buckets removed cars as incomplete', () => {
+    const section = makeSection({
+      participants: [alice, bob, carol],
+      results: {
+        1: { type: 'RaceCompleted', heat_number: 1, times_ms: { '1': 2800, '2': 2900, '3': 2500 }, lanes: [
+          { lane: 1, car_number: 1, name: 'Alice' },
+          { lane: 2, car_number: 2, name: 'Bob' },
+          { lane: 3, car_number: 3, name: 'Carol' }
+        ], timestamp: 100 }
+      },
+      removed: [3] // Carol DNF / removed
+    });
+    section.early_end = true;
+    const standings = computeLeaderboard(section);
+    // Carol's 2.500 was fastest but she was removed → incomplete, last.
+    assert.strictEqual(standings.length, 3);
+    assert.strictEqual(standings[0].name, 'Alice');
+    assert.strictEqual(standings[1].name, 'Bob');
+    assert.strictEqual(standings[2].name, 'Carol');
+    assert.strictEqual(standings[2].incomplete, true);
+  });
+});
+
 describe('computeLeaderboard — participants who never raced', () => {
   it('excludes registered participants who never checked in', () => {
     const section = makeSection({

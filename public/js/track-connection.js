@@ -1,10 +1,10 @@
 /**
- * track-connection.js — Track controller connection.
+ * track-connection.js — Track controller connection (Protocol v2).
  * Supports three modes:
- *   1. WiFi HTTP — Pico track controller over WiFi (long-poll /wait/race, /wait/gate)
+ *   1. USB Serial / WiFi HTTP — Pico track controller speaking v2 NDJSON.
  *   2. Fake Track (BroadcastChannel) — if fake-track.html is open, gate/reset drive the flow
  *   3. Manual fallback — operator clicks buttons in the UI to advance
- * See specs/03-track-controller-protocol.md for real protocol.
+ * See specs/03-track-controller-protocol-v2.md for the wire protocol.
  */
 
 import { createSerialPort } from './pico-debug/serial-port.js';
@@ -41,11 +41,22 @@ let _wifiError = null;
 // USB Serial state
 let _useSerial = false;
 let _serialPort = null;
-let _serialJsonBuf = '';
-let _serialBraceDepth = 0;
-let _serialResponseResolve = null;
-let _serialResponseReject = null;
+let _serialLineBuf = '';
 let _serialDataRedirect = null; // when set, raw REPL steals serial data
+
+// V2 protocol client state.
+//
+// _v2NextId starts at a random offset rather than 0. The Pico's firmware
+// session can outlive a host page (USB stays open across reloads), so its
+// _subs and _pending maps may still hold ids from a prior host. Starting
+// fresh from 1 risks colliding with that stale state ("id already in use
+// as a sub", or — worse — the firmware delivering an old wait_race
+// response to our new subscribe). A random ~24-bit prefix makes the
+// collision probability vanishing without any handshake on connect.
+let _v2NextId = Math.floor(Math.random() * 0x1000000); // monotonic, random base
+const _v2Pending = new Map();               // id → { resolve, reject, kind }
+const _v2Subs = new Map();                  // sub → { topics, onEvent, transport }
+let _v2EventSource = null;                  // EventSource for WiFi events
 
 // Manual fallback resolvers (when no fake track)
 let _manualRaceResolver = null;
@@ -116,67 +127,144 @@ function waitForResponse(requestId, expectedType, signal, timeout = RESPONSE_TIM
   });
 }
 
-// ─── Serial Helpers ─────────────────────────────────────────────
+// ─── Serial helpers (v2 line reader) ────────────────────────────
 
 function _handleSerialData(text) {
-  if (!_serialResponseResolve) return;
-  for (const ch of text) {
-    if (ch === '{' || ch === '[') {
-      _serialBraceDepth++;
-      _serialJsonBuf += ch;
-    } else if (ch === '}' || ch === ']') {
-      _serialBraceDepth--;
-      _serialJsonBuf += ch;
-      if (_serialBraceDepth === 0) {
-        try {
-          const data = JSON.parse(_serialJsonBuf);
-          _serialJsonBuf = '';
-          const resolve = _serialResponseResolve;
-          _serialResponseResolve = null;
-          _serialResponseReject = null;
-          resolve(data);
-        } catch (e) {
-          _serialJsonBuf = '';
-          _serialBraceDepth = 0;
-          const reject = _serialResponseReject;
-          _serialResponseResolve = null;
-          _serialResponseReject = null;
-          reject(new Error('Invalid JSON from track controller'));
-        }
-        return;
+  _serialLineBuf += text;
+  let nl;
+  while ((nl = _serialLineBuf.indexOf('\n')) >= 0) {
+    const line = _serialLineBuf.slice(0, nl).replace(/\r$/, '').trim();
+    _serialLineBuf = _serialLineBuf.slice(nl + 1);
+    if (!line) continue;
+    _v2HandleLine(line, 'serial');
+  }
+}
+
+function _v2HandleLine(line, transport) {
+  // Be tolerant of non-JSON output (firmware boot logs, REPL noise).
+  if (!line || line[0] !== '{') return;
+  let frame;
+  try {
+    frame = JSON.parse(line);
+  } catch {
+    return;
+  }
+  _v2HandleFrame(frame, transport);
+}
+
+function _v2HandleFrame(frame, transport) {
+  if (frame == null || typeof frame !== 'object') return;
+  if ('id' in frame && ('ok' in frame || 'err' in frame)) {
+    const id = frame.id;
+    const pending = _v2Pending.get(id);
+    if (!pending) return;
+    _v2Pending.delete(id);
+    if ('err' in frame) {
+      const err = new Error(frame.err);
+      err.code = frame.code;
+      pending.reject(err);
+    } else {
+      pending.resolve(frame.ok);
+    }
+    return;
+  }
+  if ('sub' in frame && 'event' in frame) {
+    const entry = _v2Subs.get(frame.sub);
+    if (entry && (transport === undefined || entry.transport === transport)) {
+      try {
+        entry.onEvent(frame);
+      } catch (e) {
+        console.error('subscription handler threw', e);
       }
-    } else if (_serialBraceDepth > 0) {
-      _serialJsonBuf += ch;
     }
   }
 }
 
-function _serialSendCommand(cmd, timeout = SERIAL_CMD_TIMEOUT) {
+function _v2NewId() {
+  _v2NextId += 1;
+  return _v2NextId;
+}
+
+/**
+ * Send a v2 request frame and resolve with its `ok` payload.
+ * @param {string} cmd
+ * @param {Object} [args] — extra fields merged into the frame
+ * @param {{ signal?: AbortSignal, timeout?: number, id?: number }} [opts]
+ */
+function _v2Request(transport, cmd, args = {}, opts = {}) {
+  const id = opts.id != null ? opts.id : _v2NewId();
+  const frame = { id, cmd, ...args };
+
   return new Promise((resolve, reject) => {
-    _serialJsonBuf = '';
-    _serialBraceDepth = 0;
+    if (opts.signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
 
-    const timer = timeout > 0 ? setTimeout(() => {
-      _serialResponseResolve = null;
-      _serialResponseReject = null;
-      reject(new Error('No response from track controller (timeout)'));
-    }, timeout) : null;
+    let timer = null;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (opts.signal) opts.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      _v2Pending.delete(id);
+      cleanup();
+      // Best-effort cancel on the device.
+      _v2SendFrame(transport, { id: _v2NewId(), cmd: 'cancel', target: id }).catch(() => {});
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
 
-    _serialResponseResolve = (data) => {
-      if (timer) clearTimeout(timer);
-      resolve(data);
-    };
-    _serialResponseReject = (err) => {
-      if (timer) clearTimeout(timer);
-      reject(err);
-    };
-    _serialPort.send(cmd + '\n').catch((err) => {
-      if (timer) clearTimeout(timer);
-      _serialResponseResolve = null;
-      _serialResponseReject = null;
-      reject(err);
+    _v2Pending.set(id, {
+      resolve: (val) => { cleanup(); resolve(val); },
+      reject: (err) => { cleanup(); reject(err); },
+      kind: cmd,
+    });
+
+    if (opts.timeout && opts.timeout > 0) {
+      timer = setTimeout(() => {
+        if (_v2Pending.delete(id)) {
+          cleanup();
+          reject(new Error(`No response from track controller for ${cmd} (timeout)`));
+        }
+      }, opts.timeout);
+    }
+    if (opts.signal) opts.signal.addEventListener('abort', onAbort, { once: true });
+
+    _v2SendFrame(transport, frame).catch((e) => {
+      if (_v2Pending.delete(id)) {
+        cleanup();
+        reject(e);
+      }
     });
   });
+}
+
+async function _v2SendFrame(transport, frame) {
+  const line = JSON.stringify(frame);
+  if (transport === 'serial') {
+    await _serialPort.send(line + '\n');
+    return;
+  }
+  if (transport === 'wifi') {
+    const resp = await fetch(`${_wifiBaseUrl}/cmd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: line,
+    });
+    if (!resp.ok) throw new Error(`Track returned ${resp.status}`);
+    const data = await resp.json();
+    // /cmd is request/response — the device returned the matching frame
+    // synchronously. Feed it back into the dispatcher.
+    _v2HandleFrame(data, 'wifi');
+    return;
+  }
+  throw new Error(`unknown transport: ${transport}`);
+}
+
+function _v2ActiveTransport() {
+  if (_useSerial) return 'serial';
+  if (_useWifi) return 'wifi';
+  return null;
 }
 
 // ─── Public API ─────────────────────────────────────────────────
@@ -198,9 +286,18 @@ export function isUsingFakeTrack() {
  */
 export async function connectWifi(ip) {
   const base = `http://${ip}`;
+  // GET /info is the convenience probe — no v2 frame needed since it's a
+  // bare HTTP fetch. We still validate the protocol version below.
   const resp = await fetch(`${base}/info`, { signal: AbortSignal.timeout(5000) });
   if (!resp.ok) throw new Error(`Track responded with ${resp.status}`);
-  const info = await resp.json();
+  const probe = await resp.json();
+  // The /info convenience route returns a v2 frame envelope { id, ok }.
+  const info = probe.ok || probe;
+  if (info.protocol && info.protocol !== '2.0') {
+    throw new Error(
+      `Track firmware speaks protocol ${info.protocol}, expected 2.0. Re-flash firmware.`
+    );
+  }
   _useWifi = true;
   _wifiBaseUrl = base;
   _wifiError = null;
@@ -220,6 +317,8 @@ export function disconnectWifi() {
   _wifiBaseUrl = '';
   _wifiError = null;
   _lastRaceId = null;
+  _closeEventSource();
+  _v2RejectAllPending(new Error('WiFi disconnected'));
   localStorage.removeItem(TRACK_IP_KEY);
   _notifyMode();
 }
@@ -286,31 +385,27 @@ export async function connectSerial(onStatus) {
       _useSerial = false;
       _connected = false;
       _notifyMode();
-      if (_serialResponseReject) {
-        const reject = _serialResponseReject;
-        _serialResponseResolve = null;
-        _serialResponseReject = null;
-        reject(new Error('Serial port disconnected'));
-      }
+      _v2RejectAllPending(new Error('Serial port disconnected'));
     }
   });
 
   await port.connect();
   _serialPort = port;
+  _useSerial = true; // enable line reader so v2 frames route correctly
 
   // Happy path: firmware is already running, info responds with JSON
   try {
     let info;
     try {
-      info = await _serialSendCommand('info');
+      info = await _v2Request('serial', 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
     } catch {
-      _serialJsonBuf = '';
-      _serialBraceDepth = 0;
-      info = await _serialSendCommand('info');
+      _serialLineBuf = '';
+      info = await _v2Request('serial', 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
     }
     return _activateSerial(info);
   } catch {
     // Firmware not responding — try to recover via raw REPL
+    _useSerial = false; // disable v2 reader during raw REPL ops
   }
 
   const rawRepl = createRawRepl(port, (cb) => { _serialDataRedirect = cb; });
@@ -326,13 +421,42 @@ export async function connectSerial(onStatus) {
     const files = stdout.trim().split(',');
     const hasMainPy = files.includes('main.py');
 
+    let needsFlash = !hasMainPy;
+
     if (hasMainPy) {
-      // Firmware files exist — execAndRestart already soft-reset, so main.py is starting
-      report('Starting firmware…');
-    } else {
-      // No firmware on the device — download from GitHub and install
+      // Firmware files exist — execAndRestart already soft-reset, so main.py is starting.
+      // But: it might be v1 firmware. Probe with a v1-style "info" line and check
+      // protocol; if it's not 2.0 we re-flash.
+      report('Detecting firmware version…');
+      await new Promise(r => setTimeout(r, 1500));
+      const probe = await _probeFirmwareVersion(port);
+      if (probe && probe.protocol && probe.protocol !== '2.0') {
+        report(`Found protocol ${probe.protocol} — upgrading to v2…`);
+        needsFlash = true;
+      } else if (!probe) {
+        // No response at all — treat as needs-flash to be safe.
+        needsFlash = true;
+      }
+    }
+
+    if (needsFlash) {
+      // Re-enter raw REPL (the probe may have left us in v1 mode).
       report('Downloading firmware…');
       const entries = await _fetchFirmwareFromGithub(report);
+
+      // Remove stale .py files from any prior firmware version (v1 left
+      // json_format.py / uuid_gen.py behind, etc.). Non-.py files like
+      // wifi.json are preserved.
+      const keep = entries.map(e => e.name);
+      try {
+        const removed = await fileManager.cleanStalePyFiles(keep);
+        if (removed && removed.length) {
+          report(`Removed stale: ${removed.join(', ')}`);
+        }
+      } catch (e) {
+        console.warn('cleanStalePyFiles failed (non-fatal):', e.message);
+      }
+
       await fileManager.writeFiles(entries, (name, i, total) => {
         report(`Installing ${name} (${i + 1}/${total})…`);
       });
@@ -343,13 +467,14 @@ export async function connectSerial(onStatus) {
     // Give main.py time to boot
     await new Promise(r => setTimeout(r, 2000));
     _serialDataRedirect = null;
-    _serialJsonBuf = '';
-    _serialBraceDepth = 0;
+    _serialLineBuf = '';
+    _useSerial = true;
 
-    const info = await _serialSendCommand('info');
+    const info = await _v2Request('serial', 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
     return _activateSerial(info);
   } catch (e) {
     _serialDataRedirect = null;
+    _useSerial = false;
     _serialPort = null;
     await port.disconnect();
     throw new Error(
@@ -361,15 +486,102 @@ export async function connectSerial(onStatus) {
 }
 
 function _activateSerial(info) {
+  if (info.protocol && info.protocol !== '2.0') {
+    throw new Error(
+      `Track firmware speaks protocol ${info.protocol}, expected 2.0. Re-flash firmware.`
+    );
+  }
   _useSerial = true;
   _laneCount = info.lane_count || info.lanes || 6;
   _connected = true;
   _lastRaceId = null;
+
+  // No reset frame here on purpose. A fire-and-forget reset races with the
+  // first render's subscribe/wait_race; an awaited reset stalls connect.
+  // _v2NextId's random base already prevents id-collision with stale
+  // firmware state, which is what the reset used to defend against.
+
   _notifyMode();
   return { lane_count: _laneCount };
 }
 
+function _v2RejectAllPending(err) {
+  for (const [, p] of _v2Pending) {
+    try { p.reject(err); } catch {}
+  }
+  _v2Pending.clear();
+}
+
+/**
+ * Probe a freshly-booted Pico for its firmware/protocol version using the
+ * v1 plaintext "info" command. v1 firmware responds with a pretty-printed
+ * JSON object (multi-line). v2 firmware will silently ignore non-JSON
+ * lines, so the probe times out and we know to fall back differently.
+ *
+ * Returns { protocol, firmware, lane_count } on success, or null on
+ * timeout / parse failure.
+ */
+async function _probeFirmwareVersion(port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let buf = '';
+    let done = false;
+    const t = setTimeout(() => {
+      if (done) return;
+      done = true;
+      _serialDataRedirect = null;
+      resolve(null);
+    }, timeoutMs);
+
+    _serialDataRedirect = (text) => {
+      buf += text;
+      // v1 pretty-prints across multiple lines; balance braces.
+      let depth = 0;
+      let start = -1;
+      for (let i = 0; i < buf.length; i++) {
+        const c = buf[i];
+        if (c === '{') {
+          if (depth === 0) start = i;
+          depth++;
+        } else if (c === '}') {
+          depth--;
+          if (depth === 0 && start >= 0) {
+            try {
+              const obj = JSON.parse(buf.slice(start, i + 1));
+              if (obj && (obj.protocol || obj.firmware || obj.error)) {
+                done = true;
+                clearTimeout(t);
+                _serialDataRedirect = null;
+                resolve(obj);
+                return;
+              }
+            } catch { /* keep buffering */ }
+          }
+        }
+      }
+    };
+
+    port.send('info\n').catch(() => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      _serialDataRedirect = null;
+      resolve(null);
+    });
+  });
+}
+
 async function _fetchFirmwareFromGithub(report) {
+  // Prefer same-origin firmware (the version bundled with this web app).
+  // The static server is configured to serve /firmware/ from the repo's
+  // firmware directory, so the host always flashes its own version —
+  // not whatever happens to be on GitHub `main`.
+  try {
+    const local = await _fetchFirmwareFromSameOrigin(report);
+    if (local) return local;
+  } catch (e) {
+    console.warn('Same-origin firmware unavailable, falling back to GitHub:', e.message);
+  }
+
   const resp = await fetch(FIRMWARE_API);
   if (!resp.ok) throw new Error('Could not download firmware from GitHub');
   const listing = await resp.json();
@@ -382,6 +594,31 @@ async function _fetchFirmwareFromGithub(report) {
     const raw = await fetch(pyFiles[i].download_url);
     if (!raw.ok) throw new Error(`Failed to download ${pyFiles[i].name}`);
     entries.push({ name: pyFiles[i].name, content: await raw.text() });
+  }
+  return entries;
+}
+
+/**
+ * Try to fetch firmware from the same origin as this web app. A small
+ * manifest at /firmware/MANIFEST.txt lists one filename per line so we
+ * don't have to do directory listing in the browser. Returns null if
+ * the manifest isn't reachable (so the caller can fall back to GitHub).
+ */
+async function _fetchFirmwareFromSameOrigin(report) {
+  const manifestResp = await fetch('/firmware/MANIFEST.txt', { cache: 'no-store' });
+  if (!manifestResp.ok) return null;
+  const manifest = (await manifestResp.text())
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#'));
+
+  const entries = [];
+  for (let i = 0; i < manifest.length; i++) {
+    const name = manifest[i];
+    report(`Reading ${name}…`);
+    const r = await fetch(`/firmware/${name}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`Failed to read ${name}`);
+    entries.push({ name, content: await r.text() });
   }
   return entries;
 }
@@ -583,10 +820,10 @@ WIFI_CONNECT_TIMEOUT_MS = 10000
       // Wait for firmware to boot with new config
       await new Promise(r => setTimeout(r, 2000));
       _serialDataRedirect = null;
-      _serialJsonBuf = '';
-      _serialBraceDepth = 0;
+      _serialLineBuf = '';
+      _useSerial = true;
 
-      const info = await _serialSendCommand('info');
+      const info = await _v2Request('serial', 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
       _activateSerial(info);
     },
 
@@ -607,14 +844,13 @@ WIFI_CONNECT_TIMEOUT_MS = 10000
 
       await new Promise(r => setTimeout(r, 2000));
       _serialDataRedirect = null;
-      _serialJsonBuf = '';
-      _serialBraceDepth = 0;
+      _serialLineBuf = '';
+      _useSerial = true;
 
       try {
-        const info = await _serialSendCommand('info');
+        const info = await _v2Request('serial', 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
         _activateSerial(info);
       } catch {
-        _useSerial = true;
         _connected = true;
         _notifyMode();
       }
@@ -631,10 +867,8 @@ export function disconnectSerial() {
     _serialPort = null;
   }
   _useSerial = false;
-  _serialJsonBuf = '';
-  _serialBraceDepth = 0;
-  _serialResponseResolve = null;
-  _serialResponseReject = null;
+  _serialLineBuf = '';
+  _v2RejectAllPending(new Error('Serial disconnected'));
   _lastRaceId = null;
   _notifyMode();
 }
@@ -648,8 +882,15 @@ export function isUsingSerial() {
 }
 
 /**
- * Send an arbitrary command over USB serial and return the parsed JSON response.
- * Only works when connected via USB serial. Rejects if another command is pending.
+ * Send an arbitrary command (v1-style "cmd args" string) over USB serial
+ * and resolve with the response payload. The argument string is parsed and
+ * translated into a v2 frame, so callers don't need to write JSON.
+ *
+ * Examples:
+ *   sendSerialCommand('dbg')                           → { ok: { ... } }
+ *   sendSerialCommand('hostname_set my-track')         → { hostname: '...' }
+ *   sendSerialCommand('wifi_setup my-ssid my-password')
+ *
  * @param {string} cmd
  * @returns {Promise<Object>}
  */
@@ -657,10 +898,32 @@ export function sendSerialCommand(cmd) {
   if (!_useSerial || !_serialPort) {
     return Promise.reject(new Error('Not connected via USB'));
   }
-  if (_serialResponseResolve) {
-    return Promise.reject(new Error('Serial port busy'));
+  const { name, args } = _parseHumanCommand(cmd);
+  return _v2Request('serial', name, args, { timeout: SERIAL_CMD_TIMEOUT });
+}
+
+function _parseHumanCommand(line) {
+  const parts = line.trim().split(/\s+/);
+  const name = parts[0] || '';
+  const rest = parts.slice(1);
+  const args = {};
+
+  // Recognized positional shapes for legacy commands.
+  if (name === 'wifi_setup' && rest.length >= 2) {
+    args.ssid = rest[0];
+    args.password = rest.slice(1).join(' ');
+  } else if (name === 'hostname_set' && rest.length >= 1) {
+    args.name = rest.join(' ');
+  } else {
+    // Generic: support key=value tokens, otherwise pass through.
+    for (const tok of rest) {
+      if (tok.includes('=')) {
+        const [k, v] = tok.split('=', 2);
+        args[k] = v;
+      }
+    }
   }
-  return _serialSendCommand(cmd);
+  return { name, args };
 }
 
 /**
@@ -739,49 +1002,19 @@ export function disconnect() {
 export async function waitForRace(lanes, signal) {
   ensureChannel();
 
-  // USB Serial: send command and wait for response
-  if (_useSerial) {
+  const transport = _v2ActiveTransport();
+  if (transport) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const lanesStr = lanes.map(l => l.lane).join('');
-    let cmd = `wait_race?lanes=${lanesStr}`;
-    if (_lastRaceId != null) cmd += `&after=${_lastRaceId}`;
-
-    let aborted = false;
-    const onAbort = () => {
-      aborted = true;
-      _serialPort.send('gate\n').catch(() => {});
-    };
-    if (signal) signal.addEventListener('abort', onAbort, { once: true });
-
+    const args = { lanes: lanes.map(l => l.lane).join('') };
+    if (_lastRaceId != null) args.after = _lastRaceId;
     try {
-      const data = await _serialSendCommand(cmd, 0);
-      if (signal) signal.removeEventListener('abort', onAbort);
-      if (aborted) throw new DOMException('Aborted', 'AbortError');
-      if (data.error) throw new Error(data.error);
-      _lastRaceId = data.race_id ?? _lastRaceId;
-      return data.times_ms;
-    } catch (e) {
-      if (signal) signal.removeEventListener('abort', onAbort);
-      if (aborted) throw new DOMException('Aborted', 'AbortError');
-      throw e;
-    }
-  }
-
-  // WiFi HTTP: long-poll the Pico for race completion
-  if (_useWifi) {
-    const lanesStr = lanes.map(l => l.lane).join('');
-    let url = `${_wifiBaseUrl}/wait/race?lanes=${lanesStr}`;
-    if (_lastRaceId != null) url += `&after=${_lastRaceId}`;
-    try {
-      const resp = await fetch(url, { signal });
-      if (!resp.ok) throw new Error(`Track returned ${resp.status}`);
-      const data = await resp.json();
+      const data = await _v2Request(transport, 'wait_race', args, { signal });
       _lastRaceId = data.race_id ?? _lastRaceId;
       _wifiError = null;
       return data.times_ms;
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      _wifiError = e.message;
+      if (transport === 'wifi') _wifiError = e.message;
       throw e;
     }
   }
@@ -828,39 +1061,16 @@ export async function waitForRace(lanes, signal) {
 export async function waitForGate(signal) {
   ensureChannel();
 
-  // USB Serial: send command and wait for response
-  if (_useSerial) {
+  const transport = _v2ActiveTransport();
+  if (transport) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-    let aborted = false;
-    const onAbort = () => {
-      aborted = true;
-      _serialPort.send('gate\n').catch(() => {});
-    };
-    if (signal) signal.addEventListener('abort', onAbort, { once: true });
-
     try {
-      await _serialSendCommand('wait_gate', 0);
-      if (signal) signal.removeEventListener('abort', onAbort);
-      if (aborted) throw new DOMException('Aborted', 'AbortError');
-      return;
-    } catch (e) {
-      if (signal) signal.removeEventListener('abort', onAbort);
-      if (aborted) throw new DOMException('Aborted', 'AbortError');
-      throw e;
-    }
-  }
-
-  // WiFi HTTP: long-poll the Pico for gate ready
-  if (_useWifi) {
-    try {
-      const resp = await fetch(`${_wifiBaseUrl}/wait/gate`, { signal });
-      if (!resp.ok) throw new Error(`Track returned ${resp.status}`);
+      await _v2Request(transport, 'wait_gate', {}, { signal });
       _wifiError = null;
       return;
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      _wifiError = e.message;
+      if (transport === 'wifi') _wifiError = e.message;
       throw e;
     }
   }
@@ -916,4 +1126,196 @@ export function triggerManualRace(lanes) {
 export function triggerManualGate() {
   if (!_manualGateResolver) return;
   _manualGateResolver();
+}
+
+// ─── V2 Subscriptions (live track status) ────────────────────────
+
+/**
+ * Subscribe to one or more topics on the track controller.
+ * Topics: 'gate', 'lanes', 'edges', 'race', 'engine'.
+ * onEvent receives the raw frame: { sub, event, ...fields }.
+ *
+ * Returns an object with .unsubscribe() to tear down. Returns null when
+ * no real track is connected (fake/manual modes don't push events).
+ *
+ * @param {string[]} topics
+ * @param {(frame: Object) => void} onEvent
+ * @returns {{ sub: number, unsubscribe: () => Promise<void> } | null}
+ */
+export function subscribeTrackEvents(topics, onEvent) {
+  const transport = _v2ActiveTransport();
+  if (!transport) return null;
+
+  if (transport === 'serial') return _subscribeSerial(topics, onEvent);
+  if (transport === 'wifi') return _subscribeWifi(topics, onEvent);
+  return null;
+}
+
+function _subscribeSerial(topics, onEvent) {
+  // Allocate one id and use it for BOTH the request id and the sub id.
+  // The firmware sets sub == req_id, and initial-state events follow
+  // the ok response on the same serial line stream — they arrive before
+  // any Promise microtask, so the handler MUST be registered
+  // synchronously before the request is sent.
+  const subId = _v2NewId();
+  const wrapper = { sub: subId, transport: 'serial', topics, onEvent };
+  _v2Subs.set(subId, wrapper);
+
+  _v2Request('serial', 'subscribe', { topics },
+             { timeout: SERIAL_CMD_TIMEOUT, id: subId })
+    .catch((e) => {
+      _v2Subs.delete(subId);
+      console.warn('subscribe failed:', e.message);
+    });
+
+  return {
+    sub: subId,
+    unsubscribe: async () => {
+      if (!_v2Subs.delete(subId)) return;
+      try {
+        await _v2Request('serial', 'unsubscribe', { sub: subId },
+                         { timeout: SERIAL_CMD_TIMEOUT });
+      } catch { /* transport may be gone */ }
+    },
+  };
+}
+
+function _subscribeWifi(topics, onEvent) {
+  // Each WiFi subscription gets its own EventSource. The device's
+  // /events route auto-subscribes when topics= is in the query.
+  const url = `${_wifiBaseUrl}/events?topics=${encodeURIComponent(topics.join(','))}`;
+  let es;
+  try {
+    es = new EventSource(url);
+  } catch (e) {
+    console.warn('EventSource not available:', e.message);
+    return null;
+  }
+
+  // The first auto-sub request id on a fresh session is 1; we don't
+  // strictly need to track it because every event on this stream is for
+  // OUR subscription. Just unwrap and forward.
+  es.onmessage = (e) => {
+    const line = e.data;
+    if (!line || line[0] !== '{') return;
+    let frame;
+    try { frame = JSON.parse(line); }
+    catch { return; }
+    if ('event' in frame) {
+      try { onEvent(frame); } catch (err) { console.error(err); }
+    }
+  };
+  es.onerror = () => {
+    // Browser auto-reconnects.
+  };
+
+  return {
+    sub: null,
+    unsubscribe: async () => {
+      try { es.close(); } catch {}
+    },
+  };
+}
+
+function _closeEventSource() {
+  if (_v2EventSource) {
+    try { _v2EventSource.close(); } catch {}
+    _v2EventSource = null;
+  }
+}
+
+// ─── Firmware update (in-band) ────────────────────────────────────
+
+/**
+ * Run an in-band firmware update over the active v2 transport.
+ * Streams files via update_begin / update_chunk / update_commit and
+ * waits for the device to come back after reboot.
+ *
+ * @param {Array<{name: string, content: string}>} files — text contents
+ *   (utf-8). Sizes/sha256 are computed by this client.
+ * @param {string} version — version string for the manifest.
+ * @param {(stage: string, info?: Object) => void} [onProgress]
+ * @returns {Promise<{firmware: string, protocol: string}>} new info
+ */
+export async function flashFirmwareInBand(files, version, onProgress = () => {}) {
+  const transport = _v2ActiveTransport();
+  if (!transport) throw new Error('Not connected to a track');
+
+  // Build manifest with sha256.
+  const enc = new TextEncoder();
+  const manifest = [];
+  const blobs = {};
+  for (const f of files) {
+    const bytes = enc.encode(f.content);
+    blobs[f.name] = bytes;
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    manifest.push({
+      name: f.name,
+      size: bytes.length,
+      sha256: Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, '0')).join(''),
+    });
+  }
+
+  onProgress('begin');
+  const beginOk = await _v2Request(transport, 'update_begin',
+    { version, files: manifest }, { timeout: 10000 });
+  const sessionId = beginOk.session;
+  const chunkSize = beginOk.chunk_size;
+
+  // Stream each file.
+  for (let fi = 0; fi < manifest.length; fi++) {
+    const m = manifest[fi];
+    const bytes = blobs[m.name];
+    let offset = 0;
+    while (offset < bytes.length) {
+      const slice = bytes.slice(offset, Math.min(offset + chunkSize, bytes.length));
+      const b64 = btoa(String.fromCharCode(...slice));
+      await _v2Request(transport, 'update_chunk', {
+        session: sessionId,
+        name: m.name,
+        offset,
+        data: b64,
+      }, { timeout: 15000 });
+      offset += slice.length;
+      onProgress('chunk', { file: m.name, fileIndex: fi, totalFiles: manifest.length,
+                            sent: offset, size: bytes.length });
+    }
+  }
+
+  onProgress('commit');
+  await _v2Request(transport, 'update_commit', { session: sessionId },
+                   { timeout: 10000 });
+
+  onProgress('rebooting');
+  // Device reboots ~500ms after committed: true. Drop pending requests
+  // and wait for boot.
+  _v2RejectAllPending(new Error('Track rebooting for firmware update'));
+  await new Promise(r => setTimeout(r, 2500));
+
+  // Re-probe info.
+  const info = await _v2Request(transport, 'info', {}, { timeout: SERIAL_CMD_TIMEOUT });
+  if (info.protocol !== '2.0') {
+    throw new Error(`After flash, device reports protocol ${info.protocol}`);
+  }
+  onProgress('done', info);
+  return info;
+}
+
+/**
+ * Fetch the latest firmware from GitHub (the same source connectSerial
+ * uses for first-time installs). Returns [{name, content}, ...].
+ *
+ * @returns {Promise<Array<{name: string, content: string}>>}
+ */
+export async function fetchLatestFirmware(onStatus = () => {}) {
+  return _fetchFirmwareFromGithub(onStatus);
+}
+
+/**
+ * Parse FIRMWARE_VERSION from a config.py text blob.
+ */
+export function parseFirmwareVersion(configText) {
+  const m = configText.match(/FIRMWARE_VERSION\s*=\s*["']([^"']+)["']/);
+  return m ? m[1] : null;
 }

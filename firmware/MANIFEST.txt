@@ -1,0 +1,18 @@
+# MANIFEST.txt — files bundled with this web app for flashing onto the
+# Track Controller. One filename per line. Order is irrelevant.
+# Lines starting with # are comments.
+#
+# When this list changes, also update file-manager.js if it has any
+# stale-file deletion logic; otherwise, the host should overwrite each
+# file listed here and leave any other files (e.g. wifi.json) alone.
+
+config.py
+engine.py
+gpio_manager.py
+http_handler.py
+main.py
+protocol_v2.py
+serial_handler.py
+update.py
+uuid_gen.py
+wifi_manager.py

@@ -531,10 +531,19 @@ export function renderLiveConsole(container, params, ctx) {
       <span class="status-badge ${trackBadgeClass} track-badge-btn" id="console-track-badge">${trackBadgeLabel}</span>
       <span class="console-state-label">${stateLabel}</span>
       <span class="track-phase-badge ${phaseClass}" id="track-phase-toggle">${phaseLabel}</span>
+      <span class="track-live-strip" id="track-live-strip" hidden></span>
     </div>
     <p class="info-line">Heat ${currentHeat} of ${totalHeats || '?'} &middot; Lanes: ${lanesStr}</p>
   `;
   header.querySelector('#console-track-badge').onclick = () => showTrackManagerDialog(ctx);
+
+  // Live gate / lane sensor indicator strip — only when a real track is
+  // connected (serial or wifi). See specs/03-track-controller-protocol-v2.md.
+  if (typeof ctx.subscribeTrackEvents === 'function' &&
+      (trackMode === 'serial' || trackMode === 'wifi')) {
+    _bindLiveStatusStrip(header.querySelector('#track-live-strip'),
+                         activeLanes, ctx);
+  }
 
   // Track phase log (collapsible)
   const phaseLog = ctx.getTrackPhaseLog();
@@ -633,24 +642,24 @@ export function renderLiveConsole(container, params, ctx) {
     if (currentLanes.length > 0) {
       const gMap = buildGroupMap(sec, state);
       const heatHasGroups = currentLanes.some(l => gMap[l.car_number]);
+      const showTimes = !!(result && result.type === 'RaceCompleted' && result.times_ms);
+      const winnerT = showTimes ? minTime(result.times_ms) : null;
       const laneTable = document.createElement('div');
       laneTable.className = 'table-wrap';
       let tableHtml = `
         <table class="lane-table">
           <thead><tr><th>Lane</th><th>Car #</th><th>Name</th>`;
       if (heatHasGroups) tableHtml += '<th>Group</th>';
-      if (result && result.type === 'RaceCompleted' && result.times_ms) {
-        tableHtml += '<th>Time</th>';
-      }
+      if (showTimes) tableHtml += '<th>Time</th><th>Δ</th>';
       tableHtml += '</tr></thead><tbody>';
 
       const sortedLanes = [...currentLanes].sort((a, b) => a.lane - b.lane);
 
       for (const lane of sortedLanes) {
         let timeStr = '';
-        if (result && result.type === 'RaceCompleted' && result.times_ms) {
+        if (showTimes) {
           const t = result.times_ms[String(lane.lane)];
-          timeStr = `<td>${t != null ? formatTime(t) : 'DNF'}</td>`;
+          timeStr = `<td>${t != null ? formatTime(t) : 'DNF'}</td><td class="delta">${formatDelta(t, winnerT)}</td>`;
         }
         tableHtml += `
           <tr>
@@ -746,13 +755,16 @@ export function renderLiveConsole(container, params, ctx) {
   // When awaiting rotation decision, include all heats — the current heat's
   // controls are hidden by the rotation prompt, so the history is the only
   // place to access re-run / correct-lanes for the last heat.
+  // Built here but appended below the controls row so operators don't have
+  // to scroll past history to reach the action buttons.
   const excludeHeat = awaitingRotationEarly ? null : currentHeat;
   const pastResults = Object.values(startResults)
     .filter(r => r.heat_number !== excludeHeat)
     .sort((a, b) => b.heat_number - a.heat_number);
 
+  let historySection = null;
   if (pastResults.length > 0) {
-    const historySection = document.createElement('div');
+    historySection = document.createElement('div');
     historySection.className = 'heat-history';
 
     const historyHeading = document.createElement('h3');
@@ -800,9 +812,10 @@ export function renderLiveConsole(container, params, ctx) {
       body.className = 'heat-history-body';
 
       const sortedLanes = [...effectiveLanes].sort((a, b) => a.lane - b.lane);
+      const histWinnerT = result.type === 'RaceCompleted' ? minTime(result.times_ms) : null;
       let tHtml = '<div class="table-wrap"><table><thead><tr><th>Lane</th><th>Car #</th><th>Name</th>';
       if (histHasGroups) tHtml += '<th>Group</th>';
-      if (result.type === 'RaceCompleted') tHtml += '<th>Time</th>';
+      if (result.type === 'RaceCompleted') tHtml += '<th>Time</th><th>Δ</th>';
       if (result.type === 'ResultManuallyEntered') tHtml += '<th>Place</th>';
       tHtml += '</tr></thead><tbody>';
 
@@ -816,7 +829,7 @@ export function renderLiveConsole(container, params, ctx) {
         }
         if (result.type === 'RaceCompleted') {
           const t = result.times_ms[String(lane.lane)];
-          tHtml += `<td>${t != null ? formatTime(t) : 'DNF'}</td>`;
+          tHtml += `<td>${t != null ? formatTime(t) : 'DNF'}</td><td class="delta">${formatDelta(t, histWinnerT)}</td>`;
         }
         if (result.type === 'ResultManuallyEntered') {
           const r = result.rankings.find(r => r.car_number === lane.car_number);
@@ -889,12 +902,13 @@ export function renderLiveConsole(container, params, ctx) {
       details.appendChild(body);
       historySection.appendChild(details);
     }
-
-    container.appendChild(historySection);
   }
 
   // Controls row (skip when showing resume prompt)
-  if (needsResume) return;
+  if (needsResume) {
+    if (historySection) container.appendChild(historySection);
+    return;
+  }
 
   // ─── Rotation Decision Prompt ────────────────────────────────
   const awaitingRotation = ctx.isAwaitingRotationDecision();
@@ -941,6 +955,7 @@ export function renderLiveConsole(container, params, ctx) {
 
     rotationWrap.appendChild(btnRow);
     container.appendChild(rotationWrap);
+    if (historySection) container.appendChild(historySection);
     return; // Don't show regular controls while awaiting decision
   }
 
@@ -1087,6 +1102,7 @@ export function renderLiveConsole(container, params, ctx) {
   controls.appendChild(backBtn);
 
   container.appendChild(controls);
+  if (historySection) container.appendChild(historySection);
 }
 
 // ─── Screen E: Section Complete ─────────────────────────────────
@@ -1174,9 +1190,7 @@ export function renderSectionComplete(container, params, ctx) {
       const legend = document.createElement('p');
       legend.className = 'form-hint';
       legend.style.marginTop = '0.75rem';
-      legend.textContent = currentStart?.early_end
-        ? '* Incomplete — section ended before all heats were run.'
-        : '* Incomplete — car was removed before finishing all heats.';
+      legend.textContent = '* Incomplete — car was removed before finishing all heats.';
       container.appendChild(legend);
     }
   }
@@ -1355,5 +1369,76 @@ function esc(str) {
 function formatTime(ms) {
   if (ms == null || !isFinite(ms)) return '—';
   return (ms / 1000).toFixed(3) + 's';
+}
+
+// ─── Live track status strip (gate + lane sensors) ─────────────────
+// Tracks the current subscription so navigation tears it down. The
+// previous run's render is closed when a new render is bound — this is
+// idempotent because each renderLiveConsole rebuilds the element tree.
+let _liveStripSub = null;
+let _liveStripState = null;
+
+function _bindLiveStatusStrip(stripEl, activeLanes, ctx) {
+  // Tear down any previous subscription before we attach a new one.
+  if (_liveStripSub) {
+    try { _liveStripSub.unsubscribe(); } catch {}
+    _liveStripSub = null;
+  }
+
+  const state = {
+    gateReady: null,
+    laneTriggered: {},  // lane number → bool
+  };
+  for (const l of activeLanes) state.laneTriggered[l] = false;
+  _liveStripState = state;
+
+  function paint() {
+    const parts = [];
+    const gateClass = state.gateReady === null
+      ? 'live-pip live-pip-unknown'
+      : state.gateReady ? 'live-pip live-pip-ok' : 'live-pip live-pip-bad';
+    parts.push(`<span class="${gateClass}" title="Gate ${state.gateReady === null ? '?' : (state.gateReady ? 'ready' : 'open')}">Gate</span>`);
+    for (const l of activeLanes) {
+      const t = state.laneTriggered[l];
+      const cls = t ? 'live-pip live-pip-bad' : 'live-pip live-pip-ok';
+      parts.push(`<span class="${cls}" title="Lane ${l} ${t ? 'triggered' : 'clear'}">L${l}</span>`);
+    }
+    stripEl.innerHTML = parts.join(' ');
+    stripEl.hidden = false;
+  }
+
+  function onEvent(frame) {
+    if (frame.event === 'state' && 'gate_ready' in frame) {
+      state.gateReady = !!frame.gate_ready;
+      paint();
+      return;
+    }
+    if (frame.event === 'state' && 'lane' in frame) {
+      state.laneTriggered[frame.lane] = !!frame.triggered;
+      paint();
+    }
+  }
+
+  const handle = ctx.subscribeTrackEvents(['gate', 'lanes'], onEvent);
+  if (!handle) return;
+  _liveStripSub = handle;
+  paint();  // initial render shows unknown until events arrive
+}
+
+function minTime(timesMs) {
+  if (!timesMs) return null;
+  let min = null;
+  for (const v of Object.values(timesMs)) {
+    if (v == null || !isFinite(v)) continue;
+    if (min == null || v < min) min = v;
+  }
+  return min;
+}
+
+function formatDelta(t, winnerT) {
+  if (t == null || winnerT == null) return '';
+  const diff = t - winnerT;
+  if (diff === 0) return '—';
+  return '+' + (diff / 1000).toFixed(3);
 }
 

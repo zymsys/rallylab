@@ -637,7 +637,7 @@ All heats for a Section have been run, or the Operator ends the Section early.
 **Behavior:**
 - Audience Display shows final leaderboard / section complete screen
 - Operator can start next Section or end Rally
-- When `early_end` is `true`, standings are based on heats completed so far; all participants are scored normally but may be marked incomplete if they ran fewer heats than others
+- When `early_end` is `true`, standings are based on heats completed so far. Surviving (non-removed) cars are ranked together by average time regardless of how many heats they ran — operator-driven early termination must not penalise cars that happened to be later in the rotation. Cars marked `removed` (`CarRemoved`) remain in the incomplete bucket. See `08-scoring-and-leaderboard.md` §4.3.
 - See `06-race-day-state-machine.md` for state transition
 
 ---

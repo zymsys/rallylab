@@ -1,7 +1,7 @@
 # RallyLab — Track Controller Protocol
 
 **Version:** 1.0
-**Status:** Specification
+**Status:** Specification (superseded in draft by v2 — see `03-track-controller-protocol-v2.md`)
 
 ---
 
