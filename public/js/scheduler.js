@@ -127,6 +127,46 @@ export function regenerateAfterLateArrival(schedule, allParticipants, currentHea
 }
 
 /**
+ * Regenerate schedule after the operator changes the available lanes mid-rally.
+ * Preserves completed heats and renumbers the new heats so the heat counter
+ * picks up where racing left off (Trevor's note: "heats don't reset when
+ * lanes are adjusted").
+ * @param {Object} schedule - Current schedule
+ * @param {Array} participants - Participants still racing
+ * @param {number} currentHeatNumber - Last completed heat (0 if none)
+ * @param {Array<number>} availableLanes - Physical lane numbers (new set)
+ * @param {Array} [results=[]]
+ * @returns {Object} Updated schedule
+ */
+export function regenerateAfterLaneChange(schedule, participants, currentHeatNumber, availableLanes, results = []) {
+  if (participants.length < 2) {
+    throw new Error('Cannot generate schedule: at least 2 participants required');
+  }
+
+  const completedHeats = (schedule?.heats || []).filter(h => h.heat_number <= currentHeatNumber);
+  const newSchedule = generateSchedule({
+    participants,
+    available_lanes: availableLanes,
+    results,
+    options: {}
+  });
+
+  const renumberedHeats = newSchedule.heats.map((heat, i) => ({
+    ...heat,
+    heat_number: currentHeatNumber + i + 1
+  }));
+
+  return {
+    heats: [...completedHeats, ...renumberedHeats],
+    metadata: {
+      ...newSchedule.metadata,
+      total_heats: completedHeats.length + renumberedHeats.length,
+      available_lanes: availableLanes
+    }
+  };
+}
+
+/**
  * Generate solo catch-up heats for a late participant.
  * Each heat puts the participant alone in a different lane, cycling through available lanes.
  * @param {Object} participant - { car_number, name }

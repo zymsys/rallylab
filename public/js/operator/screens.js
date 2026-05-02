@@ -1111,7 +1111,10 @@ export function renderLiveConsole(container, params, ctx) {
   backBtn.onclick = () => navigate('rally-home', {});
   controls.appendChild(backBtn);
 
-  container.appendChild(controls);
+  // Place controls above the panels so operators don't have to scroll
+  // past staging info, standings, lane stats, and heat history to reach
+  // Re-Run Heat and friends.
+  container.insertBefore(controls, panels);
   if (historySection) container.appendChild(historySection);
 }
 

@@ -7,7 +7,7 @@
 import { isDemoMode } from '../config.js';
 import { openStore, appendEvent as storeAppend, getAllEvents, clear as clearStore } from '../event-store.js';
 import { rebuildState, deriveRaceDayPhase, getActiveStart, getLatestStart, getStart } from '../state-manager.js';
-import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, generateCatchUpHeats } from '../scheduler.js';
+import { generateSchedule, regenerateAfterRemoval, regenerateAfterLateArrival, regenerateAfterLaneChange, generateCatchUpHeats } from '../scheduler.js';
 import {
   connect as trackConnect, waitForRace, waitForGate,
   getInfo as trackInfo, isConnected, isUsingFakeTrack,
@@ -672,6 +672,18 @@ async function runRaceLoop(sectionId) {
       renderCurrentScreen();
       const times_ms = await waitForRace(heat.lanes, signal);
 
+      // All-DNF guard: if the gate opens without any cars (or before they're
+      // loaded), every lane times out. Don't record the heat — wait for the
+      // gate to be reset and re-stage the same heat.
+      const hasAnyTime = times_ms && Object.values(times_ms).some(t => t != null);
+      if (!hasAnyTime) {
+        showToast('All lanes DNF — heat ignored. Reset the gate to re-run.', 'warning');
+        setTrackPhase('waiting-for-gate', `Heat ${heat.heat_number} (no times)`);
+        renderCurrentScreen();
+        await waitForGate(signal);
+        continue;
+      }
+
       // Emit RaceCompleted with lane assignments
       await appendAndRebuild({
         type: 'RaceCompleted',
@@ -1016,27 +1028,13 @@ async function changeLanes(sectionId, newLanes, reason) {
 
   if (participants.length >= 2) {
     const currentHeatNum = getLastCompletedHeatNumber(sectionId, startNumber);
-    const completedHeats = _liveSection?.schedule?.heats.filter(h => h.heat_number <= currentHeatNum) || [];
-    const newSchedule = generateSchedule({ participants, available_lanes: newLanes });
-
-    // Renumber new heats to continue after completed heats
-    const renumberedHeats = newSchedule.heats.map((heat, i) => ({
-      ...heat,
-      heat_number: currentHeatNum + i + 1
-    }));
+    const merged = regenerateAfterLaneChange(_liveSection?.schedule, participants, currentHeatNum, newLanes);
 
     _liveSection = {
       ..._liveSection,
       sectionId,
       startNumber,
-      schedule: {
-        heats: [...completedHeats, ...renumberedHeats],
-        metadata: {
-          ...newSchedule.metadata,
-          total_heats: completedHeats.length + renumberedHeats.length,
-          available_lanes: newLanes
-        }
-      },
+      schedule: merged,
       stagingHeat: null
     };
   }
