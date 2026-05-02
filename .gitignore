@@ -14,6 +14,9 @@ node_modules/
 # Runtime config (contains Supabase credentials)
 public/config.json
 
+# Local USB backup snapshot (written by usb-backup.js when developing)
+rallylab-backup.json
+
 # Scratch
 scratch/
 plans/

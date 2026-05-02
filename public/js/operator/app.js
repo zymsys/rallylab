@@ -30,7 +30,9 @@ import {
   configure as configureUSBBackupImpl,
   isConfigured as isUSBBackupConfigured,
   disable as disableUSBBackup,
-  onEventAppended as usbOnEventAppended
+  onEventAppended as usbOnEventAppended,
+  restore as restoreUSBBackup,
+  reauthorize as reauthorizeUSBBackupImpl
 } from '../usb-backup.js';
 
 const app = () => document.getElementById('app');
@@ -231,6 +233,7 @@ function renderScreen(screenName, params) {
     sendSerialCommand,
     startLearnMode,
     configureUSBBackup,
+    reauthorizeUSBBackup,
     disableUSBBackup,
     isUSBBackupConfigured,
     isUSBBackupSupported,
@@ -1120,6 +1123,10 @@ async function configureUSBBackup() {
   await configureUSBBackupImpl(getAllEvents, _state?.rally_id);
 }
 
+async function reauthorizeUSBBackup() {
+  return reauthorizeUSBBackupImpl(getAllEvents, _state?.rally_id);
+}
+
 // ─── Render Helper ───────────────────────────────────────────────
 
 function renderCurrentScreen() {
@@ -1289,6 +1296,20 @@ async function init() {
   initSyncIndicator({ getRallyId: () => _state?.rally_id });
   await openStore();
   await rebuildFromStore();
+
+  // Resume USB backup if a handle was persisted in a prior session.
+  if (isUSBBackupSupported()) {
+    try {
+      const status = await restoreUSBBackup(getAllEvents, _state?.rally_id);
+      if (status === 'needs-permission') {
+        showToast('USB backup needs permission — click "Reconnect backup" in settings', 'warning');
+      } else if (status === 'resumed') {
+        showToast('USB backup resumed', 'success');
+      }
+    } catch (e) {
+      console.warn('USB backup restore failed:', e);
+    }
+  }
 
   // Start background sync early so check-in events are uploaded immediately
   beginSync();

@@ -114,8 +114,8 @@ export function renderRallyHome(container, params, ctx) {
       const disableLink = document.createElement('button');
       disableLink.className = 'btn btn-sm btn-ghost';
       disableLink.textContent = 'Disable';
-      disableLink.onclick = () => {
-        ctx.disableUSBBackup();
+      disableLink.onclick = async () => {
+        await ctx.disableUSBBackup();
         navigate('rally-home', {}, { replace: true });
         showToast('USB backup disabled', 'info');
       };
