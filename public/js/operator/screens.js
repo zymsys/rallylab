@@ -11,6 +11,7 @@ import { generateHeatReport, generateEntrantsReport } from './report.js';
 import { exportSectionXlsx, exportEntrantsXlsx, exportHeatXlsx } from './export-xlsx.js';
 import { exportHeatTxt, exportSectionTxt } from './export-txt.js';
 import { showDemoDataDialog } from './demo-data.js';
+import { sendTrackStatus } from '../broadcast.js';
 
 // ─── Screen A: Rally List ────────────────────────────────────────
 
@@ -539,10 +540,19 @@ export function renderLiveConsole(container, params, ctx) {
 
   // Live gate / lane sensor indicator strip — only when a real track is
   // connected (serial or wifi). See specs/03-track-controller-protocol-v2.md.
+  // Also drives the dynamic phase badge text ("Racing!", "3 of 6 lanes
+  // finished", etc.) and the audience overlay that tells the gate operator
+  // when it's safe to drop the gate.
   if (typeof ctx.subscribeTrackEvents === 'function' &&
       (trackMode === 'serial' || trackMode === 'wifi')) {
     _bindLiveStatusStrip(header.querySelector('#track-live-strip'),
-                         activeLanes, ctx);
+                         activeLanes, ctx, {
+      phaseBadgeEl: header.querySelector('#track-phase-toggle'),
+      phase: trackPhase,
+      heatNumber: currentHeat,
+      sectionName: sec.section_name,
+      staticPhaseLabel: phaseLabel,
+    });
   }
 
   // Track phase log (collapsible)
@@ -1378,7 +1388,7 @@ function formatTime(ms) {
 let _liveStripSub = null;
 let _liveStripState = null;
 
-function _bindLiveStatusStrip(stripEl, activeLanes, ctx) {
+function _bindLiveStatusStrip(stripEl, activeLanes, ctx, opts = {}) {
   // Tear down any previous subscription before we attach a new one.
   if (_liveStripSub) {
     try { _liveStripSub.unsubscribe(); } catch {}
@@ -1392,7 +1402,19 @@ function _bindLiveStatusStrip(stripEl, activeLanes, ctx) {
   for (const l of activeLanes) state.laneTriggered[l] = false;
   _liveStripState = state;
 
-  function paint() {
+  const phaseBadgeEl = opts.phaseBadgeEl || null;
+  const phase = opts.phase || null;
+  const heatNumber = opts.heatNumber || null;
+  const sectionName = opts.sectionName || null;
+  const staticPhaseLabel = opts.staticPhaseLabel || null;
+
+  function triggeredLanes() {
+    const t = [];
+    for (const l of activeLanes) if (state.laneTriggered[l]) t.push(l);
+    return t;
+  }
+
+  function paintStrip() {
     const parts = [];
     const gateClass = state.gateReady === null
       ? 'live-pip live-pip-unknown'
@@ -1405,6 +1427,29 @@ function _bindLiveStatusStrip(stripEl, activeLanes, ctx) {
     }
     stripEl.innerHTML = parts.join(' ');
     stripEl.hidden = false;
+  }
+
+  function paintBadge() {
+    if (!phaseBadgeEl) return;
+    const dyn = dynamicPhaseLabel(phase, state, activeLanes);
+    phaseBadgeEl.textContent = dyn || staticPhaseLabel || '';
+  }
+
+  function broadcastStatus() {
+    sendTrackStatus({
+      phase,
+      heat_number: heatNumber,
+      section_name: sectionName,
+      gate_ready: state.gateReady,
+      active_lanes: activeLanes,
+      triggered_lanes: triggeredLanes(),
+    });
+  }
+
+  function paint() {
+    paintStrip();
+    paintBadge();
+    broadcastStatus();
   }
 
   function onEvent(frame) {
@@ -1423,6 +1468,36 @@ function _bindLiveStatusStrip(stripEl, activeLanes, ctx) {
   if (!handle) return;
   _liveStripSub = handle;
   paint();  // initial render shows unknown until events arrive
+}
+
+// Translate (phase, gate state, lane state) into the badge label the
+// operator sees on the live console. Returns null when the static
+// phaseLabels[] string should be used instead.
+function dynamicPhaseLabel(phase, state, activeLanes) {
+  const triggered = activeLanes.filter(l => state.laneTriggered[l]).length;
+  const total = activeLanes.length;
+
+  if (phase === 'waiting-for-race') {
+    // Heat is staged. Until the gate drops we're really waiting on the
+    // start operator, not the race.
+    if (state.gateReady === false) {
+      if (triggered === 0) return 'Racing!';
+      if (triggered >= total) return 'Race finished';
+      return `${triggered} of ${total} lanes finished`;
+    }
+    return 'Waiting for start gate';
+  }
+
+  if (phase === 'waiting-for-gate') {
+    // Between heats. Lanes that are still triggered mean the cars haven't
+    // been pulled — opening the gate now would log a false finish.
+    if (triggered > 0) return `Reset lane sensors (${triggered} still triggered)`;
+    if (state.gateReady === false) return 'Reset start gate';
+    if (state.gateReady === true) return 'Gate ready — start next heat';
+    return null;
+  }
+
+  return null;
 }
 
 function minTime(timesMs) {

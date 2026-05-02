@@ -21,7 +21,12 @@ class Engine:
         self.start_ms = None
         self.times_ms = {}            # lane (int) -> elapsed ms
         self.last_race = None         # dict returned by state command, or None
-        self._on_complete = []        # list of callback(result_dict)
+        # Persistent fan-out listeners (Dispatcher attaches one of these at
+        # startup so it can resolve every wait_race waiter on completion).
+        self._listeners = []
+        # One-shot per-arm callback. Cleared on cancel/complete; persistent
+        # listeners are not.
+        self._one_shot = None
         self._gate_ready = True       # tracks physical gate state
 
     # -- gate ready tracking (independent of race state) -------------------
@@ -35,7 +40,7 @@ class Engine:
 
     # -- commands from serial_handler --------------------------------------
 
-    def arm(self, lanes_str, on_complete):
+    def arm(self, lanes_str, on_complete=None):
         """IDLE -> ARMED. Parses lanes_str, generates race_id."""
         if lanes_str:
             lanes = set()
@@ -53,12 +58,12 @@ class Engine:
         self.race_id = uuid4()
         self.start_ms = None
         self.times_ms = {}
-        self._on_complete = [on_complete]
+        self._one_shot = on_complete
         self.phase = ARMED
 
     def add_listener(self, callback):
-        """Append a completion listener. Only valid while ARMED or RACING."""
-        self._on_complete.append(callback)
+        """Register a persistent completion listener (survives across races)."""
+        self._listeners.append(callback)
 
     def cancel(self):
         """Cancel any active wait (ARMED -> IDLE). Safe to call in any state."""
@@ -66,7 +71,7 @@ class Engine:
             self.phase = IDLE
             self.race_id = None
             self.active_lanes = None
-            self._on_complete = []
+            self._one_shot = None
 
     # -- callbacks from gpio_manager ---------------------------------------
 
@@ -105,7 +110,7 @@ class Engine:
     # -- internal ----------------------------------------------------------
 
     def _complete(self):
-        """Finalize race, store result, call completion callback."""
+        """Finalize race, store result, call completion callbacks."""
         # Build times dict with string keys, only for lanes that finished
         times = {}
         for lane in sorted(self.times_ms):
@@ -116,7 +121,12 @@ class Engine:
             "times_ms": times,
         }
         self.last_race = result
-        callbacks = self._on_complete
+
+        # Persistent listeners + this race's one-shot. Persistent ones
+        # (Dispatcher fan-out) must NOT be cleared — they fire every race.
+        callbacks = list(self._listeners)
+        if self._one_shot is not None:
+            callbacks.append(self._one_shot)
 
         # Reset state
         self.phase = IDLE
@@ -124,7 +134,7 @@ class Engine:
         self.active_lanes = None
         self.start_ms = None
         self.times_ms = {}
-        self._on_complete = []
+        self._one_shot = None
 
         for cb in callbacks:
             cb(result)

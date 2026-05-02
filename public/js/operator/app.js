@@ -17,7 +17,7 @@ import {
   connectSerial, disconnectSerial, isUsingSerial, isSerialSupported,
   sendSerialCommand, startLearnMode, subscribeTrackEvents
 } from '../track-connection.js';
-import { sendWelcome, sendStaging, sendResults, sendZoom, getZoom, notifyEventsChanged, onSyncMessage, initOperatorChannel } from '../broadcast.js';
+import { sendWelcome, sendStaging, sendResults, sendZoom, getZoom, notifyEventsChanged, onSyncMessage, initOperatorChannel, clearTrackStatus } from '../broadcast.js';
 import { getUser, getClient, signOut, initAuth } from '../supabase.js';
 import { startSync, stopSync, subscribeToRally, onInboundEvents } from '../sync-worker.js';
 import { initSyncIndicator } from '../shared/sync-indicator.js';
@@ -177,6 +177,13 @@ function renderScreen(screenName, params) {
   if (!renderFn) {
     container.innerHTML = '<p>Unknown screen</p>';
     return;
+  }
+
+  // The live-console is the only screen that publishes track status; if
+  // we're leaving it, drop the audience overlay so it doesn't linger over
+  // the leaderboard or section-complete view.
+  if (screenName !== 'live-console') {
+    clearTrackStatus();
   }
 
   updateBreadcrumbs(screenName, params);

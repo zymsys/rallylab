@@ -7,7 +7,8 @@ import { onMessage, requestState } from '../broadcast.js';
 import {
   renderWelcome, renderStaging, renderResults,
   renderLeaderboard, renderSectionComplete,
-  revealNext, revealAll
+  revealNext, revealAll,
+  renderTrackOverlay, clearTrackOverlay
 } from './screens.js';
 
 const app = () => document.getElementById('app');
@@ -54,6 +55,12 @@ onMessage((msg) => {
     case 'SET_ZOOM':
       applyZoom(msg.level);
       try { localStorage.setItem(ZOOM_STORAGE_KEY, String(msg.level)); } catch {}
+      break;
+    case 'TRACK_STATUS':
+      renderTrackOverlay(msg);
+      break;
+    case 'TRACK_STATUS_CLEAR':
+      clearTrackOverlay();
       break;
   }
 });

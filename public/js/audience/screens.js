@@ -196,6 +196,117 @@ export function renderSectionComplete(container, sectionName, standings) {
   `;
 }
 
+// ─── Track Status Overlay ────────────────────────────────────────
+//
+// A persistent banner pinned to the top of the audience screen that tells
+// the gate operator whether it's safe to drop the start gate. The big
+// failure mode it prevents: opening the gate before all six lane sensors
+// have been reset, which logs phantom finishes for the next heat.
+//
+// State machine, keyed on the operator's race phase:
+//
+//   waiting-for-gate, lanes still triggered → red "RESET LANE SENSORS"
+//   waiting-for-gate, gate not closed       → amber "RESET START GATE"
+//   waiting-for-gate, gate closed, clear    → green "READY — START NEXT HEAT"
+//   waiting-for-race, gate still closed     → amber "WAITING FOR START GATE"
+//   waiting-for-race, gate dropped          → green "RACING!" / "N of M finished"
+//   any other phase                         → overlay hidden
+
+const OVERLAY_ID = 'audience-track-overlay';
+
+function getOrCreateOverlay() {
+  let el = document.getElementById(OVERLAY_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = OVERLAY_ID;
+    el.className = 'audience-track-overlay';
+    el.hidden = true;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+export function clearTrackOverlay() {
+  const el = document.getElementById(OVERLAY_ID);
+  if (el) el.hidden = true;
+}
+
+export function renderTrackOverlay(status) {
+  const el = getOrCreateOverlay();
+  const view = deriveOverlayView(status);
+  if (!view) {
+    el.hidden = true;
+    return;
+  }
+
+  let lanesHtml = '';
+  if (view.lanes && view.lanes.length) {
+    lanesHtml = '<div class="audience-track-overlay-lanes">';
+    for (const lane of view.lanes) {
+      const cls = lane.triggered
+        ? 'audience-track-lane audience-track-lane-bad'
+        : 'audience-track-lane audience-track-lane-ok';
+      lanesHtml += `<span class="${cls}">L${lane.lane}</span>`;
+    }
+    lanesHtml += '</div>';
+  }
+
+  el.className = `audience-track-overlay audience-track-${view.tone}`;
+  el.innerHTML = `
+    <div class="audience-track-overlay-headline">${esc(view.headline)}</div>
+    ${view.detail ? `<div class="audience-track-overlay-detail">${esc(view.detail)}</div>` : ''}
+    ${lanesHtml}
+  `;
+  el.hidden = false;
+}
+
+function deriveOverlayView(status) {
+  const phase = status.phase;
+  const active = Array.isArray(status.active_lanes) ? status.active_lanes : [];
+  const triggeredSet = new Set(status.triggered_lanes || []);
+  const triggered = active.filter(l => triggeredSet.has(l));
+  const total = active.length;
+  const lanes = active.map(l => ({ lane: l, triggered: triggeredSet.has(l) }));
+
+  if (phase === 'waiting-for-gate') {
+    if (triggered.length > 0) {
+      return {
+        tone: 'bad',
+        headline: 'RESET LANE SENSORS',
+        detail: `Lane ${triggered.join(', ')} still triggered — pull the cars before opening the gate`,
+        lanes,
+      };
+    }
+    if (status.gate_ready === false) {
+      return { tone: 'warn', headline: 'RESET START GATE', detail: null, lanes };
+    }
+    if (status.gate_ready === true) {
+      return { tone: 'ok', headline: 'READY — START NEXT HEAT', detail: null, lanes };
+    }
+    return null;
+  }
+
+  if (phase === 'waiting-for-race') {
+    if (status.gate_ready === false) {
+      if (triggered.length === 0) {
+        return { tone: 'ok', headline: 'RACING!', detail: null, lanes };
+      }
+      if (triggered.length >= total && total > 0) {
+        return { tone: 'ok', headline: 'RACE FINISHED', detail: null, lanes };
+      }
+      return {
+        tone: 'ok',
+        headline: `${triggered.length} OF ${total} LANES FINISHED`,
+        detail: null,
+        lanes,
+      };
+    }
+    return { tone: 'warn', headline: 'WAITING FOR START GATE', detail: null, lanes };
+  }
+
+  return null;
+}
+
 /**
  * Reveal the next hidden row (last place first → first place last).
  * Returns the number of rows still hidden after this reveal.

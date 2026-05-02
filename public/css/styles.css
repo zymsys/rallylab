@@ -1170,6 +1170,81 @@ body.audience #app {
   padding: 1rem;
 }
 
+/* Audience track-status overlay — pinned to the top of the projector
+   display so the gate operator can see at a distance whether it's safe
+   to drop the gate. Tone classes set the background color. */
+.audience-track-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9000;
+  padding: 1rem 2rem;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 4px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.audience-track-overlay[hidden] { display: none; }
+
+.audience-track-overlay-headline {
+  font-size: 2.5rem;
+  line-height: 1.05;
+}
+.audience-track-overlay-detail {
+  font-size: 1.25rem;
+  margin-top: 0.4rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.audience-track-overlay-lanes {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.audience-track-lane {
+  display: inline-block;
+  min-width: 2.6rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+}
+.audience-track-lane-bad {
+  background: #c0382a;
+  color: #fff;
+}
+.audience-track-lane-ok {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.audience-track-bad {
+  background: #c0392b;
+  color: #fff;
+  animation: audience-track-pulse 0.8s ease-in-out infinite alternate;
+}
+.audience-track-warn {
+  background: #d8a03a;
+  color: #1b1b22;
+}
+.audience-track-ok {
+  background: #2f8a3f;
+  color: #fff;
+}
+
+@keyframes audience-track-pulse {
+  from { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4), inset 0 0 0 0 rgba(255,255,255,0); }
+  to   { box-shadow: 0 6px 36px rgba(192, 56, 42, 0.7), inset 0 0 0 4px rgba(255,255,255,0.15); }
+}
+
 .audience-header {
   text-align: center;
   margin-bottom: 2rem;

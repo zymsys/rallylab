@@ -1,7 +1,7 @@
 # config.py — Pin mapping and constants
 # This is the one file builders edit for their specific track wiring.
 
-FIRMWARE_VERSION = "0.2.1"
+FIRMWARE_VERSION = "0.2.2"
 PROTOCOL_VERSION = "2.0"
 
 # ---------------------------------------------------------------------------

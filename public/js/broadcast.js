@@ -9,6 +9,10 @@ const ZOOM_STORAGE_KEY = 'rallylab-audience-zoom';
 
 let _operatorChannel = null;
 let _lastMessage = null;
+// Track status overlays the main screen, so it has its own replay slot —
+// otherwise a late-joining audience would see SHOW_STAGING but no
+// gate/lane state until the next sensor event.
+let _lastTrackStatus = null;
 let _lastZoom = (() => {
   try {
     const v = parseFloat(localStorage.getItem(ZOOM_STORAGE_KEY));
@@ -23,6 +27,7 @@ function getOperatorChannel() {
       if (e.data?.type === 'REQUEST_STATE') {
         _operatorChannel.postMessage({ type: 'SET_ZOOM', level: _lastZoom });
         if (_lastMessage) _operatorChannel.postMessage(_lastMessage);
+        if (_lastTrackStatus) _operatorChannel.postMessage(_lastTrackStatus);
       }
     };
   }
@@ -76,6 +81,23 @@ export function sendSectionComplete(sectionName, standings) {
     section_name: sectionName,
     standings
   });
+}
+
+/**
+ * Push the live track status (gate ready + which lanes are still triggered
+ * + the operator's current race phase) to the audience monitor. Drives the
+ * "open the gate" / "reset lanes" overlay, which the gate operator reads.
+ */
+export function sendTrackStatus(status) {
+  const msg = { type: 'TRACK_STATUS', ...status };
+  _lastTrackStatus = msg;
+  getOperatorChannel().postMessage(msg);
+}
+
+/** Hide the audience track-status overlay (e.g. when leaving live console). */
+export function clearTrackStatus() {
+  _lastTrackStatus = null;
+  getOperatorChannel().postMessage({ type: 'TRACK_STATUS_CLEAR' });
 }
 
 export function sendRevealNext() {

@@ -511,10 +511,11 @@ class Dispatcher:
                 return
 
         if self._engine.phase in ("ARMED", "RACING"):
-            # Already armed by another waiter — just listen.
+            # Already armed by another waiter — just listen. The Dispatcher's
+            # persistent _on_race_complete listener will resolve us.
             pass
         else:
-            self._engine.arm(str(lanes) if lanes else None, lambda r: None)
+            self._engine.arm(str(lanes) if lanes else None)
 
         s.add_pending(req_id, "wait_race", None)
 

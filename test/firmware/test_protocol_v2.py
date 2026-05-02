@@ -37,14 +37,15 @@ class FakeEngine:
     def add_listener(self, cb):
         self._listeners.append(cb)
 
-    def arm(self, lanes_str, on_complete):
+    def arm(self, lanes_str, on_complete=None):
         if lanes_str:
             self.active_lanes = set(int(c) for c in lanes_str)
         else:
             self.active_lanes = set(range(1, self._lane_count + 1))
         self.race_id = "test-race-id"
         self.phase = "ARMED"
-        self._listeners.append(on_complete)
+        if on_complete is not None:
+            self._listeners.append(on_complete)
 
     def cancel(self):
         if self.phase == "ARMED":
@@ -58,9 +59,8 @@ class FakeEngine:
         result = {"race_id": self.race_id or "tr-1", "times_ms": times}
         self.last_race = result
         self.phase = "IDLE"
-        cbs = list(self._listeners)
-        self._listeners = []
-        for cb in cbs:
+        # Persistent listeners survive across races; matches real Engine.
+        for cb in list(self._listeners):
             cb(result)
 
 
